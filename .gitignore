@@ -17,6 +17,8 @@ credentials/
 *.json
 !pyproject.toml
 
-# IDE
+# Downloads locais
+downloads/
+
 .idea/
 .vscode/
