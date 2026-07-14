@@ -35,5 +35,44 @@ jobs:
           printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
           printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
 
+      - name: Validate Google credentials
+        run: |
+          python3 <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          required_scopes = {
+              "https://www.googleapis.com/auth/gmail.readonly",
+              "https://www.googleapis.com/auth/drive.file",
+              "https://www.googleapis.com/auth/drive.readonly",
+          }
+
+          for filename in ("gmail-oauth.json", "gmail-token.json"):
+              path = Path("credentials") / filename
+              if not path.exists() or path.stat().st_size < 10:
+                  print(f"ERRO: {filename} vazio ou ausente. Verifique os secrets no GitHub.")
+                  sys.exit(1)
+              try:
+                  json.loads(path.read_text())
+              except json.JSONDecodeError:
+                  print(f"ERRO: {filename} não é um JSON válido. Copie o arquivo inteiro, sem alterar.")
+                  sys.exit(1)
+
+          token = json.loads(Path("credentials/gmail-token.json").read_text())
+          scopes = set(token.get("scopes", []))
+          missing = required_scopes - scopes
+          if missing:
+              print("ERRO: GMAIL_TOKEN_JSON está desatualizado (falta permissão do Drive).")
+              print("Atualize o secret com um token novo após rodar: procon-email auth")
+              sys.exit(1)
+
+          if "refresh_token" not in token:
+              print("ERRO: GMAIL_TOKEN_JSON sem refresh_token. Gere um token novo.")
+              sys.exit(1)
+
+          print("Credenciais OK")
+          PY
+
       - name: Process Procon complaints
         run: python -m classificacao_procons.cli process --max-results 20
