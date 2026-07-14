@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from googleapiclient.discovery import build
@@ -41,6 +42,34 @@ def _sanitize_folder_name(consumer_name: str) -> str:
     if not cleaned:
         raise DriveClientError("Nome da consumidora vazio.")
     return cleaned[:200]
+
+
+def _sanitize_file_name_part(value: str) -> str:
+    cleaned = " ".join(value.split()).strip()
+    cleaned = re.sub(r'[\\/:*?"<>|]', "-", cleaned)
+    return cleaned
+
+
+def build_drive_pdf_filename(
+    *,
+    consumer_name: str,
+    cip_number: str,
+    complaint_date: date | None,
+) -> str:
+    """Gera nome do PDF: Atendimento Procon - NOME - CIP - DATA."""
+    safe_name = _sanitize_file_name_part(consumer_name)
+    safe_cip = _sanitize_file_name_part(cip_number.replace("/", "-"))
+    if complaint_date:
+        safe_date = complaint_date.strftime("%d-%m-%Y")
+    else:
+        safe_date = "sem-data"
+
+    if not safe_name:
+        raise DriveClientError("Nome da consumidora vazio.")
+    if not safe_cip:
+        raise DriveClientError("Número da CIP vazio.")
+
+    return f"Atendimento Procon - {safe_name} - {safe_cip} - {safe_date}.pdf"
 
 
 def _build_drive_service(token_path: str | None = None):
@@ -120,17 +149,18 @@ def upload_pdf_to_folder(
     *,
     folder_id: str,
     pdf_path: Path,
+    file_name: str | None = None,
 ) -> tuple[str, str]:
     """Faz upload do PDF e retorna (file_id, file_url)."""
     if not pdf_path.exists():
         raise DriveClientError(f"PDF não encontrado: {pdf_path}")
 
-    file_name = pdf_path.name
-    if not file_name.lower().endswith(".pdf"):
-        file_name = f"{pdf_path.stem}.pdf"
+    drive_file_name = file_name or pdf_path.name
+    if not drive_file_name.lower().endswith(".pdf"):
+        drive_file_name = f"{drive_file_name}.pdf"
 
     media = MediaFileUpload(str(pdf_path), mimetype=DRIVE_PDF_MIME, resumable=True)
-    body = {"name": file_name, "parents": [folder_id]}
+    body = {"name": drive_file_name, "parents": [folder_id]}
 
     try:
         uploaded = (
@@ -153,6 +183,8 @@ def save_complaint_pdf(
     *,
     consumer_name: str,
     pdf_path: str | Path,
+    cip_number: str,
+    complaint_date: date | None = None,
     parent_folder_id: str | None = None,
     token_path: str | None = None,
 ) -> DriveUploadResult:
@@ -175,6 +207,11 @@ def save_complaint_pdf(
         service,
         folder_id=folder_id,
         pdf_path=Path(pdf_path),
+        file_name=build_drive_pdf_filename(
+            consumer_name=consumer_name,
+            cip_number=cip_number,
+            complaint_date=complaint_date,
+        ),
     )
 
     return DriveUploadResult(

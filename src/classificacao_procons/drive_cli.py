@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from dataclasses import asdict
+from datetime import datetime
 
 from classificacao_procons.drive import DriveClientError, save_complaint_pdf
 from classificacao_procons.google_auth import DEFAULT_DRIVE_PARENT_FOLDER_ID, has_drive_access
@@ -15,6 +16,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Salva PDF de reclamação no Google Drive.")
     parser.add_argument("--consumer-name", required=True, help="Nome da consumidora.")
     parser.add_argument("--pdf", required=True, help="Caminho do PDF local.")
+    parser.add_argument("--cip", required=True, help="Número da CIP/FA (ex: 1653213/2026).")
+    parser.add_argument("--complaint-date", help="Data da reclamação (DD-MM-AAAA).")
     parser.add_argument(
         "--parent-folder-id",
         default=DEFAULT_DRIVE_PARENT_FOLDER_ID,
@@ -29,10 +32,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
+    complaint_date = None
+    if args.complaint_date:
+        try:
+            complaint_date = datetime.strptime(args.complaint_date, "%d-%m-%Y").date()
+        except ValueError:
+            print('Data inválida. Use o formato DD-MM-AAAA.', file=sys.stderr)
+            return 1
+
     try:
         result = save_complaint_pdf(
             consumer_name=args.consumer_name,
             pdf_path=args.pdf,
+            cip_number=args.cip,
+            complaint_date=complaint_date,
             parent_folder_id=args.parent_folder_id,
         )
     except DriveClientError as exc:

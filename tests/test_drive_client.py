@@ -1,5 +1,6 @@
 """Testes do cliente Google Drive."""
 
+from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -8,10 +9,32 @@ import pytest
 from classificacao_procons.drive.client import (
     DriveClientError,
     _sanitize_folder_name,
+    build_drive_pdf_filename,
     ensure_consumer_folder,
     save_complaint_pdf,
     upload_pdf_to_folder,
 )
+
+
+class TestBuildDrivePdfFilename:
+    def test_should_build_filename_in_expected_format(self) -> None:
+        name = build_drive_pdf_filename(
+            consumer_name="JANIS LEAO PALOSQUE GARUZI",
+            cip_number="1653213/2026",
+            complaint_date=date(2026, 7, 14),
+        )
+        assert name == (
+            "Atendimento Procon - JANIS LEAO PALOSQUE GARUZI - "
+            "1653213-2026 - 14-07-2026.pdf"
+        )
+
+    def test_should_use_sem_data_when_complaint_date_missing(self) -> None:
+        name = build_drive_pdf_filename(
+            consumer_name="MARIA SILVA",
+            cip_number="123/2026",
+            complaint_date=None,
+        )
+        assert name.endswith(" - sem-data.pdf")
 
 
 class TestSanitizeFolderName:
@@ -82,7 +105,12 @@ class TestDriveOperations:
             "webViewLink": "https://drive.google.com/folder/folder-new",
         }
 
-        result = save_complaint_pdf(consumer_name="JANIS LEAO", pdf_path=pdf)
+        result = save_complaint_pdf(
+            consumer_name="JANIS LEAO",
+            pdf_path=pdf,
+            cip_number="1653213/2026",
+            complaint_date=date(2026, 7, 14),
+        )
 
         assert result.pdf_file_id == "file-new"
         assert result.consumer_folder_id == "folder-new"

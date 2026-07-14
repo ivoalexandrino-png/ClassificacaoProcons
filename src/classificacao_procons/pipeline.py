@@ -129,6 +129,8 @@ def _process_notification(
     drive_result = save_complaint_pdf(
         consumer_name=complaint.consumer_name,
         pdf_path=complaint.pdf_path,
+        cip_number=protocol,
+        complaint_date=complaint.complaint_date,
         parent_folder_id=options.parent_folder_id,
         token_path=options.token_path,
     )
