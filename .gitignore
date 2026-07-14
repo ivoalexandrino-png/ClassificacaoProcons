@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.venv/
+venv/
+
+# Credenciais (nunca commitar)
+credentials/
+*.json
+!pyproject.toml
+
+# Downloads locais
+downloads/
+data/
+logs/
+
+.idea/
+.vscode/

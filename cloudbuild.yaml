@@ -1,0 +1,35 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:${SHORT_SHA}
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:${SHORT_SHA}
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - deploy
+      - classificacao-procons-worker
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:${SHORT_SHA}
+      - --region=${_REGION}
+      - --memory=2Gi
+      - --cpu=2
+      - --max-retries=1
+      - --task-timeout=1800s
+      - --set-secrets=GMAIL_OAUTH_JSON=procon-gmail-oauth:latest,GMAIL_TOKEN_JSON=procon-gmail-token:latest
+      - --set-env-vars=PROCON_MAX_RESULTS=20
+
+substitutions:
+  _REGION: southamerica-east1
+  _ARTIFACT_REPO: classificacao-procons
+
+options:
+  logging: CLOUD_LOGGING_ONLY
