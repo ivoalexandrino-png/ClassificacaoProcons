@@ -45,11 +45,11 @@ def _run_auth(args: argparse.Namespace) -> int:
         except GmailClientError as exc:
             print(f"Erro: {exc}", file=sys.stderr)
             return 1
-        print("Pronto! Seu Gmail foi conectado com sucesso.")
+        print("Pronto! Gmail e Drive conectados com sucesso.")
         return 0
 
     if has_valid_token(token):
-        print("Seu Gmail já está conectado.")
+        print("Gmail e Drive já estão conectados.")
         return 0
 
     try:
@@ -58,7 +58,7 @@ def _run_auth(args: argparse.Namespace) -> int:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
 
-    print("Para conectar seu Gmail, siga estes 4 passos:\n")
+    print("Para conectar Gmail e Drive, siga estes 4 passos:\n")
     print("1. Abra este link no navegador:")
     print(f"\n   {url}\n")
     print("2. Faça login com a conta que recebe os e-mails do Procon")
