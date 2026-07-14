@@ -58,12 +58,17 @@ def _run_auth(args: argparse.Namespace) -> int:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
 
-    print("Para conectar seu Gmail, siga estes 3 passos:\n")
+    print("Para conectar seu Gmail, siga estes 4 passos:\n")
     print("1. Abra este link no navegador:")
     print(f"\n   {url}\n")
     print("2. Faça login com a conta que recebe os e-mails do Procon")
-    print("3. Clique em Permitir e copie o código que aparecer")
-    print("\nDepois me envie o código aqui no chat.")
+    print("3. Clique em Permitir")
+    print("4. A página pode dar erro ou ficar em branco — isso é normal.")
+    print("   Olhe a barra de endereço do navegador.")
+    print("   Copie o texto que vem depois de code= (até o próximo &).")
+    print("\nExemplo: se aparecer localhost/?code=4/0ABC123&scope=...")
+    print("         copie só: 4/0ABC123")
+    print("\nCole o código aqui no chat.")
     return 0
 
 
