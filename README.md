@@ -69,6 +69,29 @@ Simular sem executar:
 procon-email process --dry-run
 ```
 
+### Agendamento automático (a cada 1 hora)
+
+**Neste ambiente (recomendado):**
+
+```bash
+bash scripts/start-scheduler.sh
+```
+
+Inicia um agendador em background que roda o processamento **a cada 1 hora**.
+Logs em `logs/pipeline.log` e `logs/scheduler.log`.
+
+Para parar:
+
+```bash
+tmux -f /exec-daemon/tmux.portal.conf kill-session -t procon-scheduler
+```
+
+**Em servidor com cron:**
+
+```bash
+bash scripts/install-cron.sh
+```
+
 ### Comandos individuais
 
 ```bash

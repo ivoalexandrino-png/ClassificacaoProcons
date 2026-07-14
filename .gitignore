@@ -20,6 +20,7 @@ credentials/
 # Downloads locais
 downloads/
 data/
+logs/
 
 .idea/
 .vscode/
