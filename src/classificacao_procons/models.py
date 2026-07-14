@@ -1,7 +1,7 @@
-"""Modelos de domínio para notificações do Procon."""
+"""Modelos de domínio para reclamações do Procon."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 
 @dataclass(frozen=True)
@@ -15,3 +15,19 @@ class ProconNotificationEmail:
     portal_url: str
     access_code: str
     raw_snippet: str | None = None
+
+
+@dataclass(frozen=True)
+class ProconComplaint:
+    """Dados extraídos do portal do Procon-SP."""
+
+    access_code: str
+    consumer_name: str
+    consumer_cpf: str
+    cip_fa_number: str
+    complaint_date: date | None
+    response_deadline: date | None
+    cause: str
+    state: str = "SP"
+    portal_url: str = ""
+    pdf_path: str | None = None

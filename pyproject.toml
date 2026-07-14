@@ -13,6 +13,7 @@ dependencies = [
     "google-api-python-client>=2.100",
     "google-auth>=2.23",
     "google-auth-oauthlib>=1.1",
+    "playwright>=1.40",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +25,7 @@ dev = [
 
 [project.scripts]
 procon-email = "classificacao_procons.cli:main"
+procon-portal = "classificacao_procons.portal_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

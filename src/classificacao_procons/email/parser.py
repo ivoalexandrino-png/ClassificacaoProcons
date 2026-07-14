@@ -20,13 +20,18 @@ _URL_PATTERN = re.compile(
 )
 
 _CODE_LABEL_PATTERN = re.compile(
-    r"(?:c[oó]digo(?:\s+de\s+acesso)?|chave(?:\s+de\s+acesso)?)\s*[:\-]?\s*"
-    r"([A-Za-z0-9][A-Za-z0-9\-]{3,})",
+    r"c[oó]digo(?:\s+de\s+acesso)?\s*:\s*([^\s<]+)",
     re.IGNORECASE,
 )
 
-_STANDALONE_CODE_PATTERN = re.compile(
-    r"\b([A-Z0-9]{6,}(?:-[A-Z0-9]+)*)\b",
+_PROTOCOL_PATTERN = re.compile(
+    r"protocolo\s+(\d+/\d+)",
+    re.IGNORECASE,
+)
+
+_DEADLINE_PATTERN = re.compile(
+    r"prazo final para an[aá]lise e resposta [eé]\s*(\d{2}-\d{2}-\d{4})",
+    re.IGNORECASE,
 )
 
 
@@ -34,6 +39,8 @@ _STANDALONE_CODE_PATTERN = re.compile(
 class ParsedEmailContent:
     portal_url: str
     access_code: str
+    protocol_number: str | None = None
+    response_deadline: str | None = None
 
 
 class ProconEmailParseError(ValueError):
@@ -79,25 +86,24 @@ def _extract_portal_url(*, html: str | None, text: str) -> str | None:
     return None
 
 
-def _is_likely_access_code(candidate: str) -> bool:
-    if len(candidate) < 6:
-        return False
-    if candidate.lower() in {"procon", "brasil", "acesso", "codigo", "código"}:
-        return False
-    return any(char.isdigit() for char in candidate) or "-" in candidate
-
-
 def _extract_access_code(text: str) -> str | None:
     label_match = _CODE_LABEL_PATTERN.search(text)
     if label_match:
-        code = label_match.group(1).strip()
-        if _is_likely_access_code(code):
-            return code
+        return label_match.group(1).strip()
+    return None
 
-    for match in _STANDALONE_CODE_PATTERN.finditer(text):
-        candidate = match.group(1)
-        if _is_likely_access_code(candidate):
-            return candidate
+
+def _extract_protocol_number(text: str) -> str | None:
+    match = _PROTOCOL_PATTERN.search(text)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def _extract_response_deadline(text: str) -> str | None:
+    match = _DEADLINE_PATTERN.search(text)
+    if match:
+        return match.group(1).strip()
     return None
 
 
@@ -127,4 +133,9 @@ def parse_procon_notification_body(
     if not access_code:
         raise ProconEmailParseError("Código de acesso não encontrado no corpo do e-mail.")
 
-    return ParsedEmailContent(portal_url=portal_url, access_code=access_code)
+    return ParsedEmailContent(
+        portal_url=portal_url,
+        access_code=access_code,
+        protocol_number=_extract_protocol_number(normalized_text),
+        response_deadline=_extract_response_deadline(normalized_text),
+    )
