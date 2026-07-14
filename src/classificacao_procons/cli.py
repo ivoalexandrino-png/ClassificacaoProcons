@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from dataclasses import asdict
+from pathlib import Path
 
 from classificacao_procons.email import GmailClientError, GmailProconFetcher
 from classificacao_procons.email.auth import (
@@ -14,6 +15,7 @@ from classificacao_procons.email.auth import (
     has_valid_token,
     save_token_from_code,
 )
+from classificacao_procons.pipeline import PipelineError, PipelineOptions, process_new_complaints
 
 
 def _default_credentials_path() -> str:
@@ -72,6 +74,42 @@ def _run_auth(args: argparse.Namespace) -> int:
     return 0
 
 
+def _serialize_processed(item: object) -> dict[str, object]:
+    data = asdict(item)
+    for key in ("complaint_date", "procon_response_deadline", "sac_deadline", "legal_deadline"):
+        if data.get(key) is not None:
+            data[key] = data[key].isoformat()
+    return data
+
+
+def _run_process(args: argparse.Namespace) -> int:
+    if not args.dry_run and not has_valid_token(args.token):
+        print("Google não conectado. Rode: procon-email auth", file=sys.stderr)
+        return 1
+
+    options = PipelineOptions(
+        max_results=args.max_results,
+        download_dir=Path(args.download_dir),
+        mark_read=not args.no_mark_read,
+        dry_run=args.dry_run,
+        credentials_path=args.credentials,
+        token_path=args.token,
+    )
+
+    try:
+        results = process_new_complaints(options)
+    except PipelineError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    output = [_serialize_processed(item) for item in results]
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+
+    if any(item.status == "error" for item in results):
+        return 1
+    return 0
+
+
 def _run_list(args: argparse.Namespace) -> int:
     if not has_valid_token(args.token):
         print(
@@ -127,12 +165,31 @@ def main(argv: list[str] | None = None) -> int:
     list_parser.add_argument("--max-results", type=int, default=20)
     list_parser.add_argument("--mark-read", action="store_true")
 
+    process_parser = subparsers.add_parser(
+        "process",
+        help="Processar e-mails novos: portal + Drive",
+    )
+    process_parser.add_argument("--max-results", type=int, default=20)
+    process_parser.add_argument("--download-dir", default="downloads")
+    process_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Só lista os e-mails que seriam processados.",
+    )
+    process_parser.add_argument(
+        "--no-mark-read",
+        action="store_true",
+        help="Não marca os e-mails como lidos após sucesso.",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "auth":
         return _run_auth(args)
     if args.command == "list":
         return _run_list(args)
+    if args.command == "process":
+        return _run_process(args)
 
     parser.print_help()
     return 0

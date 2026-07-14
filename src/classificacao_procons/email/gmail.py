@@ -17,6 +17,7 @@ from googleapiclient.errors import HttpError
 from classificacao_procons.email.parser import (
     is_procon_cip_notification,
     parse_procon_notification_body,
+    ProconEmailParseError,
 )
 from classificacao_procons.models import ProconNotificationEmail
 
@@ -145,7 +146,10 @@ class GmailProconFetcher:
             return None
 
         text_plain, text_html = _extract_bodies(payload)
-        parsed = parse_procon_notification_body(html=text_html, text=text_plain)
+        try:
+            parsed = parse_procon_notification_body(html=text_html, text=text_plain)
+        except ProconEmailParseError:
+            return None
 
         return ProconNotificationEmail(
             message_id=message_id,
@@ -154,6 +158,8 @@ class GmailProconFetcher:
             received_at=_parse_received_at(headers),
             portal_url=parsed.portal_url,
             access_code=parsed.access_code,
+            protocol_number=parsed.protocol_number,
+            email_response_deadline=parsed.response_deadline,
             raw_snippet=message.get("snippet"),
         )
 

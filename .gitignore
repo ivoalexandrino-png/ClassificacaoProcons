@@ -19,6 +19,7 @@ credentials/
 
 # Downloads locais
 downloads/
+data/
 
 .idea/
 .vscode/

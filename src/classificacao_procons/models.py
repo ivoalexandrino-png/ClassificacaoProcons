@@ -14,6 +14,8 @@ class ProconNotificationEmail:
     received_at: datetime
     portal_url: str
     access_code: str
+    protocol_number: str | None = None
+    email_response_deadline: str | None = None
     raw_snippet: str | None = None
 
 
@@ -31,3 +33,24 @@ class ProconComplaint:
     state: str = "SP"
     portal_url: str = ""
     pdf_path: str | None = None
+
+
+@dataclass(frozen=True)
+class ProcessedComplaint:
+    """Resultado completo do fluxo e-mail → portal → Drive."""
+
+    status: str
+    message_id: str
+    access_code: str
+    protocol_number: str
+    consumer_name: str
+    consumer_cpf: str
+    complaint_date: date | None
+    procon_response_deadline: date | None
+    sac_deadline: date | None
+    legal_deadline: date | None
+    cause: str
+    state: str
+    pdf_url: str | None
+    drive_folder_url: str | None
+    error: str | None = None

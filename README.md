@@ -45,17 +45,38 @@ Variáveis opcionais:
 
 ## Uso
 
-Listar e-mails não lidos do Procon-SP:
+### Conectar Google (Gmail + Drive)
 
 ```bash
-procon-email
+procon-email auth
 ```
 
-Marcar como lidos após processar:
+### Processar reclamações novas (fluxo automático)
 
 ```bash
-procon-email --mark-read
+procon-email process
 ```
+
+Isso faz, para cada e-mail **não lido** do Procon:
+1. Lê o e-mail e extrai o código
+2. Acessa o portal e baixa o PDF
+3. Cria pasta no Drive (nome da consumidora) e salva o PDF
+4. Marca o e-mail como lido
+
+Simular sem executar:
+
+```bash
+procon-email process --dry-run
+```
+
+### Comandos individuais
+
+```bash
+procon-email list          # listar e-mails não lidos
+procon-portal --code "..." # só portal
+procon-drive --consumer-name "..." --pdf downloads/arquivo.pdf
+```
+
 
 Saída (JSON):
 
