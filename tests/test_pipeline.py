@@ -45,6 +45,7 @@ class TestCalculateDeadlines:
 
 
 @patch("classificacao_procons.pipeline.GmailProconFetcher")
+@patch("classificacao_procons.pipeline.has_gmail_modify_access", return_value=True)
 @patch("classificacao_procons.pipeline.has_valid_token", return_value=True)
 @patch("classificacao_procons.pipeline.fetch_complaint")
 @patch("classificacao_procons.pipeline.save_complaint_pdf")
@@ -52,6 +53,7 @@ def test_should_process_notification_end_to_end(
     save_pdf_mock,
     fetch_complaint_mock,
     _has_token_mock,
+    _modify_mock,
     fetcher_cls_mock,
     tmp_path,
 ) -> None:

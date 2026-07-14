@@ -3,25 +3,21 @@
 from __future__ import annotations
 
 import base64
-import os
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from classificacao_procons.email.parser import (
+    ProconEmailParseError,
     is_procon_cip_notification,
     parse_procon_notification_body,
-    ProconEmailParseError,
 )
+from classificacao_procons.google_auth import load_credentials
 from classificacao_procons.models import ProconNotificationEmail
 
-GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 DEFAULT_GMAIL_QUERY = (
     'from:procon.naoresponder@procon.sp.gov.br '
     'subject:"Fundação Procon-SP - Notificação de emissão de CIP"'
@@ -94,8 +90,8 @@ class GmailProconFetcher:
         token_path: str,
         scopes: list[str] | None = None,
     ) -> GmailProconFetcher:
-        scopes = scopes or [GMAIL_READONLY_SCOPE]
-        credentials = _load_credentials(credentials_path, token_path, scopes)
+        del credentials_path, scopes
+        credentials = load_credentials(token_path)
         service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
         return cls(service)
 
@@ -177,32 +173,3 @@ class GmailProconFetcher:
                 f"Falha ao marcar mensagem {message_id} como lida: {exc}",
             ) from exc
 
-
-def _load_credentials(
-    credentials_path: str,
-    token_path: str,
-    scopes: list[str],
-) -> Credentials:
-    credentials: Credentials | None = None
-    if os.path.exists(token_path):
-        credentials = Credentials.from_authorized_user_file(token_path, scopes)
-
-    if credentials and credentials.expired and credentials.refresh_token:
-        credentials.refresh(Request())
-
-    if credentials and credentials.valid:
-        return credentials
-
-    if not os.path.exists(credentials_path):
-        raise GmailClientError(
-            f"Arquivo de credenciais OAuth não encontrado: {credentials_path}. "
-            "Configure as credenciais do Gmail conforme o README."
-        )
-
-    flow = InstalledAppFlow.from_client_secrets_file(credentials_path, scopes)
-    credentials = flow.run_local_server(port=0)
-
-    with open(token_path, "w", encoding="utf-8") as token_file:
-        token_file.write(credentials.to_json())
-
-    return credentials

@@ -9,7 +9,11 @@ from pathlib import Path
 
 from classificacao_procons.drive import DriveClientError, save_complaint_pdf
 from classificacao_procons.email import GmailClientError, GmailProconFetcher
-from classificacao_procons.google_auth import DEFAULT_DRIVE_PARENT_FOLDER_ID, has_valid_token
+from classificacao_procons.google_auth import (
+    DEFAULT_DRIVE_PARENT_FOLDER_ID,
+    has_gmail_modify_access,
+    has_valid_token,
+)
 from classificacao_procons.models import ProcessedComplaint, ProconNotificationEmail
 from classificacao_procons.portal import PortalFetchOptions, ProconPortalError, fetch_complaint
 
@@ -134,7 +138,7 @@ def _process_notification(
     processed_protocols.add(protocol)
     _save_processed_protocols(options.state_path, processed_protocols)
 
-    if options.mark_read:
+    if options.mark_read and has_gmail_modify_access(options.token_path):
         fetcher.mark_as_read(notification.message_id)
 
     return ProcessedComplaint(
