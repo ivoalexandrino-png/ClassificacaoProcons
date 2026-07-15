@@ -7,10 +7,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from classificacao_procons.drive.client import DriveClientError
+from classificacao_procons.drive.pdf_builder import (
+    build_unified_response_pdf,
+    is_mergeable_supporting_file,
+)
 from classificacao_procons.drive.reader import (
     download_drive_file,
     ensure_output_folder,
     resolve_sac_folder_context,
+    upload_pdf_file,
     upload_text_file,
 )
 from classificacao_procons.gemini import (
@@ -21,10 +26,15 @@ from classificacao_procons.gemini import (
 from classificacao_procons.google_auth import has_valid_token
 from classificacao_procons.models import ElaboratedResponseResult, MondayCaseReady
 from classificacao_procons.monday.cases import list_cases_ready_for_elaboration
-from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
+from classificacao_procons.monday.client import (
+    MondayClientError,
+    get_api_token_from_env,
+    update_elaborated_response_links,
+)
 
 DEFAULT_WORK_DIR = Path("downloads/elaboration")
 DEFAULT_STATE_PATH = Path("data/elaborated-responses.json")
+UNIFIED_PDF_NAME = "resposta-unificada.pdf"
 
 
 class ResponsePipelineError(RuntimeError):
@@ -65,6 +75,27 @@ def _resolve_monday_token(options: ResponsePipelineOptions) -> str | None:
 
 def _resolve_gemini_key(options: ResponsePipelineOptions) -> str | None:
     return options.gemini_api_key or get_api_key_from_env()
+
+
+def _download_supporting_files(
+    *,
+    sac_context,
+    case_dir: Path,
+    token_path: str,
+) -> list[Path]:
+    attachments_dir = case_dir / "anexos-sac"
+    downloaded: list[Path] = []
+    for file_info in sac_context.supporting_files:
+        if not is_mergeable_supporting_file(file_info):
+            continue
+        destination = attachments_dir / file_info.name
+        download_drive_file(
+            file_id=file_info.file_id,
+            destination=destination,
+            token_path=token_path,
+        )
+        downloaded.append(destination)
+    return downloaded
 
 
 def _elaborate_case(
@@ -178,14 +209,22 @@ def _elaborate_case(
         )
 
     try:
-        output_folder_id = ensure_output_folder(
-            parent_folder_id=sac_context.consumer_folder_id,
+        supporting_paths = _download_supporting_files(
+            sac_context=sac_context,
+            case_dir=case_dir,
             token_path=options.token_path,
         )
-        analysis_url = upload_text_file(
-            folder_id=output_folder_id,
-            file_name="resposta-analise.txt",
-            content=generated.analysis,
+        unified_pdf_path = case_dir / UNIFIED_PDF_NAME
+        build_unified_response_pdf(
+            response_text=generated.final_response,
+            complaint_pdf=complaint_pdf_path,
+            supporting_files=supporting_paths,
+            destination=unified_pdf_path,
+            title=f"Resposta ao Procon - {case.item_name}",
+        )
+
+        output_folder_id = ensure_output_folder(
+            parent_folder_id=sac_context.consumer_folder_id,
             token_path=options.token_path,
         )
         full_url = upload_text_file(
@@ -200,6 +239,12 @@ def _elaborate_case(
             content=generated.portal_summary,
             token_path=options.token_path,
         )
+        unified_pdf_url = upload_pdf_file(
+            folder_id=output_folder_id,
+            file_name=UNIFIED_PDF_NAME,
+            pdf_path=unified_pdf_path,
+            token_path=options.token_path,
+        )
     except DriveClientError as exc:
         return ElaboratedResponseResult(
             status="error",
@@ -209,6 +254,20 @@ def _elaborate_case(
             error=str(exc),
         )
 
+    monday_error: str | None = None
+    monday_token = _resolve_monday_token(options)
+    if monday_token:
+        try:
+            update_elaborated_response_links(
+                item_id=case.item_id,
+                full_response_url=full_url,
+                summary_response_url=summary_url,
+                unified_pdf_url=unified_pdf_url,
+                api_token=monday_token,
+            )
+        except MondayClientError as exc:
+            monday_error = str(exc)
+
     elaborated_item_ids.add(case.item_id)
     _save_elaborated_item_ids(options.state_path, elaborated_item_ids)
 
@@ -217,9 +276,10 @@ def _elaborate_case(
         monday_item_id=case.item_id,
         consumer_name=case.item_name,
         protocol_number=case.protocol_number,
-        analysis_file_url=analysis_url,
         full_response_file_url=full_url,
         summary_response_file_url=summary_url,
+        unified_pdf_file_url=unified_pdf_url,
+        monday_error=monday_error,
     )
 
 
