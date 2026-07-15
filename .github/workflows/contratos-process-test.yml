@@ -1,0 +1,90 @@
+name: Test contrato assinado (manual)
+
+# Processa um documento já assinado no Autentique: Drive + Monday.
+# Não requer Cloud Run — usa secrets do GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      document_id:
+        description: "ID do documento no Autentique (vazio = último assinado)"
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: "Somente simular (não grava Drive/Monday)"
+        required: false
+        type: boolean
+        default: false
+      skip_gemini:
+        description: "Pular extração Gemini"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  process-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install .
+
+      - name: Prepare Google credentials
+        env:
+          GMAIL_OAUTH_JSON: ${{ secrets.GMAIL_OAUTH_JSON }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+        run: |
+          mkdir -p credentials
+          printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
+          printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
+
+      - name: Validate secrets
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          for name in MONDAY_API_TOKEN AUTENTIQUE_API_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "Secret ausente: $name"
+              exit 1
+            fi
+          done
+          if [ -z "$GEMINI_API_KEY" ] && [ "${{ inputs.skip_gemini }}" != "true" ]; then
+            echo "GEMINI_API_KEY ausente (ou marque skip_gemini=true)"
+            exit 1
+          fi
+
+      - name: Resolve document ID
+        id: resolve
+        env:
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          INPUT_DOCUMENT_ID: ${{ inputs.document_id }}
+        run: |
+          DOCUMENT_ID=$(python3 scripts/resolve-autentique-document-id.py)
+          echo "document_id=$DOCUMENT_ID" >> "$GITHUB_OUTPUT"
+          echo "Usando document_id=$DOCUMENT_ID"
+
+      - name: Process finished contract
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          ARGS="--document-id ${{ steps.resolve.outputs.document_id }}"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          if [ "${{ inputs.skip_gemini }}" = "true" ]; then
+            ARGS="$ARGS --skip-gemini"
+          fi
+          contratos-webhook process $ARGS
