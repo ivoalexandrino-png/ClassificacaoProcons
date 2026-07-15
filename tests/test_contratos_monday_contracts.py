@@ -12,7 +12,7 @@ class TestContratosMondayColumnValues:
         columns = [
             MondayColumn(id="empresa", title="Empresa", column_type="status"),
             MondayColumn(id="cnpj", title="CNPJ", column_type="text"),
-            MondayColumn(id="tipo", title="Tipo de contrato", column_type="status"),
+            MondayColumn(id="tipo", title="Tipo de contrato", column_type="dropdown"),
             MondayColumn(id="data", title="Data do contrato", column_type="date"),
             MondayColumn(id="termino", title="Término", column_type="date"),
             MondayColumn(id="contrato", title="Contrato", column_type="link"),
@@ -39,7 +39,7 @@ class TestContratosMondayColumnValues:
 
         assert values["empresa"] == {"label": "B4A"}
         assert values["cnpj"] == "12.345.678/0001-90"
-        assert values["tipo"] == {"label": "Prestação de Serviços"}
+        assert values["tipo"] == {"labels": ["Prestação de Serviços"]}
         assert values["data"] == {"date": "2026-01-01"}
         assert values["termino"] == {"date": "2027-01-01"}
         assert values["contrato"] == {

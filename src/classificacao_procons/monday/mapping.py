@@ -193,6 +193,9 @@ def format_column_value(
     if column_type in {"status", "color"}:
         return {"label": str(value)}
 
+    if column_type == "dropdown":
+        return {"labels": [str(value)]}
+
     if column_type == "long_text":
         return {"text": str(value)}
 
