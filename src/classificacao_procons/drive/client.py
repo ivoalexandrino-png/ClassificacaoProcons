@@ -179,6 +179,60 @@ def upload_pdf_to_folder(
     return uploaded["id"], uploaded["webViewLink"]
 
 
+def ensure_folder_path(
+    service,
+    *,
+    root_folder_id: str,
+    path_parts: list[str],
+) -> tuple[str, str]:
+    """Garante uma cadeia de subpastas e retorna (folder_id, folder_url)."""
+    if not path_parts:
+        raise DriveClientError("Caminho de pastas vazio.")
+
+    parent_id = root_folder_id
+    for part in path_parts:
+        folder_name = _sanitize_folder_name(part)
+        folder_id = _find_child_folder(service, parent_id=parent_id, folder_name=folder_name)
+        if not folder_id:
+            folder_id = _create_folder(service, parent_id=parent_id, folder_name=folder_name)
+        parent_id = folder_id
+
+    try:
+        metadata = (
+            service.files()
+            .get(fileId=parent_id, fields="webViewLink", supportsAllDrives=True)
+            .execute()
+        )
+    except HttpError as exc:
+        raise DriveClientError(f"Falha ao obter link da pasta: {exc}") from exc
+
+    return parent_id, metadata["webViewLink"]
+
+
+def upload_pdf_to_folder_path(
+    *,
+    root_folder_id: str,
+    path_parts: list[str],
+    pdf_path: Path,
+    file_name: str | None = None,
+    token_path: str | None = None,
+) -> tuple[str, str, str]:
+    """Cria/garante subpastas e envia PDF. Retorna (folder_id, folder_url, file_url)."""
+    service = _build_drive_service(token_path)
+    folder_id, folder_url = ensure_folder_path(
+        service,
+        root_folder_id=root_folder_id,
+        path_parts=path_parts,
+    )
+    _, file_url = upload_pdf_to_folder(
+        service,
+        folder_id=folder_id,
+        pdf_path=pdf_path,
+        file_name=file_name,
+    )
+    return folder_id, folder_url, file_url
+
+
 def save_complaint_pdf(
     *,
     consumer_name: str,
