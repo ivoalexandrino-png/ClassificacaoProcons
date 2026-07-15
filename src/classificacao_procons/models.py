@@ -81,5 +81,4 @@ class ElaboratedResponseResult:
     full_response_file_url: str | None = None
     summary_response_file_url: str | None = None
     unified_pdf_file_url: str | None = None
-    monday_error: str | None = None
     error: str | None = None
