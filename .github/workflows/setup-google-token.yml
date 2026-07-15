@@ -1,0 +1,53 @@
+name: Setup Google token
+
+# Gera o gmail-token.json para colar no secret GMAIL_TOKEN_JSON do GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      auth_code:
+        description: "Deixe vazio para só gerar o link; depois cole o código aqui"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  setup-token:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install .
+
+      - name: Prepare OAuth client file
+        env:
+          GMAIL_OAUTH_JSON: ${{ secrets.GMAIL_OAUTH_JSON }}
+        run: |
+          mkdir -p credentials
+          printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
+
+      - name: Generate authorization link
+        if: ${{ inputs.auth_code == '' }}
+        run: python3 -m classificacao_procons.cli auth --remote
+
+      - name: Exchange authorization code for token
+        if: ${{ inputs.auth_code != '' }}
+        env:
+          AUTH_CODE: ${{ inputs.auth_code }}
+        run: python3 -m classificacao_procons.cli auth --remote --code "$AUTH_CODE"
+
+      - name: Upload token file
+        if: ${{ inputs.auth_code != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmail-token
+          path: credentials/gmail-token.json
+          retention-days: 1

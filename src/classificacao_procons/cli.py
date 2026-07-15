@@ -43,6 +43,7 @@ def _run_auth(args: argparse.Namespace) -> int:
                 code=args.code,
                 credentials_path=credentials,
                 token_path=token,
+                remote=args.remote,
             )
         except GmailClientError as exc:
             print(f"Erro: {exc}", file=sys.stderr)
@@ -50,15 +51,27 @@ def _run_auth(args: argparse.Namespace) -> int:
         print("Pronto! Gmail e Drive conectados com sucesso.")
         return 0
 
-    if has_valid_token(token):
+    if has_valid_token(token) and not args.remote:
         print("Gmail e Drive já estão conectados.")
         return 0
 
     try:
-        url = get_authorization_url(credentials_path=credentials)
+        url = get_authorization_url(
+            credentials_path=credentials,
+            remote=args.remote,
+        )
     except GmailClientError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
+
+    if args.remote:
+        print("Link para autorizar Gmail e Drive (use no GitHub Actions):\n")
+        print(url)
+        print(
+            "\nDepois de Permitir, copie o código da barra de endereço "
+            "e rode o workflow 'Setup Google token' com esse código.",
+        )
+        return 0
 
     print("Para conectar Gmail e Drive, siga estes 4 passos:\n")
     print("1. Abra este link no navegador:")
@@ -159,6 +172,11 @@ def main(argv: list[str] | None = None) -> int:
     auth_parser.add_argument(
         "--code",
         help="Código de autorização copiado do Google (uso interno).",
+    )
+    auth_parser.add_argument(
+        "--remote",
+        action="store_true",
+        help="Fluxo para GitHub Actions (sem pasta credentials no PC).",
     )
 
     list_parser = subparsers.add_parser("list", help="Listar e-mails do Procon não lidos")

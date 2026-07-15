@@ -54,21 +54,33 @@ def _load_pending_auth() -> dict[str, str]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def get_authorization_url(
+def _create_oauth_flow(
     *,
-    credentials_path: str = DEFAULT_CREDENTIALS_PATH,
-) -> str:
-    """Gera link para autorizar Gmail + Drive."""
+    credentials_path: str,
+    remote: bool,
+) -> InstalledAppFlow:
     if not os.path.exists(credentials_path):
         raise GoogleAuthError(f"Arquivo não encontrado: {credentials_path}")
 
     flow = InstalledAppFlow.from_client_secrets_file(
         credentials_path,
         scopes=GOOGLE_SCOPES,
+        autogenerate_code_verifier=not remote,
     )
     flow.redirect_uri = LOCALHOST_REDIRECT_URI
+    return flow
+
+
+def get_authorization_url(
+    *,
+    credentials_path: str = DEFAULT_CREDENTIALS_PATH,
+    remote: bool = False,
+) -> str:
+    """Gera link para autorizar Gmail + Drive."""
+    flow = _create_oauth_flow(credentials_path=credentials_path, remote=remote)
     auth_url, state = flow.authorization_url(prompt="consent", access_type="offline")
-    _save_pending_auth(flow, state)
+    if not remote:
+        _save_pending_auth(flow, state)
     return auth_url
 
 
@@ -77,25 +89,29 @@ def save_token_from_code(
     code: str,
     credentials_path: str = DEFAULT_CREDENTIALS_PATH,
     token_path: str = DEFAULT_TOKEN_PATH,
+    remote: bool = False,
 ) -> None:
     """Salva token após usuário colar o código de autorização."""
-    if not os.path.exists(credentials_path):
-        raise GoogleAuthError(f"Arquivo não encontrado: {credentials_path}")
+    pending_path = Path(PENDING_AUTH_PATH)
 
-    pending = _load_pending_auth()
-    flow = InstalledAppFlow.from_client_secrets_file(
-        credentials_path,
-        scopes=GOOGLE_SCOPES,
-    )
-    flow.redirect_uri = pending["redirect_uri"]
-    flow.code_verifier = pending["code_verifier"]
-    flow.fetch_token(code=code.strip())
+    if remote or not pending_path.exists():
+        if not remote:
+            raise GoogleAuthError(
+                "Link expirado. Gere um novo com: procon-email auth",
+            )
+        flow = _create_oauth_flow(credentials_path=credentials_path, remote=True)
+        flow.fetch_token(code=code.strip())
+    else:
+        pending = _load_pending_auth()
+        flow = _create_oauth_flow(credentials_path=credentials_path, remote=False)
+        flow.redirect_uri = pending["redirect_uri"]
+        flow.code_verifier = pending["code_verifier"]
+        flow.fetch_token(code=code.strip())
+        pending_path.unlink(missing_ok=True)
 
     os.makedirs(os.path.dirname(token_path) or ".", exist_ok=True)
     with open(token_path, "w", encoding="utf-8") as token_file:
         token_file.write(flow.credentials.to_json())
-
-    Path(PENDING_AUTH_PATH).unlink(missing_ok=True)
 
 
 def load_credentials(token_path: str = DEFAULT_TOKEN_PATH) -> Credentials:
