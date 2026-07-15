@@ -29,7 +29,7 @@ from classificacao_procons.contratos.monday_contracts import (
     update_controle_assinado,
 )
 from classificacao_procons.drive.client import DriveClientError, upload_pdf_to_folder_path
-from classificacao_procons.monday.client import get_api_token_from_env
+from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
 
 DEFAULT_DOWNLOAD_DIR = Path("downloads/contratos")
 DEFAULT_STATE_PATH = Path("data/processed-contract-documents.json")
@@ -189,13 +189,16 @@ def process_finished_document(
 
     contratos_result = None
     if monday_token:
-        contratos_result = register_contrato_item(
-            api_token=monday_token,
-            metadata=metadata,
-            document_name=document.name,
-            signed_pdf_url=drive_pdf_url,
-            tipo_label=tipo_label,
-        )
+        try:
+            contratos_result = register_contrato_item(
+                api_token=monday_token,
+                metadata=metadata,
+                document_name=document.name,
+                signed_pdf_url=drive_pdf_url,
+                tipo_label=tipo_label,
+            )
+        except MondayClientError as exc:
+            raise ContractPipelineError(str(exc)) from exc
 
     processed.add(document.document_id)
     _save_processed_documents(opts.state_path, processed)

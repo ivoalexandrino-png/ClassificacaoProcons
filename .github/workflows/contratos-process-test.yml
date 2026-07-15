@@ -3,6 +3,9 @@ name: Test contrato assinado (manual)
 # Processa um documento já assinado no Autentique: Drive + Monday.
 # Não requer Cloud Run — usa secrets do GitHub.
 on:
+  push:
+    branches:
+      - cursor/trigger-contratos-test-c1dc
   workflow_dispatch:
     inputs:
       document_id:
@@ -27,6 +30,19 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - name: Set workflow parameters
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "document_id=${{ inputs.document_id }}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+            echo "skip_gemini=${{ inputs.skip_gemini }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "document_id=" >> "$GITHUB_OUTPUT"
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+            echo "skip_gemini=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -59,7 +75,7 @@ jobs:
               exit 1
             fi
           done
-          if [ -z "$GEMINI_API_KEY" ] && [ "${{ inputs.skip_gemini }}" != "true" ]; then
+          if [ -z "$GEMINI_API_KEY" ] && [ "${{ steps.params.outputs.skip_gemini }}" != "true" ]; then
             echo "GEMINI_API_KEY ausente (ou marque skip_gemini=true)"
             exit 1
           fi
@@ -68,7 +84,7 @@ jobs:
         id: resolve
         env:
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
-          INPUT_DOCUMENT_ID: ${{ inputs.document_id }}
+          INPUT_DOCUMENT_ID: ${{ steps.params.outputs.document_id }}
         run: |
           DOCUMENT_ID=$(python3 scripts/resolve-autentique-document-id.py)
           echo "document_id=$DOCUMENT_ID" >> "$GITHUB_OUTPUT"
@@ -81,10 +97,10 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           ARGS="--document-id ${{ steps.resolve.outputs.document_id }}"
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
-          if [ "${{ inputs.skip_gemini }}" = "true" ]; then
+          if [ "${{ steps.params.outputs.skip_gemini }}" = "true" ]; then
             ARGS="$ARGS --skip-gemini"
           fi
           contratos-webhook process $ARGS
