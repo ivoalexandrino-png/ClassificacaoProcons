@@ -102,7 +102,7 @@ def build_column_values(
         if raw_value in (None, ""):
             continue
 
-        column_values[column.id] = _format_column_value(column.column_type, raw_value)
+        column_values[column.id] = format_column_value(column.column_type, raw_value)
 
     return column_values
 
@@ -178,7 +178,7 @@ def build_response_column_values(
     return column_values
 
 
-def _format_column_value(
+def format_column_value(
     column_type: str,
     value: str | date,
     *,
@@ -191,6 +191,9 @@ def _format_column_value(
         return format_link_column_value(url=str(value), text=link_text)
 
     if column_type in {"status", "color"}:
-        return {"label": value}
+        return {"label": str(value)}
+
+    if column_type == "long_text":
+        return {"text": str(value)}
 
     return str(value)

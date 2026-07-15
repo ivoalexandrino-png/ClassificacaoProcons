@@ -23,7 +23,11 @@ from classificacao_procons.contratos.constants import (
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.monday.client import _graphql_request, load_board_metadata
-from classificacao_procons.monday.mapping import MondayColumn, format_link_column_value
+from classificacao_procons.monday.mapping import (
+    MondayColumn,
+    format_column_value,
+    format_link_column_value,
+)
 
 
 @dataclass(frozen=True)
@@ -229,29 +233,33 @@ def _build_contratos_column_values(
 
     empresa_col = _find_column(column_by_title, ("empresa",))
     if empresa_col and metadata.company:
-        values[empresa_col.id] = {"label": metadata.company}
+        values[empresa_col.id] = format_column_value(empresa_col.column_type, metadata.company)
 
     cnpj_col = _find_column(column_by_title, ("cnpj",))
     if cnpj_col and metadata.counterparty_cnpj:
-        values[cnpj_col.id] = metadata.counterparty_cnpj
+        values[cnpj_col.id] = format_column_value(
+            cnpj_col.column_type,
+            metadata.counterparty_cnpj,
+        )
 
     tipo_col = _find_column(column_by_title, ("tipo de contrato",))
     if tipo_col and metadata.contract_type:
-        values[tipo_col.id] = metadata.contract_type
+        values[tipo_col.id] = format_column_value(tipo_col.column_type, metadata.contract_type)
 
     data_col = _find_column(column_by_title, ("data do contrato",))
     if data_col and metadata.start_date:
-        values[data_col.id] = {"date": metadata.start_date.isoformat()}
+        values[data_col.id] = format_column_value(data_col.column_type, metadata.start_date)
 
     termino_col = _find_column(column_by_title, ("término", "termino"))
     if termino_col and metadata.end_date:
-        values[termino_col.id] = {"date": metadata.end_date.isoformat()}
+        values[termino_col.id] = format_column_value(termino_col.column_type, metadata.end_date)
 
-    contrato_col = _find_column(column_by_title, ("contrato",))
+    contrato_col = _find_column(column_by_title, ("contrato",), exact=True)
     if contrato_col:
-        values[contrato_col.id] = format_link_column_value(
-            url=signed_pdf_url,
-            text=document_name,
+        values[contrato_col.id] = format_column_value(
+            contrato_col.column_type,
+            signed_pdf_url,
+            link_text=document_name,
         )
 
     vigencia_col = _find_column(column_by_title, ("vigência", "vigencia"))
@@ -259,11 +267,11 @@ def _build_contratos_column_values(
         label = "Vigente"
         if metadata.end_date and metadata.end_date < date.today():
             label = "Não Vigente"
-        values[vigencia_col.id] = {"label": label}
+        values[vigencia_col.id] = format_column_value(vigencia_col.column_type, label)
 
     obs_col = _find_column(column_by_title, ("observações", "observacoes"))
     if obs_col and metadata.summary:
-        values[obs_col.id] = metadata.summary
+        values[obs_col.id] = format_column_value(obs_col.column_type, metadata.summary)
 
     return values
 
@@ -271,8 +279,14 @@ def _build_contratos_column_values(
 def _find_column(
     column_by_title: dict[str, MondayColumn],
     keywords: tuple[str, ...],
+    *,
+    exact: bool = False,
 ) -> MondayColumn | None:
     for title, column in column_by_title.items():
+        if exact:
+            if title in keywords:
+                return column
+            continue
         if any(keyword in title for keyword in keywords):
             return column
     return None
