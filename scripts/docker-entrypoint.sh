@@ -20,6 +20,10 @@ case "${1:-process}" in
   process)
     exec python3 -m classificacao_procons.cli process --max-results "${PROCON_MAX_RESULTS:-20}"
     ;;
+  contratos-webhook)
+    shift
+    exec contratos-webhook serve --host 0.0.0.0 --port "${PORT:-8080}" "$@"
+    ;;
   *)
     exec "$@"
     ;;
