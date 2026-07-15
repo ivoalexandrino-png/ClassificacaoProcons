@@ -54,6 +54,32 @@ class TestContratosMondayColumnValues:
         assert values["vigencia"] == {"label": "Vigente"}
         assert values["obs"] == {"text": "Contrato de parceria B2B."}
 
+    def test_should_skip_file_column_in_json_values(self) -> None:
+        columns = [
+            MondayColumn(id="contrato", title="Contrato", column_type="file"),
+            MondayColumn(id="cnpj", title="CNPJ outra Parte", column_type="text"),
+        ]
+        metadata = ContractMetadata(
+            counterparty_name="Carolinne",
+            counterparty_cnpj="123",
+            contract_type=None,
+            company=None,
+            start_date=None,
+            end_date=None,
+            property_name=None,
+            summary=None,
+        )
+
+        values = _build_contratos_column_values(
+            columns,
+            metadata=metadata,
+            signed_pdf_url="https://drive.google.com/file/abc/view",
+            document_name="Termo de Rescisão",
+        )
+
+        assert "contrato" not in values
+        assert values["cnpj"] == "123"
+
     def test_should_drop_unknown_status_and_dropdown_labels(self) -> None:
         details = [
             MondayColumnDetails(

@@ -77,10 +77,12 @@ class TestContractPipeline:
         )
 
         assert result.drive_pdf_url == "https://drive/file.pdf"
+        assert result.drive_folder_path == "1 - Contratos / Duda & Tina"
         assert result.controle_item_id == "111"
         assert result.contratos_item_id == "222"
         update_controle_mock.assert_called_once()
         register_mock.assert_called_once()
+        assert register_mock.call_args.kwargs["pdf_path"] == pdf_path
 
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert "doc-1" in state["document_ids"]

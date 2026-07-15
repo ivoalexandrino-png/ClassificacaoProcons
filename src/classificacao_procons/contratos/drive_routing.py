@@ -10,7 +10,12 @@ from classificacao_procons.contratos.constants import (
     DRIVE_FOLDER_CONTRATOS_ID,
     DRIVE_FOLDER_LOCACAO_ID,
     DRIVE_FOLDER_MINUTAS_ID,
+    DRIVE_ROOT_FOLDER_NAMES,
+    DRIVE_SUBFOLDER_RH_CLT,
+    DRIVE_SUBFOLDER_RH_PJ,
     MINUTAS_SUBFOLDER_BY_CATEGORY,
+    MONDAY_GROUP_CONTRATOS_PJ,
+    MONDAY_GROUP_CONTRATOS_TRABALHO_CLT,
 )
 
 
@@ -29,6 +34,36 @@ def _normalize_text(value: str) -> str:
 def infer_category(*, document_name: str, contract_type: str | None = None) -> str:
     """Infere categoria do contrato a partir do nome e tipo extraído."""
     blob = _normalize_text(f"{document_name} {contract_type or ''}")
+
+    rh_clt_keywords = (
+        "rescisao",
+        "rescisão",
+        "admissao",
+        "admissão",
+        "contrato de trabalho",
+        "clt",
+        "empregado",
+        "funcionario",
+        "funcionário",
+        "holerite",
+        "trct",
+        "acordo trabalhista",
+    )
+    if any(keyword in blob for keyword in rh_clt_keywords):
+        return "rh_clt"
+
+    rh_pj_keywords = (
+        "contrato pj",
+        "prestador pj",
+        "pessoa juridica intern",
+        "pessoa jurídica intern",
+        "contrato de prestacao de servicos pj",
+        "contrato de prestação de serviços pj",
+    )
+    if any(keyword in blob for keyword in rh_pj_keywords):
+        return "rh_pj"
+    if " pj " in f" {blob} " and "intern" in blob:
+        return "rh_pj"
 
     locacao_keywords = ("locacao", "locação", "imovel", "imóvel", "tower bridge")
     if any(keyword in blob for keyword in locacao_keywords):
@@ -62,6 +97,10 @@ def infer_category(*, document_name: str, contract_type: str | None = None) -> s
 
 def infer_monday_tipo(*, document_name: str, category: str) -> str:
     """Mapeia categoria para label Tipo do Monday (Controle Assinaturas / Contratos)."""
+    if category == "rh_clt":
+        return MONDAY_GROUP_CONTRATOS_TRABALHO_CLT
+    if category == "rh_pj":
+        return MONDAY_GROUP_CONTRATOS_PJ
     if category == "influencer":
         return "Contratos Influencers (Queens)"
     if category == "nda":
@@ -110,6 +149,18 @@ def resolve_drive_destination(
     category = infer_category(document_name=document_name, contract_type=contract_type)
     counterparty = _sanitize_folder_part(counterparty_name or document_name)
 
+    if category == "rh_clt":
+        return DriveDestination(
+            root_folder_id=DRIVE_FOLDER_CONTRATOS_ID,
+            path_parts=[DRIVE_SUBFOLDER_RH_CLT, counterparty],
+        )
+
+    if category == "rh_pj":
+        return DriveDestination(
+            root_folder_id=DRIVE_FOLDER_CONTRATOS_ID,
+            path_parts=[DRIVE_SUBFOLDER_RH_PJ, counterparty],
+        )
+
     if category == "locacao":
         property_folder = _sanitize_folder_part(property_name or counterparty)
         return DriveDestination(
@@ -141,3 +192,11 @@ def build_contract_pdf_filename(*, document_name: str) -> str:
     if not safe_name.lower().endswith(".pdf"):
         return f"{safe_name}.pdf"
     return safe_name
+
+
+def format_drive_folder_path(destination: DriveDestination) -> str:
+    """Monta caminho legível da pasta no Drive (para logs e resultado do pipeline)."""
+    root_name = DRIVE_ROOT_FOLDER_NAMES.get(destination.root_folder_id, "Contratos")
+    if not destination.path_parts:
+        return root_name
+    return " / ".join([root_name, *destination.path_parts])

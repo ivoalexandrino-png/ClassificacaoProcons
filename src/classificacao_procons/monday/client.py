@@ -8,7 +8,9 @@ import re
 import unicodedata
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
 from classificacao_procons.models import ProcessedComplaint
 from classificacao_procons.monday.mapping import (
@@ -19,6 +21,7 @@ from classificacao_procons.monday.mapping import (
 )
 
 MONDAY_API_URL = "https://api.monday.com/v2"
+MONDAY_FILE_API_URL = "https://api.monday.com/v2/file"
 MONDAY_API_VERSION = "2024-10"
 DEFAULT_BOARD_NAME = "procons"
 DEFAULT_GROUP_NAME = "pendentes de resposta"
@@ -106,6 +109,73 @@ def _graphql_request(*, api_token: str, query: str, variables: dict | None = Non
         raise MondayClientError("Monday API retornou payload vazio.")
 
     return data
+
+
+def upload_file_to_column(
+    *,
+    api_token: str,
+    item_id: str,
+    column_id: str,
+    file_path: Path,
+) -> None:
+    """Envia PDF/arquivo para coluna do tipo file no Monday."""
+    if not file_path.exists():
+        raise MondayClientError(f"Arquivo não encontrado para upload no Monday: {file_path}")
+
+    file_bytes = file_path.read_bytes()
+    boundary = f"----MondayFormBoundary{uuid.uuid4().hex}"
+    query = (
+        "mutation ($file: File!) {"
+        f' add_file_to_column(item_id: {item_id}, column_id: "{column_id}", file: $file)'
+        " { id } }"
+    )
+    map_payload = json.dumps({"file": "variables.file"})
+
+    body = bytearray()
+    for part_name, part_value in (
+        ("query", query),
+        ("map", map_payload),
+    ):
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{part_name}"\r\n\r\n'.encode())
+        body.extend(part_value.encode("utf-8"))
+        body.extend(b"\r\n")
+
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(
+        (
+            f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'
+            "Content-Type: application/pdf\r\n\r\n"
+        ).encode(),
+    )
+    body.extend(file_bytes)
+    body.extend(f"\r\n--{boundary}--\r\n".encode())
+
+    request = urllib.request.Request(
+        MONDAY_FILE_API_URL,
+        data=bytes(body),
+        headers={
+            "Authorization": api_token,
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "API-Version": MONDAY_API_VERSION,
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise MondayClientError(f"Monday file API HTTP {exc.code}: {error_body}") from exc
+    except urllib.error.URLError as exc:
+        raise MondayClientError(f"Monday file API indisponível: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise MondayClientError("Monday file API retornou resposta inválida.") from exc
+
+    if payload.get("errors"):
+        messages = "; ".join(str(item.get("message", item)) for item in payload["errors"])
+        raise MondayClientError(messages)
 
 
 def _board_columns(board: dict) -> list[MondayColumn]:
