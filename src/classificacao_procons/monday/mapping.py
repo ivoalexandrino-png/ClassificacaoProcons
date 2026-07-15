@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -17,6 +18,9 @@ FIELD_COMPLAINT_DATE = "complaint_date"
 FIELD_SAC_DEADLINE = "sac_deadline"
 FIELD_LEGAL_DEADLINE = "legal_deadline"
 FIELD_CAUSE = "cause"
+FIELD_DOCS_SAC = "docs_sac"
+FIELD_STATUS = "status"
+FIELD_RESPONSE_DATE = "response_date"
 
 FIELD_TITLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     FIELD_CONSUMER_NAME: ("nome", "consumidor", "cliente", "reclamante"),
@@ -25,9 +29,12 @@ FIELD_TITLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     FIELD_PROTOCOL: ("cip", "fa", "protocolo", "numero"),
     FIELD_CPF: ("cpf",),
     FIELD_COMPLAINT_DATE: ("data reclamacao", "data da reclamacao", "data reclama", "abertura"),
-    FIELD_SAC_DEADLINE: ("sac", "prazo sac"),
-    FIELD_LEGAL_DEADLINE: ("juridico", "legal", "prazo juridico"),
+    FIELD_SAC_DEADLINE: ("prazo sac",),
+    FIELD_LEGAL_DEADLINE: ("prazo juridico", "prazo legal"),
     FIELD_CAUSE: ("causa", "motivo", "classificacao", "assunto"),
+    FIELD_DOCS_SAC: ("docs sac",),
+    FIELD_STATUS: ("status",),
+    FIELD_RESPONSE_DATE: ("data da resposta legal", "resposta legal/baixa"),
 }
 
 
@@ -99,6 +106,32 @@ def find_protocol_column(columns: list[MondayColumn]) -> MondayColumn | None:
         if resolve_field_for_column(column.title) == FIELD_PROTOCOL:
             return column
     return None
+
+
+def find_column_by_field(columns: list[MondayColumn], field: str) -> MondayColumn | None:
+    for column in columns:
+        if resolve_field_for_column(column.title) == field:
+            return column
+    return None
+
+
+def parse_link_column_value(raw_value: str | None) -> str | None:
+    if not raw_value:
+        return None
+    try:
+        payload = json.loads(raw_value)
+    except json.JSONDecodeError:
+        return raw_value.strip() or None
+    if isinstance(payload, dict):
+        url = str(payload.get("url", "")).strip()
+        return url or None
+    return None
+
+
+def parse_status_text(text: str | None) -> str | None:
+    if not text:
+        return None
+    return text.strip()
 
 
 def _format_column_value(column_type: str, value: str | date) -> Any:

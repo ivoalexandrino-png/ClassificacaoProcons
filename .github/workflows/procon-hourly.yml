@@ -78,3 +78,9 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
         run: python -m classificacao_procons.cli process --max-results 20
+
+      - name: Elaborate Procon responses
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python -m classificacao_procons.cli elaborate --max-results 20

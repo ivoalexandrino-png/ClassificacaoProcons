@@ -129,9 +129,12 @@ print(result.portal_url, result.access_code)
 
 ## Próximas etapas
 
-- [ ] Portal Procon: login + código → extrair dados e PDF
-- [ ] Google Drive: criar pasta e upload do PDF
-- [x] Monday.com: cadastro em "pendentes de resposta" (requer secret `MONDAY_API_TOKEN`)
+- [x] Portal Procon: login + código → extrair dados e PDF
+- [x] Google Drive: criar pasta e upload do PDF
+- [x] Monday.com: cadastro em "pendentes de resposta"
+- [x] Elaboração de resposta com Gemini (requer `GEMINI_API_KEY`)
+- [ ] PDF da resposta + unificação de anexos SAC
+- [ ] Envio automático no portal Procon
 
 ## Validação
 
