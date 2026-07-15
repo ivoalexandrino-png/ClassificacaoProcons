@@ -8,6 +8,17 @@ DRIVE_FOLDER_CONTRATOS_ID = "1WLO6pvT9aCsqJPfzasCdbZVf7F9esoVj"
 DRIVE_FOLDER_LOCACAO_ID = "1GHo8YNgeXhC6K0uJwETU6Nq0fB0zn3nc"
 DRIVE_FOLDER_MINUTAS_ID = "1GuGalt896VtVs75zOvbXBfrwRtjWKnB7"
 
+# Subpastas em "1 - Contratos" (DRIVE_FOLDER_CONTRATOS_ID)
+DRIVE_SUBFOLDER_RH_CLT = "RH - CLT"
+DRIVE_SUBFOLDER_RH_PJ = "RH - PJ"
+
+# Nomes legíveis das pastas raiz (para logs e resultado do pipeline)
+DRIVE_ROOT_FOLDER_NAMES: dict[str, str] = {
+    DRIVE_FOLDER_CONTRATOS_ID: "1 - Contratos",
+    DRIVE_FOLDER_LOCACAO_ID: "2 - Contratos de Locação - Imóveis",
+    DRIVE_FOLDER_MINUTAS_ID: "3 - Minutas padrões",
+}
+
 # Monday boards
 MONDAY_CONTROLE_ASSINATURAS_BOARD_ID = "5301515799"
 MONDAY_CONTRATOS_BOARD_ID = "5385471914"
@@ -27,6 +38,9 @@ CONTROLE_STATUS_ASSINADO = "Assinado"
 CONTROLE_STATUS_AGUARDANDO_OUTROS = "Aguardando outros"
 
 # Contratos — grupos (board 5385471914)
+MONDAY_GROUP_CONTRATOS_TRABALHO_CLT = "Contratos de Trabalho (CLT)"
+MONDAY_GROUP_CONTRATOS_PJ = "Contratos PJ (Interno)"
+
 CONTRATOS_GROUP_BY_TIPO: dict[str, str] = {
     "Contratos B4A": "topics",
     "Contratos MMKT": "novo_grupo",
@@ -40,8 +54,17 @@ CONTRATOS_GROUP_BY_TIPO: dict[str, str] = {
     "Contratos Influencers (Queens)": "novo_grupo67322",
     "Contratos Jan": "contratos_jan__1",
     "Pedidos Marcas Próprias": "topics",
-    "RH": "topics",
+    MONDAY_GROUP_CONTRATOS_TRABALHO_CLT: MONDAY_GROUP_CONTRATOS_TRABALHO_CLT,
+    MONDAY_GROUP_CONTRATOS_PJ: MONDAY_GROUP_CONTRATOS_PJ,
 }
+
+# Grupos criados dinamicamente no Monday (título = chave de lookup)
+DYNAMIC_CONTRATOS_GROUP_TITLES = frozenset(
+    {
+        MONDAY_GROUP_CONTRATOS_TRABALHO_CLT,
+        MONDAY_GROUP_CONTRATOS_PJ,
+    }
+)
 
 DEFAULT_CONTRATOS_GROUP_ID = "topics"
 

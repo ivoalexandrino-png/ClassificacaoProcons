@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from classificacao_procons.contratos.constants import (
@@ -17,6 +20,7 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_GROUP_ASSINADOS,
     CONTROLE_STATUS_ASSINADO,
     DEFAULT_CONTRATOS_GROUP_ID,
+    DYNAMIC_CONTRATOS_GROUP_TITLES,
     MONDAY_CONTRATOS_BOARD_ID,
     MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
 )
@@ -26,6 +30,7 @@ from classificacao_procons.monday.client import (
     MondayClientError,
     _graphql_request,
     load_board_metadata,
+    upload_file_to_column,
 )
 from classificacao_procons.monday.mapping import (
     MondayColumn,
@@ -179,6 +184,7 @@ def register_contrato_item(
     document_name: str,
     signed_pdf_url: str,
     tipo_label: str | None,
+    pdf_path: Path | None = None,
 ) -> MondayContractRegistrationResult:
     """Cria item no quadro Contratos com metadados extraídos."""
     board_context = load_board_metadata(
@@ -191,7 +197,10 @@ def register_contrato_item(
         document_name=document_name,
         category=infer_category(document_name=document_name, contract_type=metadata.contract_type),
     )
-    group_id = CONTRATOS_GROUP_BY_TIPO.get(resolved_tipo, DEFAULT_CONTRATOS_GROUP_ID)
+    group_id = _resolve_contratos_group_id(
+        api_token=api_token,
+        tipo_label=resolved_tipo,
+    )
     item_name = metadata.counterparty_name or document_name
     column_values = _sanitize_column_values(
         column_details,
@@ -202,12 +211,18 @@ def register_contrato_item(
             document_name=document_name,
         ),
     )
-    item_id = _create_contratos_item_with_fallback(
+    item_id = _create_contratos_item(
         api_token=api_token,
-        column_details=column_details,
         group_id=group_id,
         item_name=item_name,
+        column_values={},
+    )
+    _apply_contratos_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
         column_values=column_values,
+        pdf_path=pdf_path,
     )
     item_url = None
     if board_context.account_slug:
@@ -220,6 +235,126 @@ def register_contrato_item(
         contratos_item_id=item_id,
         contratos_item_url=item_url,
     )
+
+
+def _normalize_group_title(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    without_marks = "".join(char for char in normalized if not unicodedata.combining(char))
+    return re.sub(r"\s+", " ", without_marks).strip()
+
+
+def _resolve_contratos_group_id(*, api_token: str, tipo_label: str) -> str:
+    mapped = CONTRATOS_GROUP_BY_TIPO.get(tipo_label)
+    if mapped and tipo_label not in DYNAMIC_CONTRATOS_GROUP_TITLES:
+        return mapped
+    if tipo_label in DYNAMIC_CONTRATOS_GROUP_TITLES:
+        return _ensure_board_group(api_token=api_token, group_title=tipo_label)
+    return mapped or DEFAULT_CONTRATOS_GROUP_ID
+
+
+def _ensure_board_group(*, api_token: str, group_title: str) -> str:
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: [ID!]) {
+          boards(ids: $boardId) {
+            groups { id title }
+          }
+        }
+        """,
+        variables={"boardId": MONDAY_CONTRATOS_BOARD_ID},
+    )
+    boards = data.get("boards", [])
+    if boards:
+        target = _normalize_group_title(group_title)
+        for group in boards[0].get("groups", []):
+            if _normalize_group_title(str(group.get("title", ""))) == target:
+                return str(group["id"])
+
+    created = _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($boardId: ID!, $groupName: String!) {
+          create_group(board_id: $boardId, group_name: $groupName) { id }
+        }
+        """,
+        variables={"boardId": MONDAY_CONTRATOS_BOARD_ID, "groupName": group_title},
+    )
+    return str(created["create_group"]["id"])
+
+
+def _apply_contratos_column_values(
+    *,
+    api_token: str,
+    item_id: str,
+    column_details: list[MondayColumnDetails],
+    column_values: dict[str, Any],
+    pdf_path: Path | None,
+) -> None:
+    details_by_id = {detail.column.id: detail for detail in column_details}
+    contrato_column = _find_contrato_column([detail.column for detail in column_details])
+
+    for column_id, value in column_values.items():
+        detail = details_by_id.get(column_id)
+        if detail is None:
+            continue
+
+        column_type = detail.column.column_type
+        if column_type == "file":
+            if pdf_path is None or contrato_column is None or contrato_column.id != column_id:
+                continue
+            try:
+                upload_file_to_column(
+                    api_token=api_token,
+                    item_id=item_id,
+                    column_id=column_id,
+                    file_path=pdf_path,
+                )
+            except MondayClientError:
+                continue
+            continue
+
+        try:
+            _graphql_request(
+                api_token=api_token,
+                query="""
+                mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+                  change_multiple_column_values(
+                    board_id: $boardId
+                    item_id: $itemId
+                    column_values: $columnValues
+                  ) { id }
+                }
+                """,
+                variables={
+                    "boardId": MONDAY_CONTRATOS_BOARD_ID,
+                    "itemId": item_id,
+                    "columnValues": json.dumps({column_id: value}),
+                },
+            )
+        except MondayClientError:
+            continue
+
+    if (
+        pdf_path is not None
+        and contrato_column is not None
+        and contrato_column.column_type == "file"
+        and contrato_column.id not in column_values
+    ):
+        try:
+            upload_file_to_column(
+                api_token=api_token,
+                item_id=item_id,
+                column_id=contrato_column.id,
+                file_path=pdf_path,
+            )
+        except MondayClientError:
+            return
+
+
+def _find_contrato_column(columns: list[MondayColumn]) -> MondayColumn | None:
+    column_by_title = {column.title.casefold(): column for column in columns}
+    return _find_column(column_by_title, ("contrato",), exact=True)
 
 
 def _load_contratos_column_details(*, api_token: str) -> list[MondayColumnDetails]:
@@ -317,56 +452,6 @@ def _sanitize_column_values(
     return sanitized
 
 
-def _is_retryable_monday_error(exc: MondayClientError) -> bool:
-    message = str(exc).casefold()
-    return "invalid value" in message or "internal server error" in message
-
-
-def _create_contratos_item_with_fallback(
-    *,
-    api_token: str,
-    column_details: list[MondayColumnDetails],
-    group_id: str,
-    item_name: str,
-    column_values: dict[str, Any],
-) -> str:
-    link_column_ids = {
-        detail.column.id
-        for detail in column_details
-        if detail.column.column_type == "link" and detail.column.title.casefold() == "contrato"
-    }
-    link_only_values = {
-        column_id: value
-        for column_id, value in column_values.items()
-        if column_id in link_column_ids
-    }
-
-    attempts: list[dict[str, Any]] = []
-    if column_values:
-        attempts.append(column_values)
-    if link_only_values and link_only_values != column_values:
-        attempts.append(link_only_values)
-    attempts.append({})
-
-    last_error: MondayClientError | None = None
-    for attempt_values in attempts:
-        try:
-            return _create_contratos_item(
-                api_token=api_token,
-                group_id=group_id,
-                item_name=item_name,
-                column_values=attempt_values,
-            )
-        except MondayClientError as exc:
-            last_error = exc
-            if not _is_retryable_monday_error(exc):
-                raise
-
-    if last_error is not None:
-        raise last_error
-    raise MondayClientError("Não foi possível criar item no quadro Contratos.")
-
-
 def _create_contratos_item(
     *,
     api_token: str,
@@ -431,11 +516,14 @@ def _build_contratos_column_values(
 
     contrato_col = _find_column(column_by_title, ("contrato",), exact=True)
     if contrato_col:
-        values[contrato_col.id] = format_column_value(
-            contrato_col.column_type,
-            signed_pdf_url,
-            link_text=document_name,
-        )
+        if contrato_col.column_type == "file":
+            values[contrato_col.id] = None
+        else:
+            values[contrato_col.id] = format_column_value(
+                contrato_col.column_type,
+                signed_pdf_url,
+                link_text=document_name,
+            )
 
     vigencia_col = _find_column(column_by_title, ("vigência", "vigencia"))
     if vigencia_col:
@@ -448,7 +536,7 @@ def _build_contratos_column_values(
     if obs_col and metadata.summary:
         values[obs_col.id] = format_column_value(obs_col.column_type, metadata.summary)
 
-    return values
+    return {key: value for key, value in values.items() if value is not None}
 
 
 def _find_column(

@@ -16,6 +16,7 @@ from classificacao_procons.contratos.autentique.client import (
 from classificacao_procons.contratos.autentique.webhook import AutentiqueWebhookEvent
 from classificacao_procons.contratos.drive_routing import (
     build_contract_pdf_filename,
+    format_drive_folder_path,
     resolve_drive_destination,
 )
 from classificacao_procons.contratos.gemini_extractor import (
@@ -56,6 +57,7 @@ class ContractPipelineResult:
     document_id: str
     document_name: str
     drive_pdf_url: str | None
+    drive_folder_path: str | None
     controle_item_id: str | None
     contratos_item_id: str | None
     contratos_item_url: str | None
@@ -107,6 +109,7 @@ def process_finished_document(
             document_id=document_id,
             document_name=document_name or document_id,
             drive_pdf_url=None,
+            drive_folder_path=None,
             controle_item_id=None,
             contratos_item_id=None,
             contratos_item_url=None,
@@ -129,6 +132,7 @@ def process_finished_document(
             document_id=document.document_id,
             document_name=document.name,
             drive_pdf_url=document.signed_pdf_url,
+            drive_folder_path=None,
             controle_item_id=None,
             contratos_item_id=None,
             contratos_item_url=None,
@@ -158,6 +162,7 @@ def process_finished_document(
         contract_type=metadata.contract_type,
         property_name=metadata.property_name,
     )
+    drive_folder_path = format_drive_folder_path(destination)
 
     try:
         _, _, drive_pdf_url = upload_pdf_to_folder_path(
@@ -196,6 +201,7 @@ def process_finished_document(
                 document_name=document.name,
                 signed_pdf_url=drive_pdf_url,
                 tipo_label=tipo_label,
+                pdf_path=pdf_path,
             )
         except MondayClientError as exc:
             raise ContractPipelineError(str(exc)) from exc
@@ -207,6 +213,7 @@ def process_finished_document(
         document_id=document.document_id,
         document_name=document.name,
         drive_pdf_url=drive_pdf_url,
+        drive_folder_path=drive_folder_path,
         controle_item_id=controle_item.item_id if controle_item else None,
         contratos_item_id=contratos_result.contratos_item_id if contratos_result else None,
         contratos_item_url=contratos_result.contratos_item_url if contratos_result else None,
