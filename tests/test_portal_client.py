@@ -1,6 +1,17 @@
 """Testes de extração de dados do portal."""
 
-from classificacao_procons.portal.client import _complaint_details, _labeled_value, _normalize_cpf
+from unittest.mock import MagicMock
+
+import pytest
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+from classificacao_procons.portal.client import (
+    ProconPortalError,
+    _complaint_details,
+    _goto_portal_login,
+    _labeled_value,
+    _normalize_cpf,
+)
 
 SAMPLE_PAGE_LINES = [
     "Protocolo",
@@ -33,3 +44,14 @@ class TestPortalExtraction:
 
     def test_should_extract_complaint_details(self) -> None:
         assert _complaint_details(SAMPLE_PAGE_LINES) == "Produto não chegou no prazo."
+
+
+class TestPortalNavigation:
+    def test_should_raise_when_portal_login_times_out(self) -> None:
+        page = MagicMock()
+        page.goto.side_effect = PlaywrightTimeoutError("timeout")
+
+        with pytest.raises(ProconPortalError, match="não carregou a tempo"):
+            _goto_portal_login(page)
+
+        assert page.goto.call_count == 3

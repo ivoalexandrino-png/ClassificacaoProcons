@@ -14,7 +14,8 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from classificacao_procons.models import ProconComplaint
 
 PORTAL_LOGIN_URL: Final = "https://fornecedor2.procon.sp.gov.br/login"
-DEFAULT_TIMEOUT_MS: Final = 60_000
+DEFAULT_TIMEOUT_MS: Final = 90_000
+PAGE_LOAD_WAIT_UNTIL: Final = "domcontentloaded"
 
 
 class ProconPortalError(RuntimeError):
@@ -74,8 +75,31 @@ def _complaint_details(lines: list[str]) -> str:
     return " ".join(collected).strip()
 
 
+def _goto_portal_login(page: Page) -> None:
+    """Abre o login do portal com retentativas (networkidle falha em SPAs)."""
+    last_error: Exception | None = None
+    for _attempt in range(3):
+        try:
+            page.goto(
+                PORTAL_LOGIN_URL,
+                wait_until=PAGE_LOAD_WAIT_UNTIL,
+                timeout=DEFAULT_TIMEOUT_MS,
+            )
+            page.locator("mat-radio-button", has_text="Reclamação").wait_for(
+                state="visible",
+                timeout=DEFAULT_TIMEOUT_MS,
+            )
+            return
+        except PlaywrightTimeoutError as exc:
+            last_error = exc
+
+    raise ProconPortalError(
+        "Portal Procon-SP não carregou a tempo. Tente novamente em alguns minutos.",
+    ) from last_error
+
+
 def _open_complaint_with_code(page: Page, access_code: str) -> None:
-    page.goto(PORTAL_LOGIN_URL, wait_until="networkidle", timeout=DEFAULT_TIMEOUT_MS)
+    _goto_portal_login(page)
     page.locator("mat-radio-button", has_text="Reclamação").click()
     page.locator("button", has_text="Continuar").click()
     page.get_by_placeholder("Código da reclamação").fill(access_code)
@@ -145,13 +169,18 @@ def fetch_complaint(options: PortalFetchOptions) -> ProconComplaint:
         browser = playwright.chromium.launch(headless=options.headless)
         page = browser.new_page()
         try:
-            _open_complaint_with_code(page, options.access_code)
-            complaint = _extract_complaint_from_page(page, options.access_code)
-            pdf_path = _download_pdf_from_documents_tab(
-                page,
-                options.download_dir,
-                options.access_code,
-            )
+            try:
+                _open_complaint_with_code(page, options.access_code)
+                complaint = _extract_complaint_from_page(page, options.access_code)
+                pdf_path = _download_pdf_from_documents_tab(
+                    page,
+                    options.download_dir,
+                    options.access_code,
+                )
+            except PlaywrightTimeoutError as exc:
+                raise ProconPortalError(
+                    "Portal Procon-SP não respondeu a tempo durante o acesso.",
+                ) from exc
             if pdf_path:
                 return ProconComplaint(
                     access_code=complaint.access_code,
