@@ -6,14 +6,17 @@ import base64
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"
+ENV_GEMINI_MODEL = "GEMINI_MODEL"
+MAX_GEMINI_RETRIES = 3
 MAX_PORTAL_CHARACTERS = 1024
 MULTA_40_PATTERN = re.compile(r"multa de 40\s*%", re.IGNORECASE)
 MULTA_REPLACEMENT = "multa proporcional ao tempo restante"
@@ -34,6 +37,11 @@ class GeneratedResponse:
 def get_api_key_from_env() -> str | None:
     api_key = os.environ.get(ENV_GEMINI_API_KEY, "").strip()
     return api_key or None
+
+
+def get_model_from_env() -> str:
+    model = os.environ.get(ENV_GEMINI_MODEL, DEFAULT_GEMINI_MODEL).strip()
+    return model or DEFAULT_GEMINI_MODEL
 
 
 def apply_multa_replacement(text: str) -> str:
@@ -65,27 +73,42 @@ def _gemini_request(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=120) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
-    except urllib.error.URLError as exc:
-        raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
-    except json.JSONDecodeError as exc:
-        raise GeminiClientError("Gemini retornou resposta inválida.") from exc
 
-    candidates = body.get("candidates", [])
-    if not candidates:
-        raise GeminiClientError("Gemini não retornou candidatos de resposta.")
+    last_error: GeminiClientError | None = None
+    for attempt in range(MAX_GEMINI_RETRIES):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            if exc.code == 429 and attempt < MAX_GEMINI_RETRIES - 1:
+                time.sleep(8 * (attempt + 1))
+                continue
+            if exc.code == 429:
+                raise GeminiClientError(
+                    "Limite gratuito do Gemini esgotado. Aguarde alguns minutos e tente "
+                    "de novo, ou ative cobrança em https://aistudio.google.com/apikey",
+                ) from exc
+            raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
+        except urllib.error.URLError as exc:
+            raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+        except json.JSONDecodeError as exc:
+            raise GeminiClientError("Gemini retornou resposta inválida.") from exc
+        else:
+            candidates = body.get("candidates", [])
+            if not candidates:
+                raise GeminiClientError("Gemini não retornou candidatos de resposta.")
 
-    content = candidates[0].get("content", {})
-    response_parts = content.get("parts", [])
-    texts = [str(part.get("text", "")) for part in response_parts if part.get("text")]
-    if not texts:
-        raise GeminiClientError("Gemini retornou resposta vazia.")
-    return "\n".join(texts).strip()
+            content = candidates[0].get("content", {})
+            response_parts = content.get("parts", [])
+            texts = [str(part.get("text", "")) for part in response_parts if part.get("text")]
+            if not texts:
+                raise GeminiClientError("Gemini retornou resposta vazia.")
+            return "\n".join(texts).strip()
+
+    if last_error is not None:
+        raise last_error
+    raise GeminiClientError("Gemini indisponível após várias tentativas.")
 
 
 def _pdf_part(pdf_path: Path) -> dict[str, object]:
@@ -101,12 +124,14 @@ def generate_procon_response(
     consumer_name: str,
     protocol_number: str,
     api_key: str | None = None,
-    model: str = DEFAULT_GEMINI_MODEL,
+    model: str | None = None,
 ) -> GeneratedResponse:
     """Executa a cadeia de prompts para elaborar a resposta ao Procon."""
     key = api_key or get_api_key_from_env()
     if not key:
         raise GeminiClientError("GEMINI_API_KEY não configurada.")
+
+    selected_model = model or get_model_from_env()
 
     if not complaint_pdf_path.exists():
         raise GeminiClientError(f"PDF da reclamação não encontrado: {complaint_pdf_path}")
@@ -125,7 +150,7 @@ def generate_procon_response(
     )
     analysis = _gemini_request(
         api_key=key,
-        model=model,
+        model=selected_model,
         parts=[{"text": analysis_prompt}, _pdf_part(complaint_pdf_path)],
     )
 
@@ -136,14 +161,18 @@ def generate_procon_response(
         f"DOCUMENTOS ANEXADOS PELO SAC:\n{supporting_list}\n\n"
         "A resposta deve ser formal, clara e fundamentada nos documentos."
     )
-    draft = _gemini_request(api_key=key, model=model, parts=[{"text": draft_prompt}])
+    draft = _gemini_request(api_key=key, model=selected_model, parts=[{"text": draft_prompt}])
 
     rewrite_prompt = (
         "Reescreva a resposta abaixo tornando-a mais detalhada, persuasiva e bem fundamentada, "
         "sem inventar fatos que não estejam na análise ou no relato do SAC.\n\n"
         f"RESPOSTA ATUAL:\n{draft}"
     )
-    final_response = _gemini_request(api_key=key, model=model, parts=[{"text": rewrite_prompt}])
+    final_response = _gemini_request(
+        api_key=key,
+        model=selected_model,
+        parts=[{"text": rewrite_prompt}],
+    )
     final_response = apply_multa_replacement(final_response)
 
     summary_prompt = (
@@ -152,7 +181,11 @@ def generate_procon_response(
         "Não use markdown. Retorne apenas o texto final.\n\n"
         f"RESPOSTA COMPLETA:\n{final_response}"
     )
-    portal_summary = _gemini_request(api_key=key, model=model, parts=[{"text": summary_prompt}])
+    portal_summary = _gemini_request(
+        api_key=key,
+        model=selected_model,
+        parts=[{"text": summary_prompt}],
+    )
     portal_summary = apply_multa_replacement(portal_summary)
     portal_summary = enforce_portal_character_limit(portal_summary)
 
