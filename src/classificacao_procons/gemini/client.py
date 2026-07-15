@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+MODEL_PREFERENCE_ORDER = (
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite",
+    "gemini-2.5-flash",
+)
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"
 ENV_GEMINI_MODEL = "GEMINI_MODEL"
 MAX_GEMINI_RETRIES = 3
@@ -39,9 +45,74 @@ def get_api_key_from_env() -> str | None:
     return api_key or None
 
 
-def get_model_from_env() -> str:
-    model = os.environ.get(ENV_GEMINI_MODEL, DEFAULT_GEMINI_MODEL).strip()
-    return model or DEFAULT_GEMINI_MODEL
+def get_model_from_env() -> str | None:
+    model = os.environ.get(ENV_GEMINI_MODEL, "").strip()
+    return model or None
+
+
+def normalize_model_name(model: str) -> str:
+    return model.removeprefix("models/").strip()
+
+
+def list_generate_content_models(*, api_key: str) -> list[str]:
+    """Lista modelos disponíveis para generateContent nesta API key."""
+    url = f"{GEMINI_API_BASE}/models?key={api_key}"
+    request = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
+    except urllib.error.URLError as exc:
+        raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+    except json.JSONDecodeError as exc:
+        raise GeminiClientError("Gemini retornou lista de modelos inválida.") from exc
+
+    models: list[str] = []
+    for entry in body.get("models", []):
+        methods = entry.get("supportedGenerationMethods", [])
+        if "generateContent" not in methods:
+            continue
+        name = normalize_model_name(str(entry.get("name", "")))
+        if name:
+            models.append(name)
+    return models
+
+
+def resolve_gemini_model(
+    *,
+    available_models: list[str],
+    preferred: str | None = None,
+) -> str:
+    """Escolhe o melhor modelo compatível com a API key."""
+    if not available_models:
+        raise GeminiClientError("Nenhum modelo Gemini disponível para esta API key.")
+
+    available_set = set(available_models)
+    candidates: list[str] = []
+    if preferred:
+        candidates.append(preferred)
+    candidates.append(DEFAULT_GEMINI_MODEL)
+    candidates.extend(MODEL_PREFERENCE_ORDER)
+
+    seen: set[str] = set()
+    for model in candidates:
+        normalized = normalize_model_name(model)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        if normalized in available_set:
+            return normalized
+
+    for name in available_models:
+        if "flash" in name or "pro" in name:
+            return name
+
+    raise GeminiClientError(
+        "Nenhum modelo Gemini compatível encontrado. "
+        f"Disponíveis: {', '.join(available_models[:8])}",
+    )
 
 
 def apply_multa_replacement(text: str) -> str:
@@ -92,7 +163,7 @@ def _gemini_request(
             if exc.code == 404:
                 raise GeminiClientError(
                     f"Modelo Gemini '{model}' não encontrado ou descontinuado. "
-                    "Defina GEMINI_MODEL com um modelo válido (ex.: gemini-2.5-flash) "
+                    "Defina GEMINI_MODEL com um modelo válido (ex.: gemini-3.5-flash) "
                     "em https://ai.google.dev/gemini-api/docs/models",
                 ) from exc
             raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
@@ -137,7 +208,13 @@ def generate_procon_response(
     if not key:
         raise GeminiClientError("GEMINI_API_KEY não configurada.")
 
-    selected_model = model or get_model_from_env()
+    selected_model = model
+    if not selected_model:
+        available_models = list_generate_content_models(api_key=key)
+        selected_model = resolve_gemini_model(
+            available_models=available_models,
+            preferred=get_model_from_env(),
+        )
 
     if not complaint_pdf_path.exists():
         raise GeminiClientError(f"PDF da reclamação não encontrado: {complaint_pdf_path}")
