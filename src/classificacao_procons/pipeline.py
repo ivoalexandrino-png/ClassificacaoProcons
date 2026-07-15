@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
 from classificacao_procons.drive import DriveClientError, save_complaint_pdf
 from classificacao_procons.email import GmailClientError, GmailProconFetcher
 from classificacao_procons.google_auth import (
@@ -189,7 +191,7 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
                 processed_protocols=processed_protocols,
                 fetcher=fetcher,
             )
-        except (ProconPortalError, DriveClientError) as exc:
+        except (ProconPortalError, DriveClientError, PlaywrightTimeoutError) as exc:
             result = ProcessedComplaint(
                 status="error",
                 message_id=notification.message_id,
