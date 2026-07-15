@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from classificacao_procons.drive.client import DriveUploadResult
 from classificacao_procons.models import ProconComplaint, ProconNotificationEmail
+from classificacao_procons.monday.client import MondayRegistrationResult
 from classificacao_procons.pipeline import (
     PipelineOptions,
     calculate_sac_and_legal_deadlines,
@@ -47,11 +48,13 @@ class TestCalculateDeadlines:
 @patch("classificacao_procons.pipeline.GmailProconFetcher")
 @patch("classificacao_procons.pipeline.has_gmail_modify_access", return_value=True)
 @patch("classificacao_procons.pipeline.has_valid_token", return_value=True)
+@patch("classificacao_procons.pipeline.register_complaint")
 @patch("classificacao_procons.pipeline.fetch_complaint")
 @patch("classificacao_procons.pipeline.save_complaint_pdf")
 def test_should_process_notification_end_to_end(
     save_pdf_mock,
     fetch_complaint_mock,
+    register_monday_mock,
     _has_token_mock,
     _modify_mock,
     fetcher_cls_mock,
@@ -67,11 +70,17 @@ def test_should_process_notification_end_to_end(
         pdf_file_id="file-1",
         pdf_url="https://drive.google.com/file/file-1/view",
     )
+    register_monday_mock.return_value = MondayRegistrationResult(
+        item_id="monday-1",
+        board_id="board-1",
+        item_url="https://b4a.monday.com/boards/board-1/pulses/monday-1",
+    )
 
     options = PipelineOptions(
         download_dir=tmp_path / "downloads",
         state_path=tmp_path / "processed.json",
         mark_read=True,
+        monday_api_token="token-test",
     )
     results = process_new_complaints(options)
 
@@ -79,7 +88,9 @@ def test_should_process_notification_end_to_end(
     assert results[0].status == "success"
     assert results[0].consumer_name == "MARIA SILVA"
     assert results[0].pdf_url == "https://drive.google.com/file/file-1/view"
+    assert results[0].monday_item_url == "https://b4a.monday.com/boards/board-1/pulses/monday-1"
     fetcher.mark_as_read.assert_called_once_with("msg-1")
+    register_monday_mock.assert_called_once()
 
 
 @patch("classificacao_procons.pipeline.GmailProconFetcher")

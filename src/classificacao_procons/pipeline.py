@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -17,6 +17,12 @@ from classificacao_procons.google_auth import (
     has_valid_token,
 )
 from classificacao_procons.models import ProcessedComplaint, ProconNotificationEmail
+from classificacao_procons.monday import MondayClientError, register_complaint
+from classificacao_procons.monday.client import (
+    DEFAULT_BOARD_NAME,
+    DEFAULT_GROUP_NAME,
+    get_api_token_from_env,
+)
 from classificacao_procons.portal import PortalFetchOptions, ProconPortalError, fetch_complaint
 
 DEFAULT_DOWNLOAD_DIR = Path("downloads")
@@ -37,6 +43,10 @@ class PipelineOptions:
     dry_run: bool = False
     credentials_path: str = "credentials/gmail-oauth.json"
     token_path: str = "credentials/gmail-token.json"
+    monday_api_token: str | None = None
+    monday_board_name: str = DEFAULT_BOARD_NAME
+    monday_group_name: str = DEFAULT_GROUP_NAME
+    register_on_monday: bool = True
 
 
 def calculate_sac_and_legal_deadlines(*, base_date: date | None = None) -> tuple[date, date]:
@@ -70,6 +80,40 @@ def _resolve_protocol(notification: ProconNotificationEmail, complaint_protocol:
     if notification.protocol_number:
         return notification.protocol_number
     return notification.access_code
+
+
+def _resolve_monday_api_token(options: PipelineOptions) -> str | None:
+    if options.monday_api_token:
+        return options.monday_api_token
+    return get_api_token_from_env()
+
+
+def _register_on_monday_if_configured(
+    result: ProcessedComplaint,
+    *,
+    options: PipelineOptions,
+) -> ProcessedComplaint:
+    if not options.register_on_monday or result.status != "success":
+        return result
+
+    api_token = _resolve_monday_api_token(options)
+    if not api_token:
+        return result
+
+    try:
+        monday_result = register_complaint(
+            result,
+            api_token=api_token,
+            board_name=options.monday_board_name,
+            group_name=options.monday_group_name,
+        )
+    except MondayClientError as exc:
+        return replace(result, monday_error=str(exc))
+
+    if monday_result is None:
+        return result
+
+    return replace(result, monday_item_url=monday_result.item_url)
 
 
 def _process_notification(
@@ -145,7 +189,7 @@ def _process_notification(
     if options.mark_read and has_gmail_modify_access(options.token_path):
         fetcher.mark_as_read(notification.message_id)
 
-    return ProcessedComplaint(
+    result = ProcessedComplaint(
         status="success",
         message_id=notification.message_id,
         access_code=notification.access_code,
@@ -161,6 +205,7 @@ def _process_notification(
         pdf_url=drive_result.pdf_url,
         drive_folder_url=drive_result.consumer_folder_url,
     )
+    return _register_on_monday_if_configured(result, options=options)
 
 
 def process_new_complaints(options: PipelineOptions | None = None) -> list[ProcessedComplaint]:

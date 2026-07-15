@@ -53,4 +53,6 @@ class ProcessedComplaint:
     state: str
     pdf_url: str | None
     drive_folder_url: str | None
+    monday_item_url: str | None = None
+    monday_error: str | None = None
     error: str | None = None

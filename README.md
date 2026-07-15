@@ -131,7 +131,7 @@ print(result.portal_url, result.access_code)
 
 - [ ] Portal Procon: login + código → extrair dados e PDF
 - [ ] Google Drive: criar pasta e upload do PDF
-- [ ] Monday.com: cadastro em "pendentes de resposta"
+- [x] Monday.com: cadastro em "pendentes de resposta" (requer secret `MONDAY_API_TOKEN`)
 
 ## Validação
 
