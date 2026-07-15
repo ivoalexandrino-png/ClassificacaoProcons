@@ -1,17 +1,21 @@
 """Testes do cliente Gemini."""
 
+import pytest
+
 from classificacao_procons.gemini.client import (
     DEFAULT_GEMINI_MODEL,
+    GeminiClientError,
     apply_multa_replacement,
     enforce_portal_character_limit,
     get_model_from_env,
+    resolve_gemini_model,
 )
 
 
 class TestGeminiHelpers:
-    def test_should_use_gemini_2_5_flash_as_default_model(self) -> None:
-        assert DEFAULT_GEMINI_MODEL == "gemini-2.5-flash"
-        assert get_model_from_env() == "gemini-2.5-flash"
+    def test_should_use_gemini_3_5_flash_as_default_model(self) -> None:
+        assert DEFAULT_GEMINI_MODEL == "gemini-3.5-flash"
+        assert get_model_from_env() is None
 
     def test_should_replace_multa_de_40_percent(self) -> None:
         text = "A empresa aplicará multa de 40% conforme contrato."
@@ -22,3 +26,40 @@ class TestGeminiHelpers:
         text = "a" * 1100
         result = enforce_portal_character_limit(text, max_chars=1024)
         assert len(result) <= 1024
+
+
+class TestResolveGeminiModel:
+    def test_should_resolve_preferred_model_when_available(self) -> None:
+        available = ["gemini-3.5-flash", "gemini-2.5-flash"]
+        assert (
+            resolve_gemini_model(
+                available_models=available,
+                preferred="gemini-2.5-flash",
+            )
+            == "gemini-2.5-flash"
+        )
+
+    def test_should_pick_default_when_preferred_model_is_unavailable(self) -> None:
+        available = ["gemini-3.5-flash", "gemini-flash-latest"]
+        assert (
+            resolve_gemini_model(
+                available_models=available,
+                preferred="gemini-2.5-flash",
+            )
+            == "gemini-3.5-flash"
+        )
+
+    def test_should_fallback_to_any_flash_model_when_preferences_missing(self) -> None:
+        assert (
+            resolve_gemini_model(
+                available_models=["gemini-custom-flash-preview"],
+            )
+            == "gemini-custom-flash-preview"
+        )
+
+    def test_should_raise_when_no_compatible_model_exists(self) -> None:
+        with pytest.raises(GeminiClientError, match="Nenhum modelo Gemini compatível"):
+            resolve_gemini_model(
+                available_models=["embedding-001"],
+                preferred="gemini-3.5-flash",
+            )
