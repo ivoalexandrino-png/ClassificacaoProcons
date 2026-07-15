@@ -3,7 +3,12 @@
 from datetime import date
 
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
-from classificacao_procons.contratos.monday_contracts import _build_contratos_column_values
+from classificacao_procons.contratos.monday_contracts import (
+    MondayColumnDetails,
+    _allowed_labels,
+    _build_contratos_column_values,
+    _sanitize_column_values,
+)
 from classificacao_procons.monday.mapping import MondayColumn
 
 
@@ -48,3 +53,40 @@ class TestContratosMondayColumnValues:
         }
         assert values["vigencia"] == {"label": "Vigente"}
         assert values["obs"] == {"text": "Contrato de parceria B2B."}
+
+    def test_should_drop_unknown_status_and_dropdown_labels(self) -> None:
+        details = [
+            MondayColumnDetails(
+                column=MondayColumn(id="empresa", title="Empresa", column_type="status"),
+                settings_str='{"labels": {"0": "B4A", "1": "MMKT"}}',
+            ),
+            MondayColumnDetails(
+                column=MondayColumn(id="tipo", title="Tipo de contrato", column_type="dropdown"),
+                settings_str='{"labels": [{"id": 1, "name": "Prestação de Serviços"}]}',
+            ),
+            MondayColumnDetails(
+                column=MondayColumn(id="cnpj", title="CNPJ", column_type="text"),
+            ),
+        ]
+        values = {
+            "empresa": {"label": "Empresa Inexistente"},
+            "tipo": {"labels": ["Tipo Inexistente"]},
+            "cnpj": "12.345.678/0001-90",
+        }
+
+        sanitized = _sanitize_column_values(details, values)
+
+        assert sanitized == {"cnpj": "12.345.678/0001-90"}
+
+    def test_should_parse_allowed_labels_from_settings(self) -> None:
+        status_labels = _allowed_labels(
+            '{"labels": {"0": "Vigente", "1": "Não Vigente"}}',
+            "status",
+        )
+        dropdown_labels = _allowed_labels(
+            '{"labels": [{"id": 1, "name": "NDA"}]}',
+            "dropdown",
+        )
+
+        assert status_labels == {"vigente", "não vigente"}
+        assert dropdown_labels == {"nda"}
