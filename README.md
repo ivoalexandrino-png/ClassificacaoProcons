@@ -133,7 +133,7 @@ print(result.portal_url, result.access_code)
 - [x] Google Drive: criar pasta e upload do PDF
 - [x] Monday.com: cadastro em "pendentes de resposta"
 - [x] Elaboração de resposta com Gemini (requer `GEMINI_API_KEY`)
-- [ ] PDF da resposta + unificação de anexos SAC
+- [x] PDF da resposta + unificação de anexos SAC (`resposta-unificada.pdf` no Drive)
 - [ ] Envio automático no portal Procon
 
 ## Validação

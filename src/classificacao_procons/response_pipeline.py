@@ -29,7 +29,6 @@ from classificacao_procons.monday.cases import list_cases_ready_for_elaboration
 from classificacao_procons.monday.client import (
     MondayClientError,
     get_api_token_from_env,
-    update_elaborated_response_links,
 )
 
 DEFAULT_WORK_DIR = Path("downloads/elaboration")
@@ -254,20 +253,6 @@ def _elaborate_case(
             error=str(exc),
         )
 
-    monday_error: str | None = None
-    monday_token = _resolve_monday_token(options)
-    if monday_token:
-        try:
-            update_elaborated_response_links(
-                item_id=case.item_id,
-                full_response_url=full_url,
-                summary_response_url=summary_url,
-                unified_pdf_url=unified_pdf_url,
-                api_token=monday_token,
-            )
-        except MondayClientError as exc:
-            monday_error = str(exc)
-
     elaborated_item_ids.add(case.item_id)
     _save_elaborated_item_ids(options.state_path, elaborated_item_ids)
 
@@ -279,7 +264,6 @@ def _elaborate_case(
         full_response_file_url=full_url,
         summary_response_file_url=summary_url,
         unified_pdf_file_url=unified_pdf_url,
-        monday_error=monday_error,
     )
 
 

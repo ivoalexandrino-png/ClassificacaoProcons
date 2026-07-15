@@ -11,7 +11,6 @@ from classificacao_procons.response_pipeline import (
 )
 
 
-@patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
 @patch("classificacao_procons.response_pipeline.upload_pdf_file")
 @patch("classificacao_procons.response_pipeline.upload_text_file")
 @patch("classificacao_procons.response_pipeline.ensure_output_folder")
@@ -31,7 +30,6 @@ def test_should_elaborate_response_for_monday_case(
     ensure_folder_mock,
     upload_text_mock,
     upload_pdf_mock,
-    update_monday_mock,
     tmp_path,
 ) -> None:
     list_cases_mock.return_value = [
@@ -98,4 +96,3 @@ def test_should_elaborate_response_for_monday_case(
     build_pdf_mock.assert_called_once()
     assert upload_text_mock.call_count == 2
     upload_pdf_mock.assert_called_once()
-    update_monday_mock.assert_called_once()
