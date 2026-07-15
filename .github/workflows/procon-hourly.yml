@@ -15,6 +15,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Restore pipeline state
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: procon-pipeline-state-v1
+
+      - name: Prepare state directory
+        run: |
+          mkdir -p data
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          for filename, label in (
+              ("processed-protocols.json", "protocolos processados"),
+              ("elaborated-responses.json", "respostas elaboradas"),
+          ):
+              path = Path("data") / filename
+              if not path.exists():
+                  print(f"Estado: {label} — vazio (primeira execução ou cache expirado)")
+                  continue
+              try:
+                  payload = json.loads(path.read_text(encoding="utf-8"))
+              except json.JSONDecodeError:
+                  print(f"Estado: {label} — arquivo inválido, será recriado")
+                  continue
+              keys = ("protocols", "monday_item_ids")
+              for key in keys:
+                  if key in payload:
+                      print(f"Estado: {label} — {len(payload[key])} registro(s)")
+          PY
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -119,3 +151,10 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python -m classificacao_procons.cli elaborate --max-results 20
+
+      - name: Save pipeline state
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: procon-pipeline-state-v1
