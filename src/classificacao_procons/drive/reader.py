@@ -14,6 +14,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 
 from classificacao_procons.drive.client import (
     DRIVE_FOLDER_MIME,
+    DRIVE_PDF_MIME,
     DriveClientError,
     _build_drive_service,
 )
@@ -332,4 +333,37 @@ def upload_text_file(
         )
     except HttpError as exc:
         raise DriveClientError(f"Falha ao enviar arquivo de texto para o Drive: {exc}") from exc
+    return uploaded.get("webViewLink", "")
+
+
+def upload_pdf_file(
+    *,
+    folder_id: str,
+    file_name: str,
+    pdf_path: Path,
+    token_path: str | None = None,
+) -> str:
+    service = _build_drive_service(token_path)
+    if not pdf_path.exists():
+        raise DriveClientError(f"PDF não encontrado: {pdf_path}")
+
+    media = MediaIoBaseUpload(
+        io.FileIO(pdf_path, "rb"),
+        mimetype=DRIVE_PDF_MIME,
+        resumable=True,
+    )
+    body = {"name": file_name, "parents": [folder_id]}
+    try:
+        uploaded = (
+            service.files()
+            .create(
+                body=body,
+                media_body=media,
+                fields="id,webViewLink",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+    except HttpError as exc:
+        raise DriveClientError(f"Falha ao enviar PDF para o Drive: {exc}") from exc
     return uploaded.get("webViewLink", "")

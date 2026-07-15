@@ -14,6 +14,7 @@ from classificacao_procons.models import ProcessedComplaint
 from classificacao_procons.monday.mapping import (
     MondayColumn,
     build_column_values,
+    build_response_column_values,
     find_protocol_column,
 )
 
@@ -432,4 +433,55 @@ def register_complaint(
             board_id=context.board_id,
             item_id=item_id,
         ),
+    )
+
+
+def update_elaborated_response_links(
+    *,
+    item_id: str,
+    full_response_url: str,
+    summary_response_url: str,
+    unified_pdf_url: str | None = None,
+    api_token: str | None = None,
+    board_name: str | None = None,
+) -> None:
+    """Atualiza colunas de link com resposta completa, resumo e PDF unificado."""
+    token = api_token or get_api_token_from_env()
+    if not token:
+        raise MondayClientError("MONDAY_API_TOKEN não configurada.")
+
+    context = load_board_metadata(
+        api_token=token,
+        board_name=board_name or get_board_name_from_env(),
+    )
+    column_values = build_response_column_values(
+        context.columns,
+        full_response_url=full_response_url,
+        summary_response_url=summary_response_url,
+        unified_pdf_url=unified_pdf_url,
+    )
+    if not column_values:
+        raise MondayClientError(
+            "Nenhuma coluna de resposta encontrada no Monday. "
+            "Crie colunas link: Resposta Completa, Resumo Resposta e PDF Unificado.",
+        )
+
+    _graphql_request(
+        api_token=token,
+        query="""
+        mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+          change_multiple_column_values(
+            board_id: $boardId
+            item_id: $itemId
+            column_values: $columnValues
+          ) {
+            id
+          }
+        }
+        """,
+        variables={
+            "boardId": context.board_id,
+            "itemId": item_id,
+            "columnValues": json.dumps(column_values),
+        },
     )

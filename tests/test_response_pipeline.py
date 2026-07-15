@@ -11,8 +11,11 @@ from classificacao_procons.response_pipeline import (
 )
 
 
+@patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
+@patch("classificacao_procons.response_pipeline.upload_pdf_file")
 @patch("classificacao_procons.response_pipeline.upload_text_file")
 @patch("classificacao_procons.response_pipeline.ensure_output_folder")
+@patch("classificacao_procons.response_pipeline.build_unified_response_pdf")
 @patch("classificacao_procons.response_pipeline.generate_procon_response")
 @patch("classificacao_procons.response_pipeline.download_drive_file")
 @patch("classificacao_procons.response_pipeline.resolve_sac_folder_context")
@@ -24,8 +27,11 @@ def test_should_elaborate_response_for_monday_case(
     resolve_sac_mock,
     download_mock,
     generate_mock,
+    build_pdf_mock,
     ensure_folder_mock,
-    upload_mock,
+    upload_text_mock,
+    upload_pdf_mock,
+    update_monday_mock,
     tmp_path,
 ) -> None:
     list_cases_mock.return_value = [
@@ -46,7 +52,9 @@ def test_should_elaborate_response_for_monday_case(
             None,
         ),
         summary_txt=DriveFileInfo("txt-1", "informacoes.txt", "text/plain", None),
-        supporting_files=[],
+        supporting_files=[
+            DriveFileInfo("img-1", "comprovante.png", "image/png", None),
+        ],
     )
 
     def fake_download(*, file_id: str, destination, token_path=None):
@@ -64,12 +72,13 @@ def test_should_elaborate_response_for_monday_case(
         final_response="Resposta final",
         portal_summary="Resumo curto",
     )
+    build_pdf_mock.return_value = tmp_path / "work" / "100" / "resposta-unificada.pdf"
     ensure_folder_mock.return_value = "folder-output"
-    upload_mock.side_effect = [
-        "https://drive/analysis",
+    upload_text_mock.side_effect = [
         "https://drive/full",
         "https://drive/summary",
     ]
+    upload_pdf_mock.return_value = "https://drive/unified"
 
     options = ResponsePipelineOptions(
         work_dir=tmp_path / "work",
@@ -82,5 +91,11 @@ def test_should_elaborate_response_for_monday_case(
     assert len(results) == 1
     assert results[0].status == "success"
     assert results[0].full_response_file_url == "https://drive/full"
+    assert results[0].summary_response_file_url == "https://drive/summary"
+    assert results[0].unified_pdf_file_url == "https://drive/unified"
+    assert results[0].analysis_file_url is None
     generate_mock.assert_called_once()
-    assert upload_mock.call_count == 3
+    build_pdf_mock.assert_called_once()
+    assert upload_text_mock.call_count == 2
+    upload_pdf_mock.assert_called_once()
+    update_monday_mock.assert_called_once()
