@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"
 ENV_GEMINI_MODEL = "GEMINI_MODEL"
 MAX_GEMINI_RETRIES = 3
@@ -88,6 +88,12 @@ def _gemini_request(
                 raise GeminiClientError(
                     "Limite gratuito do Gemini esgotado. Aguarde alguns minutos e tente "
                     "de novo, ou ative cobrança em https://aistudio.google.com/apikey",
+                ) from exc
+            if exc.code == 404:
+                raise GeminiClientError(
+                    f"Modelo Gemini '{model}' não encontrado ou descontinuado. "
+                    "Defina GEMINI_MODEL com um modelo válido (ex.: gemini-2.5-flash) "
+                    "em https://ai.google.dev/gemini-api/docs/models",
                 ) from exc
             raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
         except urllib.error.URLError as exc:
