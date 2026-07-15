@@ -22,6 +22,10 @@ MONDAY_API_VERSION = "2024-10"
 DEFAULT_BOARD_NAME = "procons"
 DEFAULT_GROUP_NAME = "pendentes de resposta"
 ENV_API_TOKEN = "MONDAY_API_TOKEN"
+ENV_BOARD_NAME = "MONDAY_BOARD_NAME"
+ENV_BOARD_ID = "MONDAY_BOARD_ID"
+BOARD_PAGE_SIZE = 100
+MAX_BOARD_PAGES = 20
 
 
 class MondayClientError(RuntimeError):
@@ -47,6 +51,16 @@ class MondayBoardContext:
 def get_api_token_from_env() -> str | None:
     token = os.environ.get(ENV_API_TOKEN, "").strip()
     return token or None
+
+
+def get_board_name_from_env() -> str:
+    board_name = os.environ.get(ENV_BOARD_NAME, DEFAULT_BOARD_NAME).strip()
+    return board_name or DEFAULT_BOARD_NAME
+
+
+def get_board_id_from_env() -> str | None:
+    board_id = os.environ.get(ENV_BOARD_ID, "").strip()
+    return board_id or None
 
 
 def _normalize_name(value: str) -> str:
@@ -93,11 +107,117 @@ def _graphql_request(*, api_token: str, query: str, variables: dict | None = Non
     return data
 
 
+def _board_columns(board: dict) -> list[MondayColumn]:
+    return [
+        MondayColumn(
+            id=column["id"],
+            title=column["title"],
+            column_type=column["type"],
+        )
+        for column in board.get("columns", [])
+    ]
+
+
+def _pick_board_by_name(boards: list[dict], board_name: str) -> dict | None:
+    target_board_name = _normalize_name(board_name)
+    for board in boards:
+        if _normalize_name(board.get("name", "")) == target_board_name:
+            return board
+
+    for board in boards:
+        normalized = _normalize_name(board.get("name", ""))
+        if "procon" in normalized:
+            return board
+
+    return None
+
+
+def _fetch_board_record(
+    *,
+    api_token: str,
+    board_name: str,
+    board_id: str | None = None,
+) -> dict:
+    if board_id:
+        data = _graphql_request(
+            api_token=api_token,
+            query="""
+            query ($boardId: [ID!]) {
+              boards(ids: $boardId) {
+                id
+                name
+                groups {
+                  id
+                  title
+                }
+                columns {
+                  id
+                  title
+                  type
+                }
+              }
+            }
+            """,
+            variables={"boardId": board_id},
+        )
+        boards = data.get("boards", [])
+        if boards:
+            return boards[0]
+        raise MondayClientError(f'Board id "{board_id}" não encontrado no Monday.com.')
+
+    collected_boards: list[dict] = []
+    for page in range(1, MAX_BOARD_PAGES + 1):
+        data = _graphql_request(
+            api_token=api_token,
+            query="""
+            query ($limit: Int!, $page: Int!) {
+              boards(limit: $limit, page: $page) {
+                id
+                name
+                groups {
+                  id
+                  title
+                }
+                columns {
+                  id
+                  title
+                  type
+                }
+              }
+            }
+            """,
+            variables={"limit": BOARD_PAGE_SIZE, "page": page},
+        )
+        page_boards = data.get("boards", [])
+        if not page_boards:
+            break
+        collected_boards.extend(page_boards)
+        if len(page_boards) < BOARD_PAGE_SIZE:
+            break
+
+    board = _pick_board_by_name(collected_boards, board_name)
+    if board is not None:
+        return board
+
+    visible_names = ", ".join(
+        sorted({str(item.get("name", "")) for item in collected_boards if item.get("name")}),
+    )
+    hint = (
+        f" Boards visíveis para este token: {visible_names}."
+        if visible_names
+        else " Nenhum board visível para este token."
+    )
+    raise MondayClientError(
+        f'Board "{board_name}" não encontrado no Monday.com.{hint}',
+    )
+
+
 def _load_board_context(
     *,
     api_token: str,
     board_name: str,
     group_name: str,
+    board_id: str | None = None,
 ) -> MondayBoardContext:
     data = _graphql_request(
         api_token=api_token,
@@ -108,19 +228,6 @@ def _load_board_context(
               slug
             }
           }
-          boards(limit: 200) {
-            id
-            name
-            groups {
-              id
-              title
-            }
-            columns {
-              id
-              title
-              type
-            }
-          }
         }
         """,
     )
@@ -128,42 +235,69 @@ def _load_board_context(
     account = data.get("me", {}).get("account", {})
     account_slug = account.get("slug") if isinstance(account, dict) else None
 
-    boards = data.get("boards", [])
-    target_board_name = _normalize_name(board_name)
+    board = _fetch_board_record(
+        api_token=api_token,
+        board_name=board_name,
+        board_id=board_id,
+    )
     target_group_name = _normalize_name(group_name)
 
-    for board in boards:
-        if _normalize_name(board.get("name", "")) != target_board_name:
-            continue
+    group_id = None
+    for group in board.get("groups", []):
+        if _normalize_name(group.get("title", "")) == target_group_name:
+            group_id = group["id"]
+            break
 
-        group_id = None
-        for group in board.get("groups", []):
-            if _normalize_name(group.get("title", "")) == target_group_name:
-                group_id = group["id"]
-                break
-
-        if group_id is None:
-            raise MondayClientError(
-                f'Grupo "{group_name}" não encontrado no board "{board_name}".',
-            )
-
-        columns = [
-            MondayColumn(
-                id=column["id"],
-                title=column["title"],
-                column_type=column["type"],
-            )
-            for column in board.get("columns", [])
-        ]
-
-        return MondayBoardContext(
-            board_id=str(board["id"]),
-            group_id=group_id,
-            columns=columns,
-            account_slug=account_slug,
+    if group_id is None:
+        raise MondayClientError(
+            f'Grupo "{group_name}" não encontrado no board "{board.get("name", board_name)}".',
         )
 
-    raise MondayClientError(f'Board "{board_name}" não encontrado no Monday.com.')
+    return MondayBoardContext(
+        board_id=str(board["id"]),
+        group_id=group_id,
+        columns=_board_columns(board),
+        account_slug=account_slug,
+    )
+
+
+def load_board_metadata(
+    *,
+    api_token: str,
+    board_name: str | None = None,
+    board_id: str | None = None,
+) -> MondayBoardContext:
+    """Carrega metadados do board sem exigir um grupo específico."""
+    resolved_board_name = board_name or get_board_name_from_env()
+    resolved_board_id = board_id or get_board_id_from_env()
+
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query {
+          me {
+            account {
+              slug
+            }
+          }
+        }
+        """,
+    )
+    account = data.get("me", {}).get("account", {})
+    account_slug = account.get("slug") if isinstance(account, dict) else None
+
+    board = _fetch_board_record(
+        api_token=api_token,
+        board_name=resolved_board_name,
+        board_id=resolved_board_id,
+    )
+
+    return MondayBoardContext(
+        board_id=str(board["id"]),
+        group_id="",
+        columns=_board_columns(board),
+        account_slug=account_slug,
+    )
 
 
 def _find_existing_item_id(
@@ -229,8 +363,9 @@ def register_complaint(
 
     context = _load_board_context(
         api_token=token,
-        board_name=board_name,
+        board_name=board_name or get_board_name_from_env(),
         group_name=group_name,
+        board_id=get_board_id_from_env(),
     )
 
     protocol_column = find_protocol_column(context.columns)

@@ -28,8 +28,9 @@ def _processed_complaint() -> ProcessedComplaint:
     )
 
 
-BOARD_RESPONSE = {
-    "me": {"account": {"slug": "b4a"}},
+ACCOUNT_RESPONSE = {"me": {"account": {"slug": "b4a"}}}
+
+BOARD_LIST_RESPONSE = {
     "boards": [
         {
             "id": "111",
@@ -55,7 +56,8 @@ class TestMondayClient:
     @patch("classificacao_procons.monday.client._graphql_request")
     def test_should_create_item_on_monday(self, graphql_mock) -> None:
         graphql_mock.side_effect = [
-            BOARD_RESPONSE,
+            ACCOUNT_RESPONSE,
+            BOARD_LIST_RESPONSE,
             {"items_page_by_column_values": {"items": []}},
             CREATE_ITEM_RESPONSE,
         ]
@@ -65,12 +67,13 @@ class TestMondayClient:
         assert result is not None
         assert result.item_id == "999"
         assert result.item_url == "https://b4a.monday.com/boards/111/pulses/999"
-        assert graphql_mock.call_count == 3
+        assert graphql_mock.call_count == 4
 
     @patch("classificacao_procons.monday.client._graphql_request")
     def test_should_skip_duplicate_protocol(self, graphql_mock) -> None:
         graphql_mock.side_effect = [
-            BOARD_RESPONSE,
+            ACCOUNT_RESPONSE,
+            BOARD_LIST_RESPONSE,
             {"items_page_by_column_values": {"items": [{"id": "888"}]}},
         ]
 
@@ -79,7 +82,7 @@ class TestMondayClient:
         assert result is not None
         assert result.skipped_duplicate is True
         assert result.item_id == "888"
-        assert graphql_mock.call_count == 2
+        assert graphql_mock.call_count == 3
 
     def test_should_raise_when_complaint_not_successful(self) -> None:
         complaint = ProcessedComplaint(

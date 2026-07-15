@@ -5,11 +5,10 @@ from __future__ import annotations
 from classificacao_procons.models import MondayCaseReady
 from classificacao_procons.monday.client import (
     DEFAULT_BOARD_NAME,
-    DEFAULT_GROUP_NAME,
     _graphql_request,
-    _load_board_context,
     _normalize_name,
     get_api_token_from_env,
+    load_board_metadata,
 )
 from classificacao_procons.monday.mapping import (
     FIELD_DOCS_SAC,
@@ -72,7 +71,6 @@ def list_cases_ready_for_elaboration(
     *,
     api_token: str | None = None,
     board_name: str = DEFAULT_BOARD_NAME,
-    group_name: str = DEFAULT_GROUP_NAME,
     limit: int = 50,
 ) -> list[MondayCaseReady]:
     """Lista casos com Docs SAC preenchido e ainda sem status final."""
@@ -80,10 +78,9 @@ def list_cases_ready_for_elaboration(
     if not token:
         return []
 
-    context = _load_board_context(
+    context = load_board_metadata(
         api_token=token,
         board_name=board_name,
-        group_name=group_name,
     )
 
     data = _graphql_request(
@@ -116,13 +113,10 @@ def list_cases_ready_for_elaboration(
     if not boards:
         return []
 
-    target_group = _normalize_name(group_name)
     column_lookup = _build_column_lookup(context.columns)
     cases: list[MondayCaseReady] = []
 
     for group in boards[0].get("groups", []):
-        if _normalize_name(group.get("title", "")) != target_group:
-            continue
         for item in group.get("items_page", {}).get("items", []):
             case = _extract_case_from_item(item, column_lookup=column_lookup)
             if case is not None:
