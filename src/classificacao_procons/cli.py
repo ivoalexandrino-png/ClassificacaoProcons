@@ -16,6 +16,11 @@ from classificacao_procons.email.auth import (
     save_token_from_code,
 )
 from classificacao_procons.pipeline import PipelineError, PipelineOptions, process_new_complaints
+from classificacao_procons.response_pipeline import (
+    ResponsePipelineError,
+    ResponsePipelineOptions,
+    elaborate_pending_responses,
+)
 
 
 def _default_credentials_path() -> str:
@@ -123,6 +128,36 @@ def _run_process(args: argparse.Namespace) -> int:
     return 0
 
 
+def _serialize_elaborated(item: object) -> dict[str, object]:
+    return asdict(item)
+
+
+def _run_elaborate(args: argparse.Namespace) -> int:
+    if not args.dry_run and not has_valid_token(args.token):
+        print("Google não conectado. Rode: procon-email auth", file=sys.stderr)
+        return 1
+
+    options = ResponsePipelineOptions(
+        work_dir=Path(args.work_dir),
+        max_cases=args.max_results,
+        dry_run=args.dry_run,
+        token_path=args.token,
+    )
+
+    try:
+        results = elaborate_pending_responses(options)
+    except ResponsePipelineError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    output = [_serialize_elaborated(item) for item in results]
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+
+    if any(item.status == "error" for item in results):
+        return 1
+    return 0
+
+
 def _run_list(args: argparse.Namespace) -> int:
     if not has_valid_token(args.token):
         print(
@@ -200,6 +235,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Não marca os e-mails como lidos após sucesso.",
     )
 
+    elaborate_parser = subparsers.add_parser(
+        "elaborate",
+        help="Elaborar respostas para casos com Docs SAC no Monday",
+    )
+    elaborate_parser.add_argument("--max-results", type=int, default=20)
+    elaborate_parser.add_argument("--work-dir", default="downloads/elaboration")
+    elaborate_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Só lista os casos que seriam elaborados.",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "auth":
@@ -208,6 +255,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_list(args)
     if args.command == "process":
         return _run_process(args)
+    if args.command == "elaborate":
+        return _run_elaborate(args)
 
     parser.print_help()
     return 0

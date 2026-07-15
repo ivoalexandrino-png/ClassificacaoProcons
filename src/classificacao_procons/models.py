@@ -56,3 +56,28 @@ class ProcessedComplaint:
     monday_item_url: str | None = None
     monday_error: str | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class MondayCaseReady:
+    """Caso no Monday pronto para elaboração de resposta."""
+
+    item_id: str
+    item_name: str
+    docs_sac_url: str
+    protocol_number: str | None = None
+    status: str | None = None
+
+
+@dataclass(frozen=True)
+class ElaboratedResponseResult:
+    """Resultado da elaboração automática de resposta."""
+
+    status: str
+    monday_item_id: str
+    consumer_name: str
+    protocol_number: str | None
+    analysis_file_url: str | None = None
+    full_response_file_url: str | None = None
+    summary_response_file_url: str | None = None
+    error: str | None = None
