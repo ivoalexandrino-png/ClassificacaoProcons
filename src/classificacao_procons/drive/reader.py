@@ -204,6 +204,31 @@ def _select_sac_subfolder(subfolders: list[DriveFileInfo]) -> DriveFileInfo | No
     return ranked[0]
 
 
+def _build_sac_context_from_folder_children(
+    *,
+    consumer_folder_id: str,
+    children: list[DriveFileInfo],
+) -> SacFolderContext | None:
+    """Monta contexto quando PDF e resumo estão na mesma pasta (layout legado)."""
+    complaint_pdf = _find_complaint_pdf(children)
+    summary_txt = _find_summary_txt(children)
+    if complaint_pdf is None or summary_txt is None:
+        return None
+
+    return SacFolderContext(
+        consumer_folder_id=consumer_folder_id,
+        sac_folder_id=consumer_folder_id,
+        complaint_pdf=complaint_pdf,
+        summary_txt=summary_txt,
+        supporting_files=[
+            item
+            for item in children
+            if item.file_id not in {complaint_pdf.file_id, summary_txt.file_id}
+            and item.mime_type != DRIVE_FOLDER_MIME
+        ],
+    )
+
+
 def resolve_sac_folder_context(
     *,
     docs_sac_url: str,
@@ -216,6 +241,14 @@ def resolve_sac_folder_context(
 
     if linked_metadata.mime_type == DRIVE_FOLDER_MIME:
         linked_children = _list_children(service, folder_id=linked_id)
+
+        flat_context = _build_sac_context_from_folder_children(
+            consumer_folder_id=linked_id,
+            children=linked_children,
+        )
+        if flat_context is not None:
+            return flat_context
+
         complaint_pdf = _find_complaint_pdf(linked_children)
         if complaint_pdf is not None:
             subfolders = [

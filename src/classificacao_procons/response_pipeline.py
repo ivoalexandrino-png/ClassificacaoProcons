@@ -25,7 +25,10 @@ from classificacao_procons.gemini import (
 )
 from classificacao_procons.google_auth import has_valid_token
 from classificacao_procons.models import ElaboratedResponseResult, MondayCaseReady
-from classificacao_procons.monday.cases import list_cases_ready_for_elaboration
+from classificacao_procons.monday.cases import (
+    fetch_case_by_item_id,
+    list_cases_ready_for_elaboration,
+)
 from classificacao_procons.monday.client import (
     MondayClientError,
     get_api_token_from_env,
@@ -48,6 +51,9 @@ class ResponsePipelineOptions:
     monday_api_token: str | None = None
     gemini_api_key: str | None = None
     max_cases: int = 20
+    max_items_scanned: int = 500
+    monday_item_id: str | None = None
+    force: bool = False
     dry_run: bool = False
 
 
@@ -103,7 +109,7 @@ def _elaborate_case(
     options: ResponsePipelineOptions,
     elaborated_item_ids: set[str],
 ) -> ElaboratedResponseResult:
-    if case.item_id in elaborated_item_ids:
+    if case.item_id in elaborated_item_ids and not options.force:
         return ElaboratedResponseResult(
             status="skipped_duplicate",
             monday_item_id=case.item_id,
@@ -267,6 +273,29 @@ def _elaborate_case(
     )
 
 
+def _resolve_cases_to_elaborate(
+    *,
+    options: ResponsePipelineOptions,
+    monday_token: str | None,
+) -> list[MondayCaseReady]:
+    if options.monday_item_id:
+        case = fetch_case_by_item_id(
+            api_token=monday_token,
+            item_id=options.monday_item_id,
+        )
+        if case is None:
+            raise ResponsePipelineError(
+                f"Item {options.monday_item_id} não encontrado ou sem Docs SAC preenchido.",
+            )
+        return [case]
+
+    return list_cases_ready_for_elaboration(
+        api_token=monday_token,
+        limit=options.max_cases,
+        max_items_scanned=options.max_items_scanned,
+    )
+
+
 def elaborate_pending_responses(
     options: ResponsePipelineOptions | None = None,
 ) -> list[ElaboratedResponseResult]:
@@ -281,10 +310,12 @@ def elaborate_pending_responses(
         raise ResponsePipelineError("MONDAY_API_TOKEN não configurada.")
 
     try:
-        cases = list_cases_ready_for_elaboration(
-            api_token=monday_token,
-            limit=options.max_cases,
+        cases = _resolve_cases_to_elaborate(
+            options=options,
+            monday_token=monday_token,
         )
+    except ResponsePipelineError:
+        raise
     except MondayClientError as exc:
         raise ResponsePipelineError(str(exc)) from exc
 

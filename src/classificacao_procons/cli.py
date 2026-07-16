@@ -167,6 +167,9 @@ def _run_elaborate(args: argparse.Namespace) -> int:
     options = ResponsePipelineOptions(
         work_dir=Path(args.work_dir),
         max_cases=args.max_results,
+        max_items_scanned=args.max_items_scanned,
+        monday_item_id=args.item_id,
+        force=args.force,
         dry_run=args.dry_run,
         token_path=args.token,
     )
@@ -267,6 +270,21 @@ def main(argv: list[str] | None = None) -> int:
         help="Elaborar respostas para casos com Docs SAC no Monday",
     )
     elaborate_parser.add_argument("--max-results", type=int, default=20)
+    elaborate_parser.add_argument(
+        "--max-items-scanned",
+        type=int,
+        default=500,
+        help="Máximo de linhas do Monday a varrer por execução (backfill).",
+    )
+    elaborate_parser.add_argument(
+        "--item-id",
+        help="Elaborar um item específico do Monday (recuperação manual).",
+    )
+    elaborate_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Reelaborar mesmo que já conste no cache de respostas.",
+    )
     elaborate_parser.add_argument("--work-dir", default="downloads/elaboration")
     elaborate_parser.add_argument(
         "--dry-run",
