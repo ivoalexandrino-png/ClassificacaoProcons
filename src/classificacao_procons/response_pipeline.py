@@ -129,6 +129,7 @@ def _elaborate_case(
     try:
         sac_context = resolve_sac_folder_context(
             docs_sac_url=case.docs_sac_url,
+            complaint_pdf_url=case.complaint_pdf_url,
             token_path=options.token_path,
         )
     except DriveClientError as exc:

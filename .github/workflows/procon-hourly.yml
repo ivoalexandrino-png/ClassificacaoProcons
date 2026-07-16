@@ -162,7 +162,7 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m classificacao_procons.cli elaborate --max-results 100 --max-items-scanned 500
+        run: python -m classificacao_procons.cli elaborate --max-results 50 --max-items-scanned 100
 
       - name: Register Monday item (manual recovery)
         if: ${{ inputs.register_monday_access_code != '' }}

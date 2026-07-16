@@ -32,6 +32,34 @@ class TestMondayCases:
         assert case.item_id == "100"
         assert case.docs_sac_url.endswith("/abc")
 
+    def test_should_extract_complaint_pdf_url_from_notificacao_column(self) -> None:
+        item = {
+            "id": "100",
+            "name": "MARIA SILVA",
+            "column_values": [
+                {
+                    "id": "docs",
+                    "text": "Drive",
+                    "value": '{"url":"https://drive.google.com/drive/folders/abc"}',
+                },
+                {
+                    "id": "pdf",
+                    "text": "PDF",
+                    "value": '{"url":"https://drive.google.com/file/d/pdf-1/view"}',
+                },
+            ],
+        }
+        column_lookup = {
+            "docs": "docs_sac",
+            "pdf": "pdf_url",
+        }
+
+        case = _extract_case_from_item(item, column_lookup=column_lookup)
+
+        assert case is not None
+        assert case.complaint_pdf_url is not None
+        assert "pdf-1" in case.complaint_pdf_url
+
     def test_should_skip_responded_cases(self) -> None:
         item = {
             "id": "101",
@@ -47,7 +75,7 @@ class TestMondayCases:
 
     @patch("classificacao_procons.monday.cases._graphql_request")
     @patch("classificacao_procons.monday.cases.load_board_metadata")
-    def test_should_paginate_groups_when_listing_cases(
+    def test_should_list_only_pending_response_group(
         self,
         load_board_mock,
         graphql_mock,
@@ -66,27 +94,10 @@ class TestMondayCases:
             account_slug="b4a",
         )
         graphql_mock.side_effect = [
-            {"boards": [{"groups": [{"id": "grp-1", "title": "2025"}]}]},
-            {
-                "boards": [
-                    {
-                        "groups": [
-                            {
-                                "items_page": {
-                                    "cursor": "page-2",
-                                    "items": [
-                                        {
-                                            "id": "1",
-                                            "name": "SEM SAC",
-                                            "column_values": [],
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                ],
-            },
+            {"boards": [{"groups": [
+                {"id": "grp-old", "title": "2025"},
+                {"id": "grp-pending", "title": "pendentes de resposta"},
+            ]}]},
             {
                 "boards": [
                     {
@@ -119,13 +130,15 @@ class TestMondayCases:
         cases = list_cases_ready_for_elaboration(
             api_token="token",
             limit=10,
-            page_size=1,
+            page_size=10,
             max_items_scanned=10,
         )
 
         assert len(cases) == 1
         assert cases[0].item_id == "2"
-        assert graphql_mock.call_count == 3
+        assert graphql_mock.call_count == 2
+        group_query = graphql_mock.call_args_list[1].kwargs["variables"]
+        assert group_query["groupId"] == "grp-pending"
 
     @patch("classificacao_procons.monday.cases._graphql_request")
     @patch("classificacao_procons.monday.cases.load_board_metadata")

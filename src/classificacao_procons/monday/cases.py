@@ -5,6 +5,7 @@ from __future__ import annotations
 from classificacao_procons.models import MondayCaseReady
 from classificacao_procons.monday.client import (
     DEFAULT_BOARD_NAME,
+    DEFAULT_GROUP_NAME,
     _graphql_request,
     _normalize_name,
     get_api_token_from_env,
@@ -12,6 +13,7 @@ from classificacao_procons.monday.client import (
 )
 from classificacao_procons.monday.mapping import (
     FIELD_DOCS_SAC,
+    FIELD_PDF_URL,
     FIELD_PROTOCOL,
     FIELD_STATUS,
     MondayColumn,
@@ -36,13 +38,14 @@ def _extract_case_from_item(
         FIELD_DOCS_SAC: None,
         FIELD_PROTOCOL: None,
         FIELD_STATUS: None,
+        FIELD_PDF_URL: None,
     }
 
     for column_value in item.get("column_values", []):
         field = column_lookup.get(column_value.get("id", ""), "")
         if not field:
             continue
-        if field == FIELD_DOCS_SAC:
+        if field in {FIELD_DOCS_SAC, FIELD_PDF_URL}:
             link = parse_link_column_value(column_value.get("value"))
             values[field] = link or column_value.get("text")
         elif field == FIELD_STATUS:
@@ -63,19 +66,30 @@ def _extract_case_from_item(
         item_name=str(item.get("name", "")).strip(),
         docs_sac_url=docs_sac_url,
         protocol_number=values.get(FIELD_PROTOCOL),
+        complaint_pdf_url=values.get(FIELD_PDF_URL),
         status=status,
     )
+
+
+def _filter_pending_groups(groups: list[dict], group_name: str) -> list[dict]:
+    target = _normalize_name(group_name)
+    return [
+        group
+        for group in groups
+        if _normalize_name(str(group.get("title", ""))) == target
+    ]
 
 
 def list_cases_ready_for_elaboration(
     *,
     api_token: str | None = None,
     board_name: str = DEFAULT_BOARD_NAME,
+    group_name: str = DEFAULT_GROUP_NAME,
     limit: int = 50,
     page_size: int = 100,
-    max_items_scanned: int = 500,
+    max_items_scanned: int = 100,
 ) -> list[MondayCaseReady]:
-    """Lista casos com Docs SAC preenchido e ainda sem status final."""
+    """Lista casos com Docs SAC no grupo Pendentes de Resposta."""
     token = api_token or get_api_token_from_env()
     if not token:
         return []
@@ -108,7 +122,11 @@ def list_cases_ready_for_elaboration(
     cases: list[MondayCaseReady] = []
     items_scanned = 0
 
-    for group in boards[0].get("groups", []):
+    pending_groups = _filter_pending_groups(boards[0].get("groups", []), group_name)
+    if not pending_groups:
+        return []
+
+    for group in pending_groups:
         cursor: str | None = None
         while items_scanned < max_items_scanned and len(cases) < limit:
             page_limit = min(page_size, max_items_scanned - items_scanned)

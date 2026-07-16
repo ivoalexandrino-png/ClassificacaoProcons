@@ -229,9 +229,30 @@ def _build_sac_context_from_folder_children(
     )
 
 
+def _complaint_pdf_from_url(
+    service,
+    *,
+    complaint_pdf_url: str,
+) -> DriveFileInfo:
+    file_id = extract_drive_resource_id(complaint_pdf_url)
+    metadata = _get_file_metadata(service, file_id=file_id)
+    if metadata.mime_type == DRIVE_FOLDER_MIME:
+        children = _list_children(service, folder_id=file_id)
+        complaint_pdf = _find_complaint_pdf(children)
+        if complaint_pdf is None:
+            raise DriveClientError(
+                "Link de Notificação Procon não contém PDF da reclamação.",
+            )
+        return complaint_pdf
+    if not _is_pdf(metadata):
+        raise DriveClientError("Link de Notificação Procon não aponta para um PDF.")
+    return metadata
+
+
 def resolve_sac_folder_context(
     *,
     docs_sac_url: str,
+    complaint_pdf_url: str | None = None,
     token_path: str | None = None,
 ) -> SacFolderContext:
     """Localiza PDF original, pasta SAC e resumo TXT a partir do link do Monday."""
@@ -259,6 +280,16 @@ def resolve_sac_folder_context(
                 raise DriveClientError("Subpasta do SAC não encontrada na pasta do caso.")
             sac_children = _list_children(service, folder_id=sac_folder.file_id)
             summary_txt = _find_summary_txt(sac_children)
+            complaint_pdf = complaint_pdf or _find_complaint_pdf(sac_children)
+            if complaint_pdf is None and complaint_pdf_url:
+                complaint_pdf = _complaint_pdf_from_url(
+                    service,
+                    complaint_pdf_url=complaint_pdf_url,
+                )
+            if complaint_pdf is None:
+                raise DriveClientError("PDF original da reclamação não encontrado no Drive.")
+            if summary_txt is None:
+                raise DriveClientError("Resumo TXT do SAC não encontrado na subpasta.")
             return SacFolderContext(
                 consumer_folder_id=linked_id,
                 sac_folder_id=sac_folder.file_id,
@@ -271,6 +302,38 @@ def resolve_sac_folder_context(
                 ],
             )
 
+        subfolders = [
+            item for item in linked_children if item.mime_type == DRIVE_FOLDER_MIME
+        ]
+        sac_folder = _select_sac_subfolder(subfolders)
+        if sac_folder is not None:
+            sac_children = _list_children(service, folder_id=sac_folder.file_id)
+            summary_txt = _find_summary_txt(sac_children)
+            if summary_txt is not None:
+                resolved_pdf = _find_complaint_pdf(sac_children) or _find_complaint_pdf(
+                    linked_children,
+                )
+                if resolved_pdf is None and complaint_pdf_url:
+                    resolved_pdf = _complaint_pdf_from_url(
+                        service,
+                        complaint_pdf_url=complaint_pdf_url,
+                    )
+                if resolved_pdf is None:
+                    raise DriveClientError(
+                        "PDF original da reclamação não encontrado no Drive.",
+                    )
+                return SacFolderContext(
+                    consumer_folder_id=linked_id,
+                    sac_folder_id=sac_folder.file_id,
+                    complaint_pdf=resolved_pdf,
+                    summary_txt=summary_txt,
+                    supporting_files=[
+                        item
+                        for item in sac_children
+                        if item.file_id != summary_txt.file_id
+                    ],
+                )
+
         summary_txt = _find_summary_txt(linked_children)
         if summary_txt is not None:
             parent_id = _get_parent_folder_id(service, folder_id=linked_id)
@@ -278,6 +341,11 @@ def resolve_sac_folder_context(
                 raise DriveClientError("Não foi possível localizar a pasta principal do caso.")
             parent_children = _list_children(service, folder_id=parent_id)
             complaint_pdf = _find_complaint_pdf(parent_children)
+            if complaint_pdf is None and complaint_pdf_url:
+                complaint_pdf = _complaint_pdf_from_url(
+                    service,
+                    complaint_pdf_url=complaint_pdf_url,
+                )
             if complaint_pdf is None:
                 raise DriveClientError("PDF original da reclamação não encontrado no Drive.")
             return SacFolderContext(
@@ -287,6 +355,37 @@ def resolve_sac_folder_context(
                 summary_txt=summary_txt,
                 supporting_files=[
                     item for item in linked_children if item.file_id != summary_txt.file_id
+                ],
+            )
+
+        if complaint_pdf_url:
+            complaint_pdf = _complaint_pdf_from_url(
+                service,
+                complaint_pdf_url=complaint_pdf_url,
+            )
+            summary_txt = _find_summary_txt(linked_children)
+            sac_folder_id = linked_id
+            if summary_txt is None:
+                subfolders = [
+                    item for item in linked_children if item.mime_type == DRIVE_FOLDER_MIME
+                ]
+                sac_folder = _select_sac_subfolder(subfolders)
+                if sac_folder is not None:
+                    sac_folder_id = sac_folder.file_id
+                    sac_children = _list_children(service, folder_id=sac_folder.file_id)
+                    summary_txt = _find_summary_txt(sac_children)
+            if summary_txt is None:
+                raise DriveClientError("Resumo TXT do SAC não encontrado na pasta.")
+            return SacFolderContext(
+                consumer_folder_id=linked_id,
+                sac_folder_id=sac_folder_id,
+                complaint_pdf=complaint_pdf,
+                summary_txt=summary_txt,
+                supporting_files=[
+                    item
+                    for item in linked_children
+                    if item.mime_type != DRIVE_FOLDER_MIME
+                    and item.file_id != complaint_pdf.file_id
                 ],
             )
 

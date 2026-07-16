@@ -76,3 +76,61 @@ class TestSacFolderReader:
 
         assert context.consumer_folder_id == "folder-root"
         assert context.summary_txt is not None
+
+    @patch("classificacao_procons.drive.reader._list_children")
+    @patch("classificacao_procons.drive.reader._get_file_metadata")
+    @patch("classificacao_procons.drive.reader._get_parent_folder_id")
+    @patch("classificacao_procons.drive.reader._build_drive_service")
+    def test_should_use_notificacao_pdf_when_missing_in_sac_folder(
+        self,
+        build_service_mock,
+        parent_mock,
+        metadata_mock,
+        list_children_mock,
+    ) -> None:
+        from classificacao_procons.drive.reader import resolve_sac_folder_context
+
+        build_service_mock.return_value = MagicMock()
+        parent_mock.return_value = None
+        metadata_mock.side_effect = [
+            DriveFileInfo(
+                "folder-root",
+                "ANTIGA",
+                "application/vnd.google-apps.folder",
+                None,
+            ),
+            DriveFileInfo(
+                "pdf-ext",
+                "Atendimento Procon - ANTIGA.pdf",
+                "application/pdf",
+                None,
+                web_view_link="https://drive.google.com/file/d/pdf-ext/view",
+            ),
+        ]
+
+        def list_children_side_effect(service, *, folder_id: str) -> list[DriveFileInfo]:
+            if folder_id == "folder-root":
+                return [
+                    DriveFileInfo(
+                        "sac-folder",
+                        "Informações SAC",
+                        "application/vnd.google-apps.folder",
+                        None,
+                    ),
+                ]
+            if folder_id == "sac-folder":
+                return [
+                    DriveFileInfo("txt-1", "informacoes-sac.txt", "text/plain", None),
+                ]
+            return []
+
+        list_children_mock.side_effect = list_children_side_effect
+
+        context = resolve_sac_folder_context(
+            docs_sac_url="https://drive.google.com/drive/folders/folder-root",
+            complaint_pdf_url="https://drive.google.com/file/d/pdf-ext/view",
+        )
+
+        assert context.complaint_pdf.file_id == "pdf-ext"
+        assert context.summary_txt is not None
+        assert context.summary_txt.file_id == "txt-1"

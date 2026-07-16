@@ -273,8 +273,8 @@ def main(argv: list[str] | None = None) -> int:
     elaborate_parser.add_argument(
         "--max-items-scanned",
         type=int,
-        default=500,
-        help="Máximo de linhas do Monday a varrer por execução (backfill).",
+        default=100,
+        help="Máximo de linhas do Monday a varrer no grupo Pendentes de Resposta.",
     )
     elaborate_parser.add_argument(
         "--item-id",

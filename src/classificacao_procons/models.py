@@ -66,6 +66,7 @@ class MondayCaseReady:
     item_name: str
     docs_sac_url: str
     protocol_number: str | None = None
+    complaint_pdf_url: str | None = None
     status: str | None = None
 
 
