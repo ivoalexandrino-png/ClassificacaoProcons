@@ -33,6 +33,10 @@ class ContractMetadata:
     end_date: date | None
     property_name: str | None
     summary: str | None
+    parent_contract_reference: str | None = None
+    parent_contract_cnpj: str | None = None
+    is_supplemental: bool | None = None
+    supplemental_kind: str | None = None
 
 
 def _parse_iso_date(value: str | None) -> date | None:
@@ -102,10 +106,19 @@ def extract_contract_metadata(
         '  "start_date": "YYYY-MM-DD ou null",\n'
         '  "end_date": "YYYY-MM-DD ou null",\n'
         '  "property_name": "nome do imóvel se for locação, senão null",\n'
-        '  "summary": "resumo em uma frase"\n'
+        '  "summary": "resumo em uma frase",\n'
+        '  "parent_contract_reference": "nome ou identificação do contrato principal citado no '
+        'documento (ex.: contrato de locação original, número do contrato) ou null",\n'
+        '  "parent_contract_cnpj": "CNPJ da contraparte do contrato principal se citado ou null",\n'
+        '  "is_supplemental": true/false — true para aditivo, distrato, anexo, MoU, DPA, '
+        'proposta, carta de autorização e documentos que alteram/complementam outro contrato,\n'
+        '  "supplemental_kind": '
+        '"aditivo|distrato|anexo|mou|dpa|proposta|carta_autorizacao|outro|null"\n'
         "}\n"
         f"Nome do documento no Autentique: {document_name}\n"
-        "Use null quando não encontrar o dado. Não invente informações."
+        "Use null quando não encontrar o dado. Não invente informações. "
+        "Para parent_contract_reference, extraia do corpo do documento menções ao contrato "
+        "principal (razão social, objeto, imóvel, número)."
     )
 
     try:
@@ -118,6 +131,12 @@ def extract_contract_metadata(
         raise ContractExtractionError(str(exc)) from exc
 
     payload = _extract_json_block(response)
+    is_supplemental = payload.get("is_supplemental")
+    if isinstance(is_supplemental, str):
+        is_supplemental = is_supplemental.strip().lower() in {"true", "1", "sim", "yes"}
+    elif is_supplemental is not None:
+        is_supplemental = bool(is_supplemental)
+
     return ContractMetadata(
         counterparty_name=str(payload.get("counterparty_name") or document_name).strip(),
         counterparty_cnpj=_nullable_str(payload.get("counterparty_cnpj")),
@@ -127,6 +146,10 @@ def extract_contract_metadata(
         end_date=_parse_iso_date(_nullable_str(payload.get("end_date"))),
         property_name=_nullable_str(payload.get("property_name")),
         summary=_nullable_str(payload.get("summary")),
+        parent_contract_reference=_nullable_str(payload.get("parent_contract_reference")),
+        parent_contract_cnpj=_nullable_str(payload.get("parent_contract_cnpj")),
+        is_supplemental=is_supplemental,
+        supplemental_kind=_nullable_str(payload.get("supplemental_kind")),
     )
 
 

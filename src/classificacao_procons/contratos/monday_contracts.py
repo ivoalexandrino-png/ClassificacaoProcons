@@ -26,6 +26,10 @@ from classificacao_procons.contratos.constants import (
 )
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
+from classificacao_procons.contratos.models import ControleAssinaturasItem
+from classificacao_procons.contratos.parent_resolver import (
+    discover_controle_related_contract_column_id,
+)
 from classificacao_procons.monday.client import (
     MondayClientError,
     _graphql_request,
@@ -46,20 +50,13 @@ class MondayColumnDetails:
 
 
 @dataclass(frozen=True)
-class ControleAssinaturasItem:
-    item_id: str
-    name: str
-    status: str | None
-    tipo: str | None
-    signature_link: str | None
-
-
-@dataclass(frozen=True)
 class MondayContractRegistrationResult:
     controle_item_id: str | None
     contratos_item_id: str | None
     contratos_item_url: str | None
     skipped_duplicate: bool = False
+    registration_mode: str | None = None
+    parent_item_id: str | None = None
 
 
 def find_controle_item(
@@ -69,6 +66,11 @@ def find_controle_item(
     document_name: str,
 ) -> ControleAssinaturasItem | None:
     """Localiza item no Controle Assinaturas por ID/nome/link Autentique."""
+    related_col_id = discover_controle_related_contract_column_id(api_token=api_token)
+    column_ids = ["status", "status_1__1", "long_text_mkvnwp6d"]
+    if related_col_id:
+        column_ids.append(related_col_id)
+
     cursor: str | None = None
     normalized_name = document_name.casefold().strip()
     normalized_id = document_id.casefold().strip()
@@ -77,15 +79,131 @@ def find_controle_item(
         data = _graphql_request(
             api_token=api_token,
             query="""
-            query ($boardId: ID!, $limit: Int!, $cursor: String) {
+            query ($boardId: ID!, $limit: Int!, $cursor: String, $columnIds: [String!]) {
               boards(ids: [$boardId]) {
                 items_page(limit: $limit, cursor: $cursor) {
                   cursor
                   items {
                     id
                     name
-                    column_values(ids: ["status", "status_1__1", "long_text_mkvnwp6d"]) {
+                    column_values(ids: $columnIds) {
                       id
+                      text
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            """,
+            variables={
+                "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+                "limit": 100,
+                "cursor": cursor,
+                "columnIds": column_ids,
+            },
+        )
+        page = data["boards"][0]["items_page"]
+        for item in page["items"]:
+            columns_by_id = {
+                column["id"]: column for column in item.get("column_values", [])
+            }
+            values = {column_id: column.get("text") for column_id, column in columns_by_id.items()}
+            signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
+            item_name = str(item.get("name", ""))
+            if normalized_id and normalized_id in signature_link.casefold():
+                return _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                )
+            if normalized_name and normalized_name == item_name.casefold().strip():
+                return _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                )
+            if normalized_name and normalized_name in item_name.casefold():
+                return _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                )
+
+        cursor = page.get("cursor")
+        if not cursor:
+            break
+
+    return None
+
+
+@dataclass(frozen=True)
+class ControleAssinaturasIndex:
+    document_ids: frozenset[str]
+    exact_names: frozenset[str]
+
+    def matches_document(self, document: object) -> bool:
+        document_id = str(getattr(document, "document_id", "")).casefold().strip()
+        document_name = str(getattr(document, "name", "")).casefold().strip()
+        if document_id and document_id in self.document_ids:
+            return True
+        if document_name and document_name in self.exact_names:
+            return True
+        signature_link = str(getattr(document, "primary_signature_link", lambda: None)() or "")
+        if document_id and document_id in signature_link.casefold():
+            return True
+        for known_name in self.exact_names:
+            if document_name and (document_name in known_name or known_name in document_name):
+                return True
+        return False
+
+    def with_item(
+        self,
+        *,
+        document_id: str,
+        document_name: str,
+        signature_link: str | None,
+    ) -> ControleAssinaturasIndex:
+        ids = set(self.document_ids)
+        names = set(self.exact_names)
+        normalized_id = document_id.casefold().strip()
+        normalized_name = document_name.casefold().strip()
+        if normalized_id:
+            ids.add(normalized_id)
+        if normalized_name:
+            names.add(normalized_name)
+        if signature_link:
+            for token in _extract_document_ids_from_text(signature_link):
+                ids.add(token)
+        return ControleAssinaturasIndex(
+            document_ids=frozenset(ids),
+            exact_names=frozenset(names),
+        )
+
+
+def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIndex:
+    """Indexa documentos já presentes no Controle Assinaturas."""
+    document_ids: set[str] = set()
+    exact_names: set[str] = set()
+    cursor: str | None = None
+
+    for _ in range(50):
+        data = _graphql_request(
+            api_token=api_token,
+            query="""
+            query ($boardId: ID!, $limit: Int!, $cursor: String) {
+              boards(ids: [$boardId]) {
+                items_page(limit: $limit, cursor: $cursor) {
+                  cursor
+                  items {
+                    name
+                    column_values(ids: ["long_text_mkvnwp6d"]) {
                       text
                       value
                     }
@@ -102,34 +220,291 @@ def find_controle_item(
         )
         page = data["boards"][0]["items_page"]
         for item in page["items"]:
-            values = {column["id"]: column.get("text") for column in item["column_values"]}
-            signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
-            item_name = str(item.get("name", ""))
-            if normalized_id and normalized_id in signature_link.casefold():
-                return _to_controle_item(item, values, signature_link)
-            if normalized_name and normalized_name == item_name.casefold().strip():
-                return _to_controle_item(item, values, signature_link)
-            if normalized_name and normalized_name in item_name.casefold():
-                return _to_controle_item(item, values, signature_link)
+            item_name = str(item.get("name", "")).casefold().strip()
+            if item_name:
+                exact_names.add(item_name)
+            for column in item.get("column_values", []):
+                text = str(column.get("text") or "")
+                value = str(column.get("value") or "")
+                for token in _extract_document_ids_from_text(f"{text}\n{value}"):
+                    document_ids.add(token)
 
         cursor = page.get("cursor")
         if not cursor:
             break
 
-    return None
+    return ControleAssinaturasIndex(
+        document_ids=frozenset(document_ids),
+        exact_names=frozenset(exact_names),
+    )
+
+
+def load_controle_board_groups(*, api_token: str) -> dict[str, str]:
+    """Retorna grupos do Controle Assinaturas: título normalizado → id."""
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: [ID!]) {
+          boards(ids: $boardId) {
+            groups { id title }
+          }
+        }
+        """,
+        variables={"boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID},
+    )
+    boards = data.get("boards", [])
+    if not boards:
+        return {CONTROLE_GROUP_ASSINADOS: CONTROLE_GROUP_ASSINADOS}
+
+    groups: dict[str, str] = {}
+    for group in boards[0].get("groups", []):
+        title = _normalize_group_title(str(group.get("title", "")))
+        groups[title] = str(group["id"])
+        if title == "assinados":
+            groups[CONTROLE_GROUP_ASSINADOS] = str(group["id"])
+    return groups
+
+
+def create_controle_assinatura_item(
+    *,
+    api_token: str,
+    item_name: str,
+    group_id: str,
+    signature_link_text: str,
+    status_label: str,
+    tipo_label: str | None = None,
+    signed_at: date | None = None,
+    signed_pdf_url: str | None = None,
+) -> tuple[str, str | None]:
+    """Cria item no Controle Assinaturas."""
+    board_context = load_board_metadata(
+        api_token=api_token,
+        board_id=MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+    )
+    column_details = _load_controle_column_details(api_token=api_token)
+    column_values = _sanitize_column_values(
+        column_details,
+        _build_controle_column_values(
+            [detail.column for detail in column_details],
+            signature_link_text=signature_link_text,
+            status_label=status_label,
+            tipo_label=tipo_label,
+            signed_at=signed_at,
+            signed_pdf_url=signed_pdf_url,
+        ),
+    )
+
+    item_id = _create_controle_item(
+        api_token=api_token,
+        group_id=group_id,
+        item_name=item_name,
+        column_values={},
+    )
+    _apply_controle_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
+        column_values=column_values,
+    )
+
+    item_url = None
+    if board_context.account_slug:
+        item_url = (
+            f"https://{board_context.account_slug}.monday.com/boards/"
+            f"{MONDAY_CONTROLE_ASSINATURAS_BOARD_ID}/pulses/{item_id}"
+        )
+    return item_id, item_url
+
+
+def _load_controle_column_details(*, api_token: str) -> list[MondayColumnDetails]:
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: [ID!]) {
+          boards(ids: $boardId) {
+            columns {
+              id
+              title
+              type
+              settings_str
+            }
+          }
+        }
+        """,
+        variables={"boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID},
+    )
+    boards = data.get("boards", [])
+    if not boards:
+        return []
+    return [
+        MondayColumnDetails(
+            column=MondayColumn(
+                id=str(column["id"]),
+                title=str(column.get("title", "")),
+                column_type=str(column.get("type", "")),
+            ),
+            settings_str=column.get("settings_str"),
+        )
+        for column in boards[0].get("columns", [])
+    ]
+
+
+def _build_controle_column_values(
+    columns: list[MondayColumn],
+    *,
+    signature_link_text: str,
+    status_label: str,
+    tipo_label: str | None,
+    signed_at: date | None,
+    signed_pdf_url: str | None,
+) -> dict[str, Any]:
+    column_by_title = {column.title.casefold(): column for column in columns}
+    values: dict[str, Any] = {}
+
+    status_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_STATUS, ("status",))
+    if status_col:
+        values[status_col.id] = format_column_value(status_col.column_type, status_label)
+
+    link_col = columns_by_id_or_title(
+        column_by_title,
+        CONTROLE_COL_LINK_ASSINATURA,
+        ("link autentique", "assinatura", "link"),
+    )
+    if link_col:
+        values[link_col.id] = format_column_value(link_col.column_type, signature_link_text)
+
+    tipo_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_TIPO, ("tipo",))
+    if tipo_col and tipo_label:
+        values[tipo_col.id] = format_column_value(tipo_col.column_type, tipo_label)
+
+    data_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_DATA_ASSINATURA, ("data",))
+    if data_col and signed_at:
+        values[data_col.id] = format_column_value(data_col.column_type, signed_at)
+
+    assinado_col = columns_by_id_or_title(
+        column_by_title,
+        CONTROLE_COL_LINK_ASSINADO,
+        ("contrato assinado", "pdf assinado"),
+    )
+    if assinado_col and signed_pdf_url:
+        values[assinado_col.id] = format_column_value(
+            assinado_col.column_type,
+            signed_pdf_url,
+            link_text="Contrato assinado",
+        )
+
+    return {key: value for key, value in values.items() if value is not None}
+
+
+def columns_by_id_or_title(
+    column_by_title: dict[str, MondayColumn],
+    column_id: str,
+    title_keywords: tuple[str, ...],
+) -> MondayColumn | None:
+    for column in column_by_title.values():
+        if column.id == column_id:
+            return column
+    return _find_column(column_by_title, title_keywords)
+
+
+def _apply_controle_column_values(
+    *,
+    api_token: str,
+    item_id: str,
+    column_details: list[MondayColumnDetails],
+    column_values: dict[str, Any],
+) -> None:
+    details_by_id = {detail.column.id: detail for detail in column_details}
+    for column_id, value in column_values.items():
+        if details_by_id.get(column_id) is None:
+            continue
+        try:
+            _graphql_request(
+                api_token=api_token,
+                query="""
+                mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+                  change_multiple_column_values(
+                    board_id: $boardId
+                    item_id: $itemId
+                    column_values: $columnValues
+                  ) { id }
+                }
+                """,
+                variables={
+                    "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+                    "itemId": item_id,
+                    "columnValues": json.dumps({column_id: value}),
+                },
+            )
+        except MondayClientError:
+            continue
+
+
+def _create_controle_item(
+    *,
+    api_token: str,
+    group_id: str,
+    item_name: str,
+    column_values: dict[str, Any],
+) -> str:
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON) {
+          create_item(
+            board_id: $boardId
+            group_id: $groupId
+            item_name: $itemName
+            column_values: $columnValues
+          ) { id }
+        }
+        """,
+        variables={
+            "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+            "groupId": group_id,
+            "itemName": item_name,
+            "columnValues": json.dumps(column_values) if column_values else None,
+        },
+    )
+    return str(data["create_item"]["id"])
+
+
+def _extract_document_ids_from_text(text: str) -> set[str]:
+    normalized = text.casefold()
+    tokens: set[str] = set()
+    for match in re.findall(r"[a-f0-9]{32,64}", normalized):
+        tokens.add(match)
+    if "autentique id:" in normalized:
+        tail = normalized.split("autentique id:", maxsplit=1)[1].strip()
+        first_line = tail.splitlines()[0].strip()
+        if first_line:
+            tokens.add(first_line)
+    return tokens
 
 
 def _to_controle_item(
     item: dict,
     values: dict[str, str | None],
     signature_link: str,
+    *,
+    related_col_id: str | None = None,
+    columns_by_id: dict[str, dict] | None = None,
 ) -> ControleAssinaturasItem:
+    from classificacao_procons.contratos.parent_resolver import _parse_linked_item_ids
+
+    related_ids: tuple[str, ...] = ()
+    if related_col_id and columns_by_id and related_col_id in columns_by_id:
+        raw_value = columns_by_id[related_col_id].get("value")
+        if raw_value:
+            related_ids = tuple(_parse_linked_item_ids(str(raw_value)))
+
     return ControleAssinaturasItem(
         item_id=str(item["id"]),
         name=str(item.get("name", "")),
         status=values.get(CONTROLE_COL_STATUS),
         tipo=values.get(CONTROLE_COL_TIPO),
         signature_link=signature_link or None,
+        related_contract_item_ids=related_ids,
     )
 
 
@@ -234,6 +609,152 @@ def register_contrato_item(
         controle_item_id=None,
         contratos_item_id=item_id,
         contratos_item_url=item_url,
+        registration_mode="top_level",
+    )
+
+
+def find_parent_contrato_item(
+    *,
+    api_token: str,
+    document_name: str,
+    metadata: ContractMetadata,
+    controle_item: ControleAssinaturasItem | None = None,
+    min_score: int = 70,
+) -> str | None:
+    """Localiza item pai no quadro Contratos (wrapper legado)."""
+    from classificacao_procons.contratos.parent_resolver import resolve_parent_contrato_item
+
+    result = resolve_parent_contrato_item(
+        api_token=api_token,
+        document_name=document_name,
+        metadata=metadata,
+        controle_item=controle_item,
+        min_name_score=min_score,
+    )
+    return result.parent_item_id
+
+
+def register_contrato_subitem(
+    *,
+    api_token: str,
+    parent_item_id: str,
+    metadata: ContractMetadata,
+    document_name: str,
+    signed_pdf_url: str,
+    pdf_path: Path | None = None,
+) -> MondayContractRegistrationResult:
+    """Cria subitem no quadro Contratos vinculado ao contrato pai."""
+    board_context = load_board_metadata(
+        api_token=api_token,
+        board_id=MONDAY_CONTRATOS_BOARD_ID,
+    )
+    column_details = _load_contratos_column_details(api_token=api_token)
+    columns = [detail.column for detail in column_details]
+    item_name = document_name
+    column_values = _sanitize_column_values(
+        column_details,
+        _build_contratos_column_values(
+            columns,
+            metadata=metadata,
+            signed_pdf_url=signed_pdf_url,
+            document_name=document_name,
+        ),
+    )
+    item_id = _create_contratos_subitem(
+        api_token=api_token,
+        parent_item_id=parent_item_id,
+        item_name=item_name,
+    )
+    _apply_contratos_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
+        column_values=column_values,
+        pdf_path=pdf_path,
+    )
+    item_url = None
+    if board_context.account_slug:
+        item_url = (
+            f"https://{board_context.account_slug}.monday.com/boards/"
+            f"{MONDAY_CONTRATOS_BOARD_ID}/pulses/{item_id}"
+        )
+    return MondayContractRegistrationResult(
+        controle_item_id=None,
+        contratos_item_id=item_id,
+        contratos_item_url=item_url,
+        registration_mode="subitem",
+        parent_item_id=parent_item_id,
+    )
+
+
+def _create_contratos_subitem(
+    *,
+    api_token: str,
+    parent_item_id: str,
+    item_name: str,
+) -> str:
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($parentItemId: ID!, $itemName: String!) {
+          create_subitem(parent_item_id: $parentItemId, item_name: $itemName) { id }
+        }
+        """,
+        variables={
+            "parentItemId": parent_item_id,
+            "itemName": item_name,
+        },
+    )
+    return str(data["create_subitem"]["id"])
+
+
+def fetch_contratos_item_name(*, api_token: str, item_id: str) -> str:
+    """Retorna nome do item no quadro Contratos."""
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($itemIds: [ID!]) {
+          items(ids: $itemIds) {
+            id
+            name
+          }
+        }
+        """,
+        variables={"itemIds": [item_id]},
+    )
+    items = data.get("items", [])
+    if not items:
+        raise MondayClientError(f'Item "{item_id}" não encontrado no Monday.')
+    return str(items[0].get("name", ""))
+
+
+def enrich_contratos_item_columns(
+    *,
+    api_token: str,
+    item_id: str,
+    metadata: ContractMetadata,
+    document_name: str,
+    signed_pdf_url: str | None = None,
+    pdf_path: Path | None = None,
+) -> None:
+    """Preenche colunas de item existente no quadro Contratos (webhook Monday)."""
+    column_details = _load_contratos_column_details(api_token=api_token)
+    columns = [detail.column for detail in column_details]
+    column_values = _sanitize_column_values(
+        column_details,
+        _build_contratos_column_values(
+            columns,
+            metadata=metadata,
+            signed_pdf_url=signed_pdf_url or "",
+            document_name=document_name,
+        ),
+    )
+    _apply_contratos_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
+        column_values=column_values,
+        pdf_path=pdf_path,
     )
 
 

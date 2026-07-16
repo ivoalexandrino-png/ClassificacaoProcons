@@ -18,6 +18,34 @@ class AutentiqueClientError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class AutentiqueSigner:
+    public_id: str
+    name: str | None
+    email: str | None
+    short_link: str | None
+    signed_at: str | None
+
+
+@dataclass(frozen=True)
+class AutentiqueDocumentSummary:
+    document_id: str
+    name: str
+    created_at: str | None
+    signed_pdf_url: str | None
+    signatures: tuple[AutentiqueSigner, ...]
+
+    @property
+    def is_fully_signed(self) -> bool:
+        return bool(self.signed_pdf_url)
+
+    def primary_signature_link(self) -> str | None:
+        for signer in self.signatures:
+            if signer.short_link:
+                return signer.short_link
+        return None
+
+
+@dataclass(frozen=True)
 class AutentiqueDocument:
     document_id: str
     name: str
@@ -126,3 +154,111 @@ def download_file(*, url: str, destination: Path) -> Path:
         raise AutentiqueClientError("PDF baixado está vazio.")
 
     return destination
+
+
+def _parse_signatures(raw_signatures: list[dict] | None) -> tuple[AutentiqueSigner, ...]:
+    signers: list[AutentiqueSigner] = []
+    for signature in raw_signatures or []:
+        link = signature.get("link") or {}
+        signed = signature.get("signed") or {}
+        signers.append(
+            AutentiqueSigner(
+                public_id=str(signature.get("public_id", "")),
+                name=_nullable_str(signature.get("name")),
+                email=_nullable_str(signature.get("email")),
+                short_link=_nullable_str(link.get("short_link")),
+                signed_at=_nullable_str(signed.get("created_at")),
+            ),
+        )
+    return tuple(signers)
+
+
+def _parse_document_summary(document: dict) -> AutentiqueDocumentSummary:
+    files = document.get("files") or {}
+    return AutentiqueDocumentSummary(
+        document_id=str(document["id"]),
+        name=str(document.get("name", "")).strip(),
+        created_at=document.get("created_at"),
+        signed_pdf_url=files.get("signed"),
+        signatures=_parse_signatures(document.get("signatures")),
+    )
+
+
+def _nullable_str(value: object) -> str | None:
+    if value is None:
+        return None
+    cleaned = str(value).strip()
+    return cleaned or None
+
+
+def list_documents(
+    *,
+    api_token: str | None = None,
+    page_size: int = 60,
+    max_pages: int = 50,
+) -> list[AutentiqueDocumentSummary]:
+    """Lista documentos do Autentique com paginação."""
+    token = api_token or get_api_token_from_env()
+    if not token:
+        raise AutentiqueClientError("AUTENTIQUE_API_TOKEN não configurada.")
+
+    documents: list[AutentiqueDocumentSummary] = []
+    for page in range(1, max_pages + 1):
+        data = _graphql_request(
+            api_token=token,
+            query="""
+            query ($limit: Int!, $page: Int!) {
+              documents(limit: $limit, page: $page) {
+                data {
+                  id
+                  name
+                  created_at
+                  files { signed }
+                  signatures {
+                    public_id
+                    name
+                    email
+                    link { short_link }
+                    signed { created_at }
+                  }
+                }
+              }
+            }
+            """,
+            variables={"limit": page_size, "page": page},
+        )
+        page_data = data.get("documents", {}).get("data", [])
+        if not page_data:
+            break
+        documents.extend(_parse_document_summary(item) for item in page_data)
+        if len(page_data) < page_size:
+            break
+
+    return documents
+
+
+def create_signature_link(
+    *,
+    public_id: str,
+    api_token: str | None = None,
+) -> str:
+    """Gera link de assinatura assina.ae para um signatário."""
+    token = api_token or get_api_token_from_env()
+    if not token:
+        raise AutentiqueClientError("AUTENTIQUE_API_TOKEN não configurada.")
+
+    data = _graphql_request(
+        api_token=token,
+        query="""
+        mutation ($publicId: UUID!) {
+          createLinkToSignature(public_id: $publicId) {
+            short_link
+          }
+        }
+        """,
+        variables={"publicId": public_id},
+    )
+    link = data.get("createLinkToSignature", {}).get("short_link")
+    if not link:
+        raise AutentiqueClientError(f"Não foi possível gerar link para assinatura {public_id}.")
+    return str(link)
