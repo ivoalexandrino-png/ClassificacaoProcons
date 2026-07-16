@@ -10,6 +10,7 @@ import pytest
 
 from classificacao_procons.google_auth import (
     GoogleAuthError,
+    _normalize_auth_code,
     get_authorization_url,
     save_token_from_code,
 )
@@ -76,6 +77,31 @@ def test_save_token_from_code_remote_should_skip_pending_file(
     create_flow.assert_called_once_with(credentials_path=str(credentials), remote=True)
     flow.fetch_token.assert_called_once_with(code="4/0ABC")
     assert token.read_text(encoding="utf-8") == '{"token":"ok"}'
+
+
+def test_normalize_auth_code_should_strip_code_prefix_and_leading_equals() -> None:
+    assert _normalize_auth_code("code=4/0ABC") == "4/0ABC"
+    assert _normalize_auth_code("=4/0ABC") == "4/0ABC"
+
+
+def test_save_token_from_code_should_normalize_malformed_paste(
+    oauth_files: tuple[Path, Path],
+) -> None:
+    credentials, token = oauth_files
+
+    with patch("classificacao_procons.google_auth._create_oauth_flow") as create_flow:
+        flow = MagicMock()
+        flow.credentials.to_json.return_value = '{"token":"ok"}'
+        create_flow.return_value = flow
+
+        save_token_from_code(
+            code="=4/0ABC",
+            credentials_path=str(credentials),
+            token_path=str(token),
+            remote=True,
+        )
+
+    flow.fetch_token.assert_called_once_with(code="4/0ABC")
 
 
 def test_save_token_from_code_should_raise_when_pending_missing_and_not_remote(
