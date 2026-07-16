@@ -32,6 +32,7 @@ CONTROLE_COL_DATA_ASSINATURA = "data0"
 CONTROLE_COL_LINK_ASSINADO = "link"
 CONTROLE_COL_LINK_ASSINATURA = "long_text_mkvnwp6d"
 CONTROLE_COL_TIPO = "status_1__1"
+CONTROLE_COL_CONTRATO_RELACIONADO = "board_relation_mm5ap90f"
 
 # Controle Assinaturas — status (labels)
 CONTROLE_STATUS_ASSINADO = "Assinado"

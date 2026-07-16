@@ -84,23 +84,35 @@ def _discover_column_id(
     board_id: str,
     title_keywords: tuple[str, ...],
     allowed_types: tuple[str, ...] | None = None,
+    columns: list[dict[str, str]] | None = None,
 ) -> str | None:
-    data = _graphql_request(
-        api_token=api_token,
-        query="""
-        query ($boardId: [ID!]) {
-          boards(ids: $boardId) {
-            columns { id title type }
-          }
-        }
-        """,
-        variables={"boardId": board_id},
-    )
-    boards = data.get("boards", [])
-    if not boards:
-        return None
+    if columns is None:
+        columns = _load_board_columns(api_token=api_token, board_id=board_id)
+    if not columns:
+        data = _graphql_request(
+            api_token=api_token,
+            query="""
+            query ($boardId: [ID!]) {
+              boards(ids: $boardId) {
+                columns { id title type }
+              }
+            }
+            """,
+            variables={"boardId": board_id},
+        )
+        boards = data.get("boards", [])
+        if not boards:
+            return None
+        columns = [
+            {
+                "id": str(column["id"]),
+                "title": str(column.get("title", "")),
+                "type": str(column.get("type", "")),
+            }
+            for column in boards[0].get("columns", [])
+        ]
 
-    for column in boards[0].get("columns", []):
+    for column in columns:
         title = str(column.get("title", "")).casefold()
         column_type = str(column.get("type", ""))
         if allowed_types and column_type not in allowed_types:
@@ -171,14 +183,51 @@ def load_contratos_board_index(*, api_token: str) -> ContratosBoardIndex:
 
 def discover_controle_related_contract_column_id(*, api_token: str) -> str | None:
     """Descobre coluna de vínculo com contrato no Controle Assinaturas."""
-    from classificacao_procons.contratos.constants import MONDAY_CONTROLE_ASSINATURAS_BOARD_ID
+    from classificacao_procons.contratos.constants import (
+        CONTROLE_COL_CONTRATO_RELACIONADO,
+        MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+    )
+
+    columns = _load_board_columns(
+        api_token=api_token,
+        board_id=MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+    )
+    column_ids = {str(column["id"]) for column in columns}
+    if CONTROLE_COL_CONTRATO_RELACIONADO in column_ids:
+        return CONTROLE_COL_CONTRATO_RELACIONADO
 
     return _discover_column_id(
         api_token=api_token,
         board_id=MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
         title_keywords=RELATED_CONTRACT_COLUMN_KEYWORDS,
         allowed_types=("board_relation", "connect_boards", "link"),
+        columns=columns,
     )
+
+
+def _load_board_columns(*, api_token: str, board_id: str) -> list[dict[str, str]]:
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: [ID!]) {
+          boards(ids: $boardId) {
+            columns { id title type }
+          }
+        }
+        """,
+        variables={"boardId": board_id},
+    )
+    boards = data.get("boards", [])
+    if not boards:
+        return []
+    return [
+        {
+            "id": str(column["id"]),
+            "title": str(column.get("title", "")),
+            "type": str(column.get("type", "")),
+        }
+        for column in boards[0].get("columns", [])
+    ]
 
 
 def _resolve_from_controle_link(
