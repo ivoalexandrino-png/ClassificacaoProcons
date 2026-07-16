@@ -14,6 +14,10 @@ from classificacao_procons.contratos.autentique.webhook import (
     parse_webhook_event,
     verify_webhook_signature,
 )
+from classificacao_procons.contratos.controle_sync import (
+    ControleSyncError,
+    sync_controle_from_autentique,
+)
 from classificacao_procons.contratos.pipeline import (
     ContractPipelineError,
     ContractPipelineOptions,
@@ -23,6 +27,26 @@ from classificacao_procons.contratos.pipeline import (
 
 ENV_WEBHOOK_SECRET = "AUTENTIQUE_WEBHOOK_SECRET"
 DEFAULT_PORT = 8080
+
+
+def _run_sync_controle(args: argparse.Namespace) -> int:
+    try:
+        result = sync_controle_from_autentique(dry_run=args.dry_run, max_pages=args.max_pages)
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    summary = {
+        "total_autentique": result.total_autentique,
+        "already_in_monday": result.already_in_monday,
+        "created": result.created,
+        "skipped": result.skipped,
+        "failed": result.failed,
+        "dry_run": result.dry_run,
+        "items": [item.__dict__ for item in result.items if item.action != "already_exists"],
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if result.failed == 0 else 1
 
 
 def _run_process_document(args: argparse.Namespace) -> int:
@@ -131,6 +155,14 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument("--skip-gemini", action="store_true")
     serve_parser.add_argument("--token", default="credentials/gmail-token.json")
     serve_parser.set_defaults(func=_run_serve)
+
+    sync_parser = subparsers.add_parser(
+        "sync-controle",
+        help="Cria itens faltantes no Controle Assinaturas a partir do Autentique",
+    )
+    sync_parser.add_argument("--dry-run", action="store_true")
+    sync_parser.add_argument("--max-pages", type=int, default=50)
+    sync_parser.set_defaults(func=_run_sync_controle)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

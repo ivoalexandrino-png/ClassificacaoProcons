@@ -1,0 +1,69 @@
+name: Sync Controle Assinaturas (Autentique)
+
+on:
+  push:
+    branches:
+      - cursor/sync-controle-autentique-c1dc
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Somente simular (não cria itens no Monday)"
+        required: false
+        type: boolean
+        default: true
+      max_pages:
+        description: "Páginas do Autentique (60 docs por página)"
+        required: false
+        type: string
+        default: "50"
+
+jobs:
+  sync-controle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Set workflow parameters
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+            echo "max_pages=${{ inputs.max_pages }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+            echo "max_pages=50" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install .
+
+      - name: Validate secrets
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          for name in MONDAY_API_TOKEN AUTENTIQUE_API_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "Secret ausente: $name"
+              exit 1
+            fi
+          done
+
+      - name: Sync Controle Assinaturas
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          ARGS=""
+          if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          contratos-webhook sync-controle $ARGS --max-pages "${{ steps.params.outputs.max_pages }}"
