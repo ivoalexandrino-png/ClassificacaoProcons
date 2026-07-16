@@ -258,3 +258,65 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
         results.append(result)
 
     return results
+
+
+def register_monday_for_access_code(
+    access_code: str,
+    *,
+    options: PipelineOptions | None = None,
+) -> ProcessedComplaint:
+    """Cadastra no Monday um caso já salvo no Drive (recuperação manual)."""
+    from classificacao_procons.drive.client import _build_drive_service, ensure_consumer_folder
+    from classificacao_procons.drive.reader import _find_complaint_pdf, _list_children
+
+    options = options or PipelineOptions()
+
+    if not has_valid_token(options.token_path):
+        raise PipelineError("Google não conectado. Rode: procon-email auth")
+
+    complaint = fetch_complaint(
+        PortalFetchOptions(
+            access_code=access_code,
+            download_dir=options.download_dir,
+        ),
+    )
+    protocol = complaint.cip_fa_number or access_code
+
+    service = _build_drive_service(options.token_path)
+    _folder_id, folder_url = ensure_consumer_folder(
+        service,
+        parent_folder_id=options.parent_folder_id,
+        consumer_name=complaint.consumer_name,
+    )
+    children = _list_children(service, folder_id=_folder_id)
+    complaint_pdf = _find_complaint_pdf(children)
+    if complaint_pdf is None or not complaint_pdf.web_view_link:
+        raise PipelineError(
+            f"PDF da reclamação não encontrado no Drive para {complaint.consumer_name}.",
+        )
+
+    sac_deadline, legal_deadline = calculate_sac_and_legal_deadlines(
+        base_date=complaint.complaint_date,
+    )
+    result = ProcessedComplaint(
+        status="success",
+        message_id="manual-register",
+        access_code=access_code,
+        protocol_number=protocol,
+        consumer_name=complaint.consumer_name,
+        consumer_cpf=complaint.consumer_cpf,
+        complaint_date=complaint.complaint_date,
+        procon_response_deadline=complaint.response_deadline,
+        sac_deadline=sac_deadline,
+        legal_deadline=legal_deadline,
+        cause=complaint.cause,
+        state=complaint.state,
+        pdf_url=complaint_pdf.web_view_link,
+        drive_folder_url=folder_url,
+    )
+    registered = _register_on_monday_if_configured(result, options=options)
+    if registered.monday_error:
+        raise PipelineError(registered.monday_error)
+    if registered.monday_item_url is None:
+        raise PipelineError("Monday não configurado ou item não criado.")
+    return registered

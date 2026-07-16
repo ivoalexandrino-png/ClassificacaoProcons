@@ -5,6 +5,11 @@ on:
     # A cada hora (UTC)
     - cron: "0 * * * *"
   workflow_dispatch:
+    inputs:
+      register_monday_access_code:
+        description: "Opcional — cadastrar caso no Monday pelo código do portal"
+        required: false
+        type: string
 
 jobs:
   process:
@@ -151,6 +156,14 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python -m classificacao_procons.cli elaborate --max-results 20
+
+      - name: Register Monday item (manual recovery)
+        if: ${{ inputs.register_monday_access_code != '' }}
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+        run: >
+          python -m classificacao_procons.cli register-monday
+          --access-code "${{ inputs.register_monday_access_code }}"
 
       - name: Save pipeline state
         uses: actions/cache/save@v4
