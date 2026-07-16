@@ -10,21 +10,28 @@ from classificacao_procons.contratos.monday_contracts import (
 
 
 class TestContratosSubitem:
-    @patch("classificacao_procons.contratos.monday_contracts._graphql_request")
+    @patch("classificacao_procons.contratos.parent_resolver._graphql_request")
     def test_should_find_parent_contrato_item_by_name_match(self, graphql_mock) -> None:
-        graphql_mock.return_value = {
-            "boards": [
-                {
-                    "items_page": {
-                        "cursor": None,
-                        "items": [
-                            {"id": "100", "name": "Amby Natural"},
-                            {"id": "200", "name": "Tower Bridge"},
-                        ],
+        graphql_mock.side_effect = [
+            {"boards": [{"columns": [{"id": "cnpj", "title": "CNPJ", "type": "text"}]}]},
+            {
+                "boards": [
+                    {
+                        "items_page": {
+                            "cursor": None,
+                            "items": [
+                                {"id": "100", "name": "Amby Natural", "column_values": []},
+                                {
+                                    "id": "200",
+                                    "name": "Tower Bridge",
+                                    "column_values": [],
+                                },
+                            ],
+                        }
                     }
-                }
-            ]
-        }
+                ]
+            },
+        ]
         metadata = ContractMetadata(
             counterparty_name="Tower Bridge Empreendimentos",
             counterparty_cnpj=None,

@@ -27,10 +27,10 @@ from classificacao_procons.contratos.gemini_extractor import (
 )
 from classificacao_procons.contratos.monday_contracts import (
     find_controle_item,
-    find_parent_contrato_item,
     register_contrato_subitem,
     update_controle_assinado,
 )
+from classificacao_procons.contratos.parent_resolver import resolve_parent_contrato_item
 from classificacao_procons.drive.client import DriveClientError, upload_pdf_to_folder_path
 from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
 
@@ -65,6 +65,7 @@ class ContractPipelineResult:
     contratos_item_url: str | None
     contratos_registration_mode: str | None = None
     contratos_parent_item_id: str | None = None
+    contratos_parent_resolution_strategy: str | None = None
     skipped_duplicate: bool = False
 
 
@@ -197,16 +198,19 @@ def process_finished_document(
         )
 
     contratos_result = None
+    parent_resolution = None
     registration_mode = resolve_contratos_registration_mode(
         controle_tipo=tipo_label,
         controle_item_found=controle_item is not None,
     )
     if monday_token and registration_mode == "subitem":
-        parent_item_id = find_parent_contrato_item(
+        parent_resolution = resolve_parent_contrato_item(
             api_token=monday_token,
             document_name=document.name,
             metadata=metadata,
+            controle_item=controle_item,
         )
+        parent_item_id = parent_resolution.parent_item_id
         if parent_item_id is None:
             raise ContractPipelineError(
                 "Documento sem Tipo no Controle Assinaturas e contrato pai não encontrado "
@@ -237,6 +241,9 @@ def process_finished_document(
         contratos_item_url=contratos_result.contratos_item_url if contratos_result else None,
         contratos_registration_mode=registration_mode,
         contratos_parent_item_id=contratos_result.parent_item_id if contratos_result else None,
+        contratos_parent_resolution_strategy=parent_resolution.strategy
+        if parent_resolution
+        else None,
     )
 
 

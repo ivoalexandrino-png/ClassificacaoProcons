@@ -14,9 +14,19 @@ from classificacao_procons.contratos.autentique.webhook import (
     parse_webhook_event,
     verify_webhook_signature,
 )
+from classificacao_procons.contratos.contratos_enrichment import (
+    ContratosEnrichmentError,
+    process_contratos_item_created,
+)
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
     sync_controle_from_autentique,
+)
+from classificacao_procons.contratos.monday_webhook import (
+    MondayWebhookError,
+    build_challenge_response,
+    is_contratos_item_created_event,
+    parse_monday_webhook,
 )
 from classificacao_procons.contratos.pipeline import (
     ContractPipelineError,
@@ -120,6 +130,81 @@ def _make_handler(*, options: ContractPipelineOptions, webhook_secret: str | Non
     return WebhookHandler
 
 
+def _make_monday_handler(*, options: ContractPipelineOptions):
+    class MondayWebhookHandler(BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+        def do_POST(self) -> None:
+            if self.path not in ("/webhooks/monday", "/"):
+                self.send_response(404)
+                self.end_headers()
+                return
+
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw_body = self.rfile.read(length)
+
+            try:
+                event = parse_monday_webhook(raw_body)
+            except MondayWebhookError as exc:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(exc).encode("utf-8"))
+                return
+
+            if event.event_type == "challenge":
+                response = build_challenge_response(event)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(response).encode("utf-8"))
+                return
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"received":true}')
+
+            if not is_contratos_item_created_event(event):
+                return
+
+            def _process() -> None:
+                from classificacao_procons.monday.client import get_api_token_from_env
+
+                token = options.monday_api_token or get_api_token_from_env()
+                if not token:
+                    return
+                try:
+                    process_contratos_item_created(
+                        event,
+                        api_token=token,
+                        gemini_api_key=options.gemini_api_key,
+                        skip_gemini=options.skip_gemini,
+                    )
+                except ContratosEnrichmentError:
+                    return
+
+            threading.Thread(target=_process, daemon=True).start()
+
+    return MondayWebhookHandler
+
+
+def _run_serve_monday(args: argparse.Namespace) -> int:
+    options = ContractPipelineOptions(
+        skip_gemini=args.skip_gemini,
+        monday_api_token=None,
+        gemini_api_key=None,
+    )
+    handler = _make_monday_handler(options=options)
+    server = ThreadingHTTPServer((args.host, args.port), handler)
+    print(f"Webhook Monday escutando em http://{args.host}:{args.port}/webhooks/monday")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nEncerrando servidor.")
+        return 0
+
+
 def _run_serve(args: argparse.Namespace) -> int:
     webhook_secret = os.environ.get(ENV_WEBHOOK_SECRET, "").strip() or None
     options = ContractPipelineOptions(
@@ -163,6 +248,15 @@ def main(argv: list[str] | None = None) -> int:
     sync_parser.add_argument("--dry-run", action="store_true")
     sync_parser.add_argument("--max-pages", type=int, default=50)
     sync_parser.set_defaults(func=_run_sync_controle)
+
+    monday_parser = subparsers.add_parser(
+        "serve-monday",
+        help="Inicia servidor HTTP para webhooks do Monday (quadro Contratos)",
+    )
+    monday_parser.add_argument("--host", default="0.0.0.0")
+    monday_parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    monday_parser.add_argument("--skip-gemini", action="store_true")
+    monday_parser.set_defaults(func=_run_serve_monday)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

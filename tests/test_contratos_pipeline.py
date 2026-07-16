@@ -80,7 +80,7 @@ class TestContractPipeline:
         assert "doc-1" in state["document_ids"]
 
     @patch("classificacao_procons.contratos.pipeline.register_contrato_subitem")
-    @patch("classificacao_procons.contratos.pipeline.find_parent_contrato_item")
+    @patch("classificacao_procons.contratos.pipeline.resolve_parent_contrato_item")
     @patch("classificacao_procons.contratos.pipeline.update_controle_assinado")
     @patch("classificacao_procons.contratos.pipeline.find_controle_item")
     @patch("classificacao_procons.contratos.pipeline.upload_pdf_to_folder_path")
@@ -93,7 +93,7 @@ class TestContractPipeline:
         upload_mock,
         find_controle_mock,
         update_controle_mock,
-        find_parent_mock,
+        resolve_parent_mock,
         register_subitem_mock,
         tmp_path: Path,
     ) -> None:
@@ -102,6 +102,7 @@ class TestContractPipeline:
             ControleAssinaturasItem,
             MondayContractRegistrationResult,
         )
+        from classificacao_procons.contratos.parent_resolver import ParentResolutionResult
 
         pdf_path = tmp_path / "downloads" / "contratos" / "doc-2.pdf"
         pdf_path.parent.mkdir(parents=True)
@@ -126,7 +127,10 @@ class TestContractPipeline:
             tipo=None,
             signature_link="https://assina.ae/aditivo",
         )
-        find_parent_mock.return_value = "200"
+        resolve_parent_mock.return_value = ParentResolutionResult(
+            parent_item_id="200",
+            strategy="gemini_reference",
+        )
         register_subitem_mock.return_value = MondayContractRegistrationResult(
             controle_item_id=None,
             contratos_item_id="999",
@@ -148,8 +152,9 @@ class TestContractPipeline:
 
         assert result.contratos_item_id == "999"
         assert result.contratos_parent_item_id == "200"
+        assert result.contratos_parent_resolution_strategy == "gemini_reference"
         assert result.contratos_registration_mode == "subitem"
-        find_parent_mock.assert_called_once()
+        resolve_parent_mock.assert_called_once()
         register_subitem_mock.assert_called_once()
 
     def test_should_skip_duplicate_document(self, tmp_path: Path) -> None:

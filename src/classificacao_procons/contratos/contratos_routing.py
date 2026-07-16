@@ -21,6 +21,13 @@ SUPPLEMENTAL_DOCUMENT_KEYWORDS: tuple[str, ...] = (
     "renovação",
     "resilição",
     "resilicao",
+    "carta de autorizacao",
+    "carta de autorização",
+    "mou",
+    "memorando de entendimento",
+    "dpa",
+    "proposta comercial",
+    "proposta ",
 )
 
 
@@ -30,8 +37,16 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", without_marks).strip()
 
 
-def is_supplemental_document(*, document_name: str) -> bool:
+def is_supplemental_document(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> bool:
     """Indica documentos complementares (aditivos, distratos etc.) sem Tipo no Controle."""
+    if metadata is not None and metadata.is_supplemental is True:
+        return True
+    if metadata is not None and metadata.is_supplemental is False:
+        return False
     blob = _normalize_text(document_name)
     return any(keyword in blob for keyword in SUPPLEMENTAL_DOCUMENT_KEYWORDS)
 
@@ -77,6 +92,8 @@ def extract_parent_search_terms(
 
     add_term(metadata.counterparty_name)
     add_term(metadata.property_name)
+
+    add_term(metadata.parent_contract_reference)
 
     name_parts = [part.strip() for part in document_name.split(" - ") if part.strip()]
     if len(name_parts) > 1:

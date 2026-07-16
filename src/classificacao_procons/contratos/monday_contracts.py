@@ -24,12 +24,12 @@ from classificacao_procons.contratos.constants import (
     MONDAY_CONTRATOS_BOARD_ID,
     MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
 )
-from classificacao_procons.contratos.contratos_routing import (
-    extract_parent_search_terms,
-    score_parent_name_match,
-)
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
+from classificacao_procons.contratos.models import ControleAssinaturasItem
+from classificacao_procons.contratos.parent_resolver import (
+    discover_controle_related_contract_column_id,
+)
 from classificacao_procons.monday.client import (
     MondayClientError,
     _graphql_request,
@@ -50,15 +50,6 @@ class MondayColumnDetails:
 
 
 @dataclass(frozen=True)
-class ControleAssinaturasItem:
-    item_id: str
-    name: str
-    status: str | None
-    tipo: str | None
-    signature_link: str | None
-
-
-@dataclass(frozen=True)
 class MondayContractRegistrationResult:
     controle_item_id: str | None
     contratos_item_id: str | None
@@ -75,6 +66,11 @@ def find_controle_item(
     document_name: str,
 ) -> ControleAssinaturasItem | None:
     """Localiza item no Controle Assinaturas por ID/nome/link Autentique."""
+    related_col_id = discover_controle_related_contract_column_id(api_token=api_token)
+    column_ids = ["status", "status_1__1", "long_text_mkvnwp6d"]
+    if related_col_id:
+        column_ids.append(related_col_id)
+
     cursor: str | None = None
     normalized_name = document_name.casefold().strip()
     normalized_id = document_id.casefold().strip()
@@ -83,14 +79,14 @@ def find_controle_item(
         data = _graphql_request(
             api_token=api_token,
             query="""
-            query ($boardId: ID!, $limit: Int!, $cursor: String) {
+            query ($boardId: ID!, $limit: Int!, $cursor: String, $columnIds: [String!]) {
               boards(ids: [$boardId]) {
                 items_page(limit: $limit, cursor: $cursor) {
                   cursor
                   items {
                     id
                     name
-                    column_values(ids: ["status", "status_1__1", "long_text_mkvnwp6d"]) {
+                    column_values(ids: $columnIds) {
                       id
                       text
                       value
@@ -104,19 +100,41 @@ def find_controle_item(
                 "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
                 "limit": 100,
                 "cursor": cursor,
+                "columnIds": column_ids,
             },
         )
         page = data["boards"][0]["items_page"]
         for item in page["items"]:
-            values = {column["id"]: column.get("text") for column in item["column_values"]}
+            columns_by_id = {
+                column["id"]: column for column in item.get("column_values", [])
+            }
+            values = {column_id: column.get("text") for column_id, column in columns_by_id.items()}
             signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
             item_name = str(item.get("name", ""))
             if normalized_id and normalized_id in signature_link.casefold():
-                return _to_controle_item(item, values, signature_link)
+                return _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                )
             if normalized_name and normalized_name == item_name.casefold().strip():
-                return _to_controle_item(item, values, signature_link)
+                return _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                )
             if normalized_name and normalized_name in item_name.casefold():
-                return _to_controle_item(item, values, signature_link)
+                return _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                )
 
         cursor = page.get("cursor")
         if not cursor:
@@ -468,13 +486,25 @@ def _to_controle_item(
     item: dict,
     values: dict[str, str | None],
     signature_link: str,
+    *,
+    related_col_id: str | None = None,
+    columns_by_id: dict[str, dict] | None = None,
 ) -> ControleAssinaturasItem:
+    from classificacao_procons.contratos.parent_resolver import _parse_linked_item_ids
+
+    related_ids: tuple[str, ...] = ()
+    if related_col_id and columns_by_id and related_col_id in columns_by_id:
+        raw_value = columns_by_id[related_col_id].get("value")
+        if raw_value:
+            related_ids = tuple(_parse_linked_item_ids(str(raw_value)))
+
     return ControleAssinaturasItem(
         item_id=str(item["id"]),
         name=str(item.get("name", "")),
         status=values.get(CONTROLE_COL_STATUS),
         tipo=values.get(CONTROLE_COL_TIPO),
         signature_link=signature_link or None,
+        related_contract_item_ids=related_ids,
     )
 
 
@@ -588,55 +618,20 @@ def find_parent_contrato_item(
     api_token: str,
     document_name: str,
     metadata: ContractMetadata,
+    controle_item: ControleAssinaturasItem | None = None,
     min_score: int = 70,
 ) -> str | None:
-    """Localiza item pai no quadro Contratos para vincular aditivos como subitem."""
-    search_terms = extract_parent_search_terms(document_name=document_name, metadata=metadata)
-    if not search_terms:
-        return None
+    """Localiza item pai no quadro Contratos (wrapper legado)."""
+    from classificacao_procons.contratos.parent_resolver import resolve_parent_contrato_item
 
-    best_item_id: str | None = None
-    best_score = 0
-    cursor: str | None = None
-
-    for _ in range(50):
-        data = _graphql_request(
-            api_token=api_token,
-            query="""
-            query ($boardId: ID!, $limit: Int!, $cursor: String) {
-              boards(ids: [$boardId]) {
-                items_page(limit: $limit, cursor: $cursor) {
-                  cursor
-                  items {
-                    id
-                    name
-                  }
-                }
-              }
-            }
-            """,
-            variables={
-                "boardId": MONDAY_CONTRATOS_BOARD_ID,
-                "limit": 100,
-                "cursor": cursor,
-            },
-        )
-        page = data["boards"][0]["items_page"]
-        for item in page["items"]:
-            item_name = str(item.get("name", ""))
-            for term in search_terms:
-                score = score_parent_name_match(item_name=item_name, search_term=term)
-                if score > best_score:
-                    best_score = score
-                    best_item_id = str(item["id"])
-
-        cursor = page.get("cursor")
-        if not cursor:
-            break
-
-    if best_score < min_score:
-        return None
-    return best_item_id
+    result = resolve_parent_contrato_item(
+        api_token=api_token,
+        document_name=document_name,
+        metadata=metadata,
+        controle_item=controle_item,
+        min_name_score=min_score,
+    )
+    return result.parent_item_id
 
 
 def register_contrato_subitem(
@@ -711,6 +706,56 @@ def _create_contratos_subitem(
         },
     )
     return str(data["create_subitem"]["id"])
+
+
+def fetch_contratos_item_name(*, api_token: str, item_id: str) -> str:
+    """Retorna nome do item no quadro Contratos."""
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($itemIds: [ID!]) {
+          items(ids: $itemIds) {
+            id
+            name
+          }
+        }
+        """,
+        variables={"itemIds": [item_id]},
+    )
+    items = data.get("items", [])
+    if not items:
+        raise MondayClientError(f'Item "{item_id}" não encontrado no Monday.')
+    return str(items[0].get("name", ""))
+
+
+def enrich_contratos_item_columns(
+    *,
+    api_token: str,
+    item_id: str,
+    metadata: ContractMetadata,
+    document_name: str,
+    signed_pdf_url: str | None = None,
+    pdf_path: Path | None = None,
+) -> None:
+    """Preenche colunas de item existente no quadro Contratos (webhook Monday)."""
+    column_details = _load_contratos_column_details(api_token=api_token)
+    columns = [detail.column for detail in column_details]
+    column_values = _sanitize_column_values(
+        column_details,
+        _build_contratos_column_values(
+            columns,
+            metadata=metadata,
+            signed_pdf_url=signed_pdf_url or "",
+            document_name=document_name,
+        ),
+    )
+    _apply_contratos_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
+        column_values=column_values,
+        pdf_path=pdf_path,
+    )
 
 
 def _normalize_group_title(value: str) -> str:
