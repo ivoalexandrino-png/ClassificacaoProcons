@@ -158,6 +158,16 @@ def sanitize_column_values(
     return sanitized
 
 
+def _should_apply_cause_to_column(column: MondayColumn) -> bool:
+    """Só preenche classificação na coluna Causa 1 (ou Classificação)."""
+    normalized = _normalize_title(column.title)
+    if "causa 2" in normalized:
+        return False
+    if column.column_type in {"status", "color"}:
+        return "causa 1" in normalized or "classificacao" in normalized
+    return False
+
+
 def build_column_values(
     columns: list[MondayColumn],
     *,
@@ -194,7 +204,9 @@ def build_column_values(
         if raw_value in (None, ""):
             continue
 
-        if field == FIELD_CAUSE and column.column_type in {"status", "color"}:
+        if field == FIELD_CAUSE:
+            if not _should_apply_cause_to_column(column):
+                continue
             mapped_cause = map_procon_cause_to_monday_status_label(str(raw_value))
             if mapped_cause is None:
                 continue

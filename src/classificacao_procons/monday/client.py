@@ -496,9 +496,12 @@ def _apply_complaint_column_values(
     item_id: str,
     column_details: list[MondayColumnDetails],
     column_values: dict[str, object],
+    protocol_column_id: str | None = None,
 ) -> None:
     """Aplica colunas uma a uma para evitar falhas em create_item com payload grande."""
     details_by_id = {detail.column.id: detail for detail in column_details}
+    applied_count = 0
+    protocol_applied = protocol_column_id is None
 
     for column_id, value in column_values.items():
         if details_by_id.get(column_id) is None:
@@ -523,8 +526,26 @@ def _apply_complaint_column_values(
                     "columnValues": json.dumps({column_id: value}),
                 },
             )
-        except MondayClientError:
+        except MondayClientError as exc:
+            if column_id == protocol_column_id:
+                raise MondayClientError(
+                    f"Item {item_id} criado, mas falhou ao preencher protocolo CIP/FA: {exc}",
+                ) from exc
             continue
+
+        applied_count += 1
+        if column_id == protocol_column_id:
+            protocol_applied = True
+
+    if column_values and applied_count == 0:
+        raise MondayClientError(
+            f"Item {item_id} criado, mas nenhuma coluna foi preenchida no Monday.",
+        )
+
+    if protocol_column_id is not None and not protocol_applied:
+        raise MondayClientError(
+            f"Item {item_id} criado, mas coluna de protocolo CIP/FA não foi preenchida.",
+        )
 
 
 def register_complaint(
@@ -597,6 +618,7 @@ def register_complaint(
         item_id=item_id,
         column_details=context.column_details,
         column_values=column_values,
+        protocol_column_id=protocol_column.id if protocol_column is not None else None,
     )
     return MondayRegistrationResult(
         item_id=item_id,

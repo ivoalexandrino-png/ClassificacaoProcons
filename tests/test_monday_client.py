@@ -114,3 +114,16 @@ class TestMondayClient:
 
         with pytest.raises(MondayClientError, match="processadas com sucesso"):
             register_complaint(complaint, api_token="token-test")
+
+    @patch("classificacao_procons.monday.client._graphql_request")
+    def test_should_raise_when_protocol_column_update_fails(self, graphql_mock) -> None:
+        graphql_mock.side_effect = [
+            ACCOUNT_RESPONSE,
+            BOARD_LIST_RESPONSE,
+            {"items_page_by_column_values": {"items": []}},
+            CREATE_ITEM_RESPONSE,
+            MondayClientError("Internal Server Error"),
+        ]
+
+        with pytest.raises(MondayClientError, match="protocolo CIP/FA"):
+            register_complaint(_processed_complaint(), api_token="token-test")

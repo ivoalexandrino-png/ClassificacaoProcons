@@ -36,7 +36,7 @@ class TestMondayColumnMapping:
 
     def test_should_skip_unmapped_cause_on_status_column(self) -> None:
         columns = [
-            MondayColumn(id="status_cause", title="Classificação", column_type="status"),
+            MondayColumn(id="status_cause", title="Causa 1", column_type="status"),
         ]
         values = build_column_values(
             columns,
@@ -52,7 +52,46 @@ class TestMondayColumnMapping:
         )
         assert values == {}
 
-    def test_should_build_column_values_by_type(self) -> None:
+    def test_should_map_simone_cause_to_entrega_label(self) -> None:
+        cause = (
+            "Demais ProdutosVestuário e Artigos de Uso Pessoal (roupa, calçados, jóias, "
+            "bijuterias, malas, bolsas, produtos eróticos, etc.)Entrega do Produto"
+            "Não entrega / demora na entrega"
+        )
+        columns = [
+            MondayColumn(id="status_cause", title="Causa 1", column_type="status"),
+        ]
+        values = build_column_values(
+            columns,
+            consumer_name="SIMONE OLIVEIRA SIMAS",
+            state="SP",
+            pdf_url=None,
+            protocol_number="1661673/2026",
+            consumer_cpf="18038017862",
+            complaint_date=date(2026, 7, 16),
+            sac_deadline=date(2026, 7, 21),
+            legal_deadline=date(2026, 7, 22),
+            cause=cause,
+        )
+        assert values == {"status_cause": {"label": "Problemas com entrega"}}
+
+    def test_should_not_put_cause_text_in_motivo_column(self) -> None:
+        columns = [
+            MondayColumn(id="text_motivo", title="Motivo da reclamação", column_type="text"),
+        ]
+        values = build_column_values(
+            columns,
+            consumer_name="SIMONE OLIVEIRA SIMAS",
+            state="SP",
+            pdf_url=None,
+            protocol_number="1661673/2026",
+            consumer_cpf="18038017862",
+            complaint_date=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="Não entrega / demora na entrega",
+        )
+        assert values == {}
         columns = [
             MondayColumn(id="text_cpf", title="CPF", column_type="text"),
             MondayColumn(id="link_pdf", title="Link PDF", column_type="link"),
