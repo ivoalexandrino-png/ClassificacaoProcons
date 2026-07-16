@@ -34,8 +34,13 @@ CONTROLE_COL_LINK_ASSINATURA = "long_text_mkvnwp6d"
 CONTROLE_COL_TIPO = "status_1__1"
 
 # Controle Assinaturas — status (labels)
+CONTROLE_STATUS_AGUARDANDO_ASSINATURA = "Aguardando Assinatura"
 CONTROLE_STATUS_ASSINADO = "Assinado"
 CONTROLE_STATUS_AGUARDANDO_OUTROS = "Aguardando outros"
+
+# Signatários internos (Autentique)
+SIGNER_EMAIL_JAN = "assinador@b4a.com.br"
+SIGNER_EMAIL_LUCIANO = "juridico@b4a.com.br"
 
 # Contratos — grupos (board 5385471914)
 MONDAY_GROUP_CONTRATOS_TRABALHO_CLT = "Contratos de Trabalho (CLT)"

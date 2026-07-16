@@ -4,7 +4,14 @@ Guia para o time de TI publicar o serviço que recebe avisos do Autentique.
 
 ## O que este serviço faz
 
-Fica na internet 24h escutando o evento `document.finished` do Autentique. Quando um contrato é totalmente assinado:
+Fica na internet 24h escutando eventos do Autentique:
+
+| Evento | O que faz |
+|--------|-----------|
+| `document.created` | Cria item no Monday **Controle Assinaturas** (grupo Jan/Luciano, com Tipo só no grupo Jan) |
+| `document.finished` | Baixa PDF assinado, extrai dados com Gemini, salva no Drive e atualiza Monday |
+
+Quando um contrato é totalmente assinado (`document.finished`):
 
 1. Baixa o PDF assinado
 2. Extrai dados com Gemini
@@ -58,7 +65,7 @@ Enviar esta URL ao jurídico.
 1. https://painel.autentique.com.br → Perfil → Webhooks
 2. Novo endpoint
 3. URL: a URL acima
-4. Evento: `document.finished`
+4. Eventos: `document.created` e `document.finished`
 5. Copiar o **secret** gerado
 6. Salvar no Secret Manager:
 
@@ -75,9 +82,15 @@ gcloud builds submit --config=cloudbuild-contratos.yaml --project=PROJECT_ID
 
 ## Passo 4 — Teste
 
-Assinar um contrato de teste no Autentique (ou reenviar evento de teste no painel de webhooks).
+Criar ou assinar um contrato de teste no Autentique (ou reenviar eventos de teste no painel de webhooks).
 
-Verificar:
+Verificar após **criar** o documento (`document.created`):
+
+- Novo item no Monday Controle Assinaturas → grupo **Contratos pendentes de assinatura Jan**
+- Coluna **Tipo** preenchida (apenas nesse grupo)
+- Link de assinatura preenchido
+
+Verificar após **assinar** por completo (`document.finished`):
 
 - PDF na pasta correta do Drive
 - Item no Monday Controle Assinaturas → Assinado

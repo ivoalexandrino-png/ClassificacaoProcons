@@ -3,19 +3,26 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime
 
 from classificacao_procons.contratos.autentique.client import (
     AutentiqueClientError,
     AutentiqueDocumentSummary,
+    AutentiqueSigner,
     create_signature_link,
+    fetch_document_summary,
     list_documents,
 )
+from classificacao_procons.contratos.autentique.webhook import AutentiqueWebhookEvent
 from classificacao_procons.contratos.constants import (
     CONTROLE_GROUP_ASSINADOS,
+    CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
     CONTROLE_STATUS_AGUARDANDO_OUTROS,
     CONTROLE_STATUS_ASSINADO,
+    SIGNER_EMAIL_JAN,
+    SIGNER_EMAIL_LUCIANO,
 )
 from classificacao_procons.contratos.contratos_routing import (
     is_supplemental_document,
@@ -24,6 +31,7 @@ from classificacao_procons.contratos.drive_routing import infer_category, infer_
 from classificacao_procons.contratos.monday_contracts import (
     build_controle_assinaturas_index,
     create_controle_assinatura_item,
+    find_controle_item_by_autentique_id,
     load_controle_board_groups,
 )
 from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
@@ -52,6 +60,91 @@ class ControleSyncResult:
     failed: int
     dry_run: bool
     items: tuple[ControleSyncItemResult, ...]
+
+
+@dataclass(frozen=True)
+class ControleRegistrationResult:
+    document_id: str
+    document_name: str
+    monday_item_id: str | None
+    monday_item_url: str | None
+    skipped_duplicate: bool = False
+    group_id: str | None = None
+    status_label: str | None = None
+    tipo_filled: bool = False
+
+
+def register_document_in_controle(
+    *,
+    document_id: str,
+    document_name: str | None = None,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+) -> ControleRegistrationResult:
+    """Cria item no Controle Assinaturas para um documento do Autentique (se ainda não existir)."""
+    monday_token = monday_api_token or get_api_token_from_env()
+    if not monday_token:
+        raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+
+    if find_controle_item_by_autentique_id(api_token=monday_token, document_id=document_id):
+        return ControleRegistrationResult(
+            document_id=document_id,
+            document_name=document_name or document_id,
+            monday_item_id=None,
+            monday_item_url=None,
+            skipped_duplicate=True,
+        )
+
+    try:
+        document = fetch_document_summary(document_id=document_id, api_token=autentique_api_token)
+    except AutentiqueClientError as exc:
+        raise ControleSyncError(str(exc)) from exc
+
+    groups = load_controle_board_groups(api_token=monday_token)
+    group_id = _resolve_controle_group_id(document=document, groups=groups)
+    tipo_label = _resolve_tipo_label(
+        document_name=document.name,
+        group_id=group_id,
+        groups=groups,
+    )
+
+    try:
+        item_id, item_url = _create_controle_item(
+            api_token=monday_token,
+            autentique_api_token=autentique_api_token,
+            document=document,
+            groups=groups,
+        )
+    except (MondayClientError, AutentiqueClientError) as exc:
+        raise ControleSyncError(str(exc)) from exc
+
+    return ControleRegistrationResult(
+        document_id=document.document_id,
+        document_name=document.name,
+        monday_item_id=item_id,
+        monday_item_url=item_url,
+        group_id=group_id,
+        status_label=_resolve_controle_status(document=document),
+        tipo_filled=tipo_label is not None,
+    )
+
+
+def process_document_created_webhook_event(
+    event: AutentiqueWebhookEvent,
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+) -> ControleRegistrationResult:
+    """Processa evento document.created do Autentique."""
+    if event.event_type != "document.created":
+        raise ControleSyncError(f"Evento não suportado: {event.event_type}")
+
+    return register_document_in_controle(
+        document_id=event.document_id,
+        document_name=event.document_name or None,
+        monday_api_token=monday_api_token,
+        autentique_api_token=autentique_api_token,
+    )
 
 
 def sync_controle_from_autentique(
@@ -163,13 +256,12 @@ def _create_controle_item(
         document=document,
         api_token=autentique_api_token,
     )
-    tipo = None
-    if not is_supplemental_document(document_name=document.name):
-        tipo = infer_monday_tipo(
-            document_name=document.name,
-            category=infer_category(document_name=document.name),
-        )
     group_id = _resolve_controle_group_id(document=document, groups=groups)
+    tipo = _resolve_tipo_label(
+        document_name=document.name,
+        group_id=group_id,
+        groups=groups,
+    )
     status_label = _resolve_controle_status(document=document)
     signed_at = _resolve_signed_at(document=document)
 
@@ -225,16 +317,95 @@ def _resolve_controle_group_id(
     if document.is_fully_signed and assinados_id:
         return assinados_id
 
-    for keyword in ("jan", "pendente", "aguardando"):
-        for title, group_id in groups.items():
-            if keyword in title and group_id != assinados_id:
-                return group_id
+    jan_signed = _is_signer_signed(document=document, email=SIGNER_EMAIL_JAN)
+    luciano_signed = _is_signer_signed(document=document, email=SIGNER_EMAIL_LUCIANO)
+
+    jan_group_id = _find_group_id_by_keyword(groups, keyword="jan", exclude_id=assinados_id)
+    luciano_group_id = _find_group_id_by_keyword(
+        groups,
+        keyword="luciano",
+        exclude_id=assinados_id,
+    )
+
+    if jan_signed and not luciano_signed and luciano_group_id:
+        return luciano_group_id
+    if jan_group_id:
+        return jan_group_id
+    if luciano_group_id:
+        return luciano_group_id
+
+    for keyword in ("pendente", "aguardando"):
+        group_id = _find_group_id_by_keyword(groups, keyword=keyword, exclude_id=assinados_id)
+        if group_id:
+            return group_id
 
     for title, group_id in groups.items():
         if title != "assinados" and group_id != assinados_id:
             return group_id
 
     return assinados_id or CONTROLE_GROUP_ASSINADOS
+
+
+def _resolve_tipo_label(
+    *,
+    document_name: str,
+    group_id: str,
+    groups: dict[str, str],
+) -> str | None:
+    if is_supplemental_document(document_name=document_name):
+        return None
+    if _group_is_luciano_track(group_id=group_id, groups=groups):
+        return None
+    return infer_monday_tipo(
+        document_name=document_name,
+        category=infer_category(document_name=document_name),
+    )
+
+
+def _group_is_luciano_track(*, group_id: str, groups: dict[str, str]) -> bool:
+    for title, current_id in groups.items():
+        if current_id != group_id:
+            continue
+        normalized = _normalize_group_title(title)
+        return "luciano" in normalized
+    return False
+
+
+def _find_group_id_by_keyword(
+    groups: dict[str, str],
+    *,
+    keyword: str,
+    exclude_id: str | None,
+) -> str | None:
+    for title, group_id in groups.items():
+        if exclude_id and group_id == exclude_id:
+            continue
+        if keyword in _normalize_group_title(title):
+            return group_id
+    return None
+
+
+def _normalize_group_title(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    without_marks = "".join(char for char in normalized if not unicodedata.combining(char))
+    return without_marks.strip()
+
+
+def _is_signer_signed(*, document: AutentiqueDocumentSummary, email: str) -> bool:
+    signer = _find_signer_by_email(document.signatures, email=email)
+    return bool(signer and signer.signed_at)
+
+
+def _find_signer_by_email(
+    signatures: tuple[AutentiqueSigner, ...],
+    *,
+    email: str,
+) -> AutentiqueSigner | None:
+    target = email.casefold().strip()
+    for signer in signatures:
+        if signer.email and signer.email.casefold().strip() == target:
+            return signer
+    return None
 
 
 def _resolve_controle_status(document: AutentiqueDocumentSummary) -> str:
@@ -244,7 +415,7 @@ def _resolve_controle_status(document: AutentiqueDocumentSummary) -> str:
     signed_count = sum(1 for signer in document.signatures if signer.signed_at)
     if signed_count > 0:
         return CONTROLE_STATUS_AGUARDANDO_OUTROS
-    return "Aguardando Assinatura"
+    return CONTROLE_STATUS_AGUARDANDO_ASSINATURA
 
 
 def _resolve_signed_at(document: AutentiqueDocumentSummary) -> date | None:
@@ -272,12 +443,14 @@ def _parse_iso_datetime(value: str) -> date | None:
 
 
 def _describe_planned_item(*, document: AutentiqueDocumentSummary, groups: dict[str, str]) -> str:
+    group_id = _resolve_controle_group_id(document=document, groups=groups)
     payload = {
-        "group_id": _resolve_controle_group_id(document=document, groups=groups),
+        "group_id": group_id,
         "status": _resolve_controle_status(document=document),
-        "tipo": infer_monday_tipo(
+        "tipo": _resolve_tipo_label(
             document_name=document.name,
-            category=infer_category(document_name=document.name),
+            group_id=group_id,
+            groups=groups,
         ),
         "signed": document.is_fully_signed,
     }

@@ -20,6 +20,8 @@ from classificacao_procons.contratos.contratos_enrichment import (
 )
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
+    process_document_created_webhook_event,
+    register_document_in_controle,
     sync_controle_from_autentique,
 )
 from classificacao_procons.contratos.monday_webhook import (
@@ -37,6 +39,38 @@ from classificacao_procons.contratos.pipeline import (
 
 ENV_WEBHOOK_SECRET = "AUTENTIQUE_WEBHOOK_SECRET"
 DEFAULT_PORT = 8080
+
+
+def _run_register_controle(args: argparse.Namespace) -> int:
+    try:
+        result = register_document_in_controle(
+            document_id=args.document_id,
+            monday_api_token=None,
+            autentique_api_token=None,
+        )
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(result.__dict__, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _dispatch_autentique_event(
+    event,
+    *,
+    options: ContractPipelineOptions,
+) -> None:
+    if event.event_type == "document.created":
+        process_document_created_webhook_event(
+            event,
+            monday_api_token=options.monday_api_token,
+            autentique_api_token=options.autentique_api_token,
+        )
+        return
+    if event.event_type == "document.finished":
+        process_finished_webhook_event(event, options=options)
+        return
 
 
 def _run_sync_controle(args: argparse.Namespace) -> int:
@@ -116,13 +150,21 @@ def _make_handler(*, options: ContractPipelineOptions, webhook_secret: str | Non
             self.end_headers()
             self.wfile.write(b'{"received":true}')
 
-            if event.event_type != "document.finished":
+            if event.event_type not in ("document.created", "document.finished"):
                 return
 
             def _process() -> None:
+                from classificacao_procons.monday.client import get_api_token_from_env
+
+                opts = ContractPipelineOptions(
+                    token_path=options.token_path,
+                    skip_gemini=options.skip_gemini,
+                    monday_api_token=options.monday_api_token or get_api_token_from_env(),
+                    autentique_api_token=options.autentique_api_token,
+                )
                 try:
-                    process_finished_webhook_event(event, options=options)
-                except ContractPipelineError:
+                    _dispatch_autentique_event(event, options=opts)
+                except (ContractPipelineError, ControleSyncError):
                     return
 
             threading.Thread(target=_process, daemon=True).start()
@@ -214,6 +256,7 @@ def _run_serve(args: argparse.Namespace) -> int:
     handler = _make_handler(options=options, webhook_secret=webhook_secret)
     server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Webhook de contratos escutando em http://{args.host}:{args.port}/webhooks/autentique")
+    print("Eventos: document.created, document.finished")
     if not webhook_secret:
         print("Aviso: AUTENTIQUE_WEBHOOK_SECRET não configurado; assinatura não será validada.")
     try:
@@ -248,6 +291,13 @@ def main(argv: list[str] | None = None) -> int:
     sync_parser.add_argument("--dry-run", action="store_true")
     sync_parser.add_argument("--max-pages", type=int, default=50)
     sync_parser.set_defaults(func=_run_sync_controle)
+
+    register_parser = subparsers.add_parser(
+        "register-controle",
+        help="Cria item no Controle Assinaturas para um documento do Autentique",
+    )
+    register_parser.add_argument("--document-id", required=True)
+    register_parser.set_defaults(func=_run_register_controle)
 
     monday_parser = subparsers.add_parser(
         "serve-monday",
