@@ -46,6 +46,7 @@ BOARD_LIST_RESPONSE = {
 }
 
 CREATE_ITEM_RESPONSE = {"create_item": {"id": "999"}}
+UPDATE_ITEM_RESPONSE = {"change_multiple_column_values": {"id": "999"}}
 
 
 class TestMondayClient:
@@ -60,6 +61,9 @@ class TestMondayClient:
             BOARD_LIST_RESPONSE,
             {"items_page_by_column_values": {"items": []}},
             CREATE_ITEM_RESPONSE,
+            UPDATE_ITEM_RESPONSE,
+            UPDATE_ITEM_RESPONSE,
+            UPDATE_ITEM_RESPONSE,
         ]
 
         result = register_complaint(_processed_complaint(), api_token="token-test")
@@ -67,7 +71,12 @@ class TestMondayClient:
         assert result is not None
         assert result.item_id == "999"
         assert result.item_url == "https://b4a.monday.com/boards/111/pulses/999"
-        assert graphql_mock.call_count == 4
+        assert graphql_mock.call_count == 7
+
+        create_call = graphql_mock.call_args_list[3]
+        assert "create_item" in create_call.kwargs["query"]
+        assert create_call.kwargs["variables"]["itemName"] == "MARIA SILVA"
+        assert "columnValues" not in create_call.kwargs["variables"]
 
     @patch("classificacao_procons.monday.client._graphql_request")
     def test_should_skip_duplicate_protocol(self, graphql_mock) -> None:

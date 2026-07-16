@@ -4,9 +4,12 @@ from datetime import date
 
 from classificacao_procons.monday.mapping import (
     MondayColumn,
+    MondayColumnDetails,
+    allowed_labels,
     build_column_values,
     map_procon_cause_to_monday_status_label,
     resolve_field_for_column,
+    sanitize_column_values,
 )
 
 
@@ -19,6 +22,10 @@ class TestMondayColumnMapping:
         assert resolve_field_for_column("Procon/Órgão") == "state"
         assert resolve_field_for_column("Prazo SAC") == "sac_deadline"
         assert resolve_field_for_column("Prazo Jurídico") == "legal_deadline"
+
+    def test_should_ignore_causa_2_column(self) -> None:
+        assert resolve_field_for_column("Causa 2") is None
+        assert resolve_field_for_column("Causa 1") == "cause"
 
     def test_should_map_laura_cause_to_cancelamento_label(self) -> None:
         cause = (
@@ -91,3 +98,26 @@ class TestMondayColumnMapping:
         )
 
         assert values == {}
+
+    def test_should_drop_invalid_status_labels(self) -> None:
+        details = [
+            MondayColumnDetails(
+                column=MondayColumn(id="status_org", title="Procon/Órgão", column_type="status"),
+                settings_str='{"labels": {"0": "SP", "1": "MS"}}',
+            ),
+            MondayColumnDetails(
+                column=MondayColumn(id="text_cpf", title="CPF", column_type="text"),
+            ),
+        ]
+        values = {
+            "status_org": {"label": "RJ"},
+            "text_cpf": "12345678901",
+        }
+
+        sanitized = sanitize_column_values(details, values)
+
+        assert sanitized == {"text_cpf": "12345678901"}
+
+    def test_should_parse_allowed_labels_from_settings(self) -> None:
+        labels = allowed_labels('{"labels": {"0": "Problemas com entrega"}}', "status")
+        assert labels == {"problemas com entrega"}

@@ -52,6 +52,7 @@ def test_should_update_monday_item_with_response_links(
             MondayColumn("col_full", "Resposta Completa", "link"),
             MondayColumn("col_summary", "Resumo Resposta", "link"),
         ],
+        column_details=[],
         account_slug="account",
     )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import unicodedata
 import urllib.error
 import urllib.request
@@ -15,9 +16,11 @@ from pathlib import Path
 from classificacao_procons.models import ProcessedComplaint
 from classificacao_procons.monday.mapping import (
     MondayColumn,
+    MondayColumnDetails,
     build_column_values,
     build_response_column_values,
     find_protocol_column,
+    sanitize_column_values,
 )
 
 MONDAY_API_URL = "https://api.monday.com/v2"
@@ -30,6 +33,8 @@ ENV_BOARD_NAME = "MONDAY_BOARD_NAME"
 ENV_BOARD_ID = "MONDAY_BOARD_ID"
 BOARD_PAGE_SIZE = 100
 MAX_BOARD_PAGES = 20
+GRAPHQL_MAX_RETRIES = 3
+GRAPHQL_RETRY_BASE_DELAY_SECONDS = 2
 
 
 class MondayClientError(RuntimeError):
@@ -49,6 +54,7 @@ class MondayBoardContext:
     board_id: str
     group_id: str
     columns: list[MondayColumn]
+    column_details: list[MondayColumnDetails]
     account_slug: str | None = None
 
 
@@ -73,42 +79,68 @@ def _normalize_name(value: str) -> str:
     return re.sub(r"\s+", " ", without_marks).strip()
 
 
-def _graphql_request(*, api_token: str, query: str, variables: dict | None = None) -> dict:
-    payload: dict[str, object] = {"query": query}
-    if variables:
-        payload["variables"] = variables
+def _is_transient_monday_error(exc: MondayClientError) -> bool:
+    message = str(exc).casefold()
+    return "internal server error" in message or "http 500" in message or "http 502" in message
 
-    request = urllib.request.Request(
-        MONDAY_API_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": api_token,
-            "Content-Type": "application/json",
-            "API-Version": MONDAY_API_VERSION,
-        },
-        method="POST",
-    )
 
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise MondayClientError(f"Monday API HTTP {exc.code}: {error_body}") from exc
-    except urllib.error.URLError as exc:
-        raise MondayClientError(f"Monday API indisponível: {exc.reason}") from exc
-    except json.JSONDecodeError as exc:
-        raise MondayClientError("Monday API retornou resposta inválida.") from exc
+def _graphql_request(
+    *,
+    api_token: str,
+    query: str,
+    variables: dict | None = None,
+    max_retries: int = GRAPHQL_MAX_RETRIES,
+) -> dict:
+    last_error: MondayClientError | None = None
 
-    if body.get("errors"):
-        messages = "; ".join(str(item.get("message", item)) for item in body["errors"])
-        raise MondayClientError(messages)
+    for attempt in range(max_retries):
+        payload: dict[str, object] = {"query": query}
+        if variables:
+            payload["variables"] = variables
 
-    data = body.get("data")
-    if not isinstance(data, dict):
-        raise MondayClientError("Monday API retornou payload vazio.")
+        request = urllib.request.Request(
+            MONDAY_API_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": api_token,
+                "Content-Type": "application/json",
+                "API-Version": MONDAY_API_VERSION,
+            },
+            method="POST",
+        )
 
-    return data
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            last_error = MondayClientError(f"Monday API HTTP {exc.code}: {error_body}")
+            if exc.code in {500, 502, 503, 504} and attempt < max_retries - 1:
+                time.sleep(GRAPHQL_RETRY_BASE_DELAY_SECONDS * (2**attempt))
+                continue
+            raise last_error from exc
+        except urllib.error.URLError as exc:
+            raise MondayClientError(f"Monday API indisponível: {exc.reason}") from exc
+        except json.JSONDecodeError as exc:
+            raise MondayClientError("Monday API retornou resposta inválida.") from exc
+
+        if body.get("errors"):
+            messages = "; ".join(str(item.get("message", item)) for item in body["errors"])
+            last_error = MondayClientError(messages)
+            if _is_transient_monday_error(last_error) and attempt < max_retries - 1:
+                time.sleep(GRAPHQL_RETRY_BASE_DELAY_SECONDS * (2**attempt))
+                continue
+            raise last_error
+
+        data = body.get("data")
+        if not isinstance(data, dict):
+            raise MondayClientError("Monday API retornou payload vazio.")
+
+        return data
+
+    if last_error is not None:
+        raise last_error
+    raise MondayClientError("Monday API retornou payload vazio.")
 
 
 def upload_file_to_column(
@@ -179,11 +211,18 @@ def upload_file_to_column(
 
 
 def _board_columns(board: dict) -> list[MondayColumn]:
+    return [detail.column for detail in _board_column_details(board)]
+
+
+def _board_column_details(board: dict) -> list[MondayColumnDetails]:
     return [
-        MondayColumn(
-            id=column["id"],
-            title=column["title"],
-            column_type=column["type"],
+        MondayColumnDetails(
+            column=MondayColumn(
+                id=column["id"],
+                title=column["title"],
+                column_type=column["type"],
+            ),
+            settings_str=column.get("settings_str"),
         )
         for column in board.get("columns", [])
     ]
@@ -225,6 +264,7 @@ def _fetch_board_record(
                   id
                   title
                   type
+                  settings_str
                 }
               }
             }
@@ -253,6 +293,7 @@ def _fetch_board_record(
                   id
                   title
                   type
+                  settings_str
                 }
               }
             }
@@ -328,6 +369,7 @@ def _load_board_context(
         board_id=str(board["id"]),
         group_id=group_id,
         columns=_board_columns(board),
+        column_details=_board_column_details(board),
         account_slug=account_slug,
     )
 
@@ -367,6 +409,7 @@ def load_board_metadata(
         board_id=str(board["id"]),
         group_id="",
         columns=_board_columns(board),
+        column_details=_board_column_details(board),
         account_slug=account_slug,
     )
 
@@ -417,6 +460,73 @@ def _build_item_url(
     return f"https://{account_slug}.monday.com/boards/{board_id}/pulses/{item_id}"
 
 
+def _create_item(
+    *,
+    api_token: str,
+    board_id: str,
+    group_id: str,
+    item_name: str,
+) -> str:
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($boardId: ID!, $groupId: String!, $itemName: String!) {
+          create_item(
+            board_id: $boardId
+            group_id: $groupId
+            item_name: $itemName
+          ) {
+            id
+          }
+        }
+        """,
+        variables={
+            "boardId": board_id,
+            "groupId": group_id,
+            "itemName": item_name,
+        },
+    )
+    return str(data["create_item"]["id"])
+
+
+def _apply_complaint_column_values(
+    *,
+    api_token: str,
+    board_id: str,
+    item_id: str,
+    column_details: list[MondayColumnDetails],
+    column_values: dict[str, object],
+) -> None:
+    """Aplica colunas uma a uma para evitar falhas em create_item com payload grande."""
+    details_by_id = {detail.column.id: detail for detail in column_details}
+
+    for column_id, value in column_values.items():
+        if details_by_id.get(column_id) is None:
+            continue
+        try:
+            _graphql_request(
+                api_token=api_token,
+                query="""
+                mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+                  change_multiple_column_values(
+                    board_id: $boardId
+                    item_id: $itemId
+                    column_values: $columnValues
+                  ) {
+                    id
+                  }
+                }
+                """,
+                variables={
+                    "boardId": board_id,
+                    "itemId": item_id,
+                    "columnValues": json.dumps({column_id: value}),
+                },
+            )
+        except MondayClientError:
+            continue
+
+
 def register_complaint(
     complaint: ProcessedComplaint,
     *,
@@ -459,42 +569,35 @@ def register_complaint(
                 skipped_duplicate=True,
             )
 
-    column_values = build_column_values(
-        context.columns,
-        consumer_name=complaint.consumer_name,
-        state=complaint.state,
-        pdf_url=complaint.pdf_url,
-        protocol_number=complaint.protocol_number,
-        consumer_cpf=complaint.consumer_cpf,
-        complaint_date=complaint.complaint_date,
-        sac_deadline=complaint.sac_deadline,
-        legal_deadline=complaint.legal_deadline,
-        cause=complaint.cause,
+    column_values = sanitize_column_values(
+        context.column_details,
+        build_column_values(
+            context.columns,
+            consumer_name=complaint.consumer_name,
+            state=complaint.state,
+            pdf_url=complaint.pdf_url,
+            protocol_number=complaint.protocol_number,
+            consumer_cpf=complaint.consumer_cpf,
+            complaint_date=complaint.complaint_date,
+            sac_deadline=complaint.sac_deadline,
+            legal_deadline=complaint.legal_deadline,
+            cause=complaint.cause,
+        ),
     )
 
-    data = _graphql_request(
+    item_id = _create_item(
         api_token=token,
-        query="""
-        mutation ($boardId: ID!, $groupId: String!, $itemName: String!, $columnValues: JSON) {
-          create_item(
-            board_id: $boardId
-            group_id: $groupId
-            item_name: $itemName
-            column_values: $columnValues
-          ) {
-            id
-          }
-        }
-        """,
-        variables={
-            "boardId": context.board_id,
-            "groupId": context.group_id,
-            "itemName": complaint.consumer_name,
-            "columnValues": json.dumps(column_values),
-        },
+        board_id=context.board_id,
+        group_id=context.group_id,
+        item_name=complaint.consumer_name,
     )
-
-    item_id = str(data["create_item"]["id"])
+    _apply_complaint_column_values(
+        api_token=token,
+        board_id=context.board_id,
+        item_id=item_id,
+        column_details=context.column_details,
+        column_values=column_values,
+    )
     return MondayRegistrationResult(
         item_id=item_id,
         board_id=context.board_id,

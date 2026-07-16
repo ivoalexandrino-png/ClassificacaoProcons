@@ -51,6 +51,12 @@ class MondayColumn:
     column_type: str
 
 
+@dataclass(frozen=True)
+class MondayColumnDetails:
+    column: MondayColumn
+    settings_str: str | None = None
+
+
 def _normalize_title(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value.casefold())
     without_marks = "".join(char for char in normalized if not unicodedata.combining(char))
@@ -80,10 +86,76 @@ def map_procon_cause_to_monday_status_label(cause: str) -> str | None:
 def resolve_field_for_column(title: str) -> str | None:
     """Associa uma coluna do board a um campo do domínio pelo título."""
     normalized = _normalize_title(title)
+    if "causa 2" in normalized:
+        return None
     for field, keywords in FIELD_TITLE_KEYWORDS.items():
         if any(keyword in normalized for keyword in keywords):
             return field
     return None
+
+
+def allowed_labels(settings_str: str | None, column_type: str) -> set[str] | None:
+    """Extrai rótulos permitidos de settings_str para status/dropdown."""
+    if not settings_str:
+        return None
+    try:
+        settings = json.loads(settings_str)
+    except json.JSONDecodeError:
+        return None
+
+    if column_type in {"status", "color"}:
+        labels = settings.get("labels", {})
+        if isinstance(labels, dict):
+            return {str(label).casefold() for label in labels.values() if str(label).strip()}
+        return None
+
+    if column_type == "dropdown":
+        labels = settings.get("labels", [])
+        if isinstance(labels, list):
+            names: list[str] = []
+            for item in labels:
+                if isinstance(item, dict):
+                    names.append(str(item.get("name", "")))
+                else:
+                    names.append(str(item))
+            return {name.casefold() for name in names if name.strip()}
+        return None
+
+    return None
+
+
+def sanitize_column_values(
+    column_details: list[MondayColumnDetails],
+    values: dict[str, Any],
+) -> dict[str, Any]:
+    """Remove valores com rótulos inválidos para status/dropdown."""
+    details_by_id = {detail.column.id: detail for detail in column_details}
+    sanitized: dict[str, Any] = {}
+
+    for column_id, value in values.items():
+        detail = details_by_id.get(column_id)
+        if detail is None:
+            continue
+
+        column_type = detail.column.column_type
+        if column_type in {"status", "color"} and isinstance(value, dict) and "label" in value:
+            allowed = allowed_labels(detail.settings_str, column_type)
+            label = str(value["label"])
+            if allowed is not None and label.casefold() not in allowed:
+                continue
+
+        if column_type == "dropdown" and isinstance(value, dict) and "labels" in value:
+            allowed = allowed_labels(detail.settings_str, column_type)
+            labels = [str(item) for item in value.get("labels", [])]
+            if allowed is not None:
+                labels = [label for label in labels if label.casefold() in allowed]
+                if not labels:
+                    continue
+            value = {"labels": labels}
+
+        sanitized[column_id] = value
+
+    return sanitized
 
 
 def build_column_values(
