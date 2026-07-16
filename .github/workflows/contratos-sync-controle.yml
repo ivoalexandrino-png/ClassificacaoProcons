@@ -1,9 +1,6 @@
 name: Sync Controle Assinaturas (Autentique)
 
 on:
-  push:
-    branches:
-      - cursor/sync-controle-autentique-c1dc
   workflow_dispatch:
     inputs:
       dry_run:
