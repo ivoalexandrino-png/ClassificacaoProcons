@@ -237,6 +237,43 @@ def list_documents(
     return documents
 
 
+def fetch_document_summary(
+    *,
+    document_id: str,
+    api_token: str | None = None,
+) -> AutentiqueDocumentSummary:
+    """Busca documento no Autentique com signatários (para Controle Assinaturas)."""
+    token = api_token or get_api_token_from_env()
+    if not token:
+        raise AutentiqueClientError("AUTENTIQUE_API_TOKEN não configurada.")
+
+    data = _graphql_request(
+        api_token=token,
+        query="""
+        query ($documentId: UUID!) {
+          document(id: $documentId) {
+            id
+            name
+            created_at
+            files { signed }
+            signatures {
+              public_id
+              name
+              email
+              link { short_link }
+              signed { created_at }
+            }
+          }
+        }
+        """,
+        variables={"documentId": document_id},
+    )
+    document = data.get("document")
+    if not document:
+        raise AutentiqueClientError(f'Documento "{document_id}" não encontrado no Autentique.')
+    return _parse_document_summary(document)
+
+
 def create_signature_link(
     *,
     public_id: str,

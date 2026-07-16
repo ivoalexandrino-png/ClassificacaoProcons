@@ -143,25 +143,85 @@ def find_controle_item(
     return None
 
 
+def find_controle_item_by_autentique_id(
+    *,
+    api_token: str,
+    document_id: str,
+) -> ControleAssinaturasItem | None:
+    """Localiza item no Controle Assinaturas apenas pelo ID do Autentique."""
+    normalized_id = document_id.casefold().strip()
+    if not normalized_id:
+        return None
+
+    related_col_id = discover_controle_related_contract_column_id(api_token=api_token)
+    column_ids = ["status", "status_1__1", "long_text_mkvnwp6d"]
+    if related_col_id:
+        column_ids.append(related_col_id)
+
+    cursor: str | None = None
+    for _ in range(30):
+        data = _graphql_request(
+            api_token=api_token,
+            query="""
+            query ($boardId: ID!, $limit: Int!, $cursor: String, $columnIds: [String!]) {
+              boards(ids: [$boardId]) {
+                items_page(limit: $limit, cursor: $cursor) {
+                  cursor
+                  items {
+                    id
+                    name
+                    column_values(ids: $columnIds) {
+                      id
+                      text
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            """,
+            variables={
+                "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+                "limit": 100,
+                "cursor": cursor,
+                "columnIds": column_ids,
+            },
+        )
+        page = data["boards"][0]["items_page"]
+        for item in page["items"]:
+            columns_by_id = {
+                column["id"]: column for column in item.get("column_values", [])
+            }
+            values = {column_id: column.get("text") for column_id, column in columns_by_id.items()}
+            signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
+            if normalized_id in signature_link.casefold():
+                return _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                )
+
+        cursor = page.get("cursor")
+        if not cursor:
+            break
+
+    return None
+
+
 @dataclass(frozen=True)
 class ControleAssinaturasIndex:
     document_ids: frozenset[str]
     exact_names: frozenset[str]
 
     def matches_document(self, document: object) -> bool:
+        """Verifica duplicata somente pelo ID do Autentique (evita falso positivo por nome)."""
         document_id = str(getattr(document, "document_id", "")).casefold().strip()
-        document_name = str(getattr(document, "name", "")).casefold().strip()
         if document_id and document_id in self.document_ids:
             return True
-        if document_name and document_name in self.exact_names:
-            return True
         signature_link = str(getattr(document, "primary_signature_link", lambda: None)() or "")
-        if document_id and document_id in signature_link.casefold():
-            return True
-        for known_name in self.exact_names:
-            if document_name and (document_name in known_name or known_name in document_name):
-                return True
-        return False
+        return bool(document_id) and document_id in signature_link.casefold()
 
     def with_item(
         self,
