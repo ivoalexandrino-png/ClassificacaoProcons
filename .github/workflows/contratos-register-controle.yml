@@ -1,0 +1,48 @@
+name: Registrar contrato no Controle
+
+# Cria um item no Monday Controle Assinaturas para um documento do Autentique.
+# Substitui temporariamente o webhook document.created (sem Cloud Run).
+on:
+  workflow_dispatch:
+    inputs:
+      document_id:
+        description: "ID do documento no Autentique"
+        required: true
+        type: string
+
+jobs:
+  register-controle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install .
+
+      - name: Validate secrets
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          for name in MONDAY_API_TOKEN AUTENTIQUE_API_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "Secret ausente: $name"
+              exit 1
+            fi
+          done
+
+      - name: Register in Controle Assinaturas
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          contratos-webhook register-controle \
+            --document-id "${{ inputs.document_id }}"

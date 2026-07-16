@@ -3,9 +3,6 @@ name: Test contrato assinado (manual)
 # Processa um documento já assinado no Autentique: Drive + Monday.
 # Não requer Cloud Run — usa secrets do GitHub.
 on:
-  push:
-    branches:
-      - cursor/trigger-contratos-test-c1dc
   workflow_dispatch:
     inputs:
       document_id:
