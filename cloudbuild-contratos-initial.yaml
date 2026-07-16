@@ -1,0 +1,42 @@
+# Igual ao cloudbuild-contratos.yaml, mas sem secret do webhook Autentique
+# (para primeiro deploy, antes de registrar o endpoint no painel Autentique).
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:${SHORT_SHA}
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:${SHORT_SHA}
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - contratos-webhook
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --memory=1Gi
+      - --cpu=1
+      - --timeout=300s
+      - --min-instances=0
+      - --max-instances=3
+      - --command=/entrypoint.sh
+      - --args=contratos-webhook
+      - --set-secrets=GMAIL_OAUTH_JSON=procon-gmail-oauth:latest,GMAIL_TOKEN_JSON=procon-gmail-token:latest,MONDAY_API_TOKEN=contratos-monday-token:latest,AUTENTIQUE_API_TOKEN=contratos-autentique-token:latest,GEMINI_API_KEY=contratos-gemini-key:latest
+
+substitutions:
+  _REGION: southamerica-east1
+  _ARTIFACT_REPO: classificacao-procons
+
+options:
+  logging: CLOUD_LOGGING_ONLY
