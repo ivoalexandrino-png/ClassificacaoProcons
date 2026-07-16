@@ -13,3 +13,4 @@ class ControleAssinaturasItem:
     tipo: str | None
     signature_link: str | None
     related_contract_item_ids: tuple[str, ...] = ()
+    group_id: str | None = None

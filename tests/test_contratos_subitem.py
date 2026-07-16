@@ -70,6 +70,7 @@ class TestContratosSubitem:
             board_id="5385471914",
             account_slug="b4a",
             columns=[],
+            column_details=[],
             group_id="topics",
         )
         load_columns_mock.return_value = [
