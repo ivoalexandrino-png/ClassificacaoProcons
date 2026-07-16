@@ -1,0 +1,38 @@
+name: Setup Monday Contrato relacionado
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cursor/monday-contrato-relacionado-c1dc
+
+jobs:
+  setup-monday-column:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install .
+
+      - name: Validate secrets
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+        run: |
+          if [ -z "$MONDAY_API_TOKEN" ]; then
+            echo "Secret ausente: MONDAY_API_TOKEN"
+            exit 1
+          fi
+
+      - name: Ensure Contrato relacionado column
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+        run: python scripts/setup_monday_contrato_relacionado.py
