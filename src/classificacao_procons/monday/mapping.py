@@ -27,11 +27,11 @@ FIELD_RESPONSE_UNIFIED_PDF = "response_unified_pdf_url"
 
 FIELD_TITLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     FIELD_CONSUMER_NAME: ("nome", "consumidor", "cliente", "reclamante"),
-    FIELD_STATE: ("estado", "uf", "state"),
+    FIELD_STATE: ("estado", "uf", "state", "orgao", "órgão"),
     FIELD_RESPONSE_FULL: ("resposta completa",),
     FIELD_RESPONSE_SUMMARY: ("resumo resposta", "resumo portal", "resposta resumo"),
     FIELD_RESPONSE_UNIFIED_PDF: ("pdf unificado", "resposta unificada", "documentos unificados"),
-    FIELD_PDF_URL: ("pdf procon", "link pdf", "pdf drive"),
+    FIELD_PDF_URL: ("notificacao", "pdf procon", "link pdf", "pdf drive"),
     FIELD_PROTOCOL: ("cip", "fa", "protocolo", "numero"),
     FIELD_CPF: ("cpf",),
     FIELD_COMPLAINT_DATE: ("data reclamacao", "data da reclamacao", "data reclama", "abertura"),
@@ -55,6 +55,26 @@ def _normalize_title(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value.casefold())
     without_marks = "".join(char for char in normalized if not unicodedata.combining(char))
     return re.sub(r"\s+", " ", without_marks).strip()
+
+
+MONDAY_CAUSE_STATUS_LABELS: tuple[tuple[str, str], ...] = (
+    ("cancel", "Problemas com Cancelamento"),
+    ("renov", "Renovação Automática"),
+    ("experi", "Problemas na experiência"),
+    ("pagamento", "Problemas no pagamento"),
+    ("entrega", "Problemas com entrega"),
+)
+
+
+def map_procon_cause_to_monday_status_label(cause: str) -> str | None:
+    """Mapeia texto do Procon para rótulo de status do Monday (classificação)."""
+    normalized = _normalize_title(cause)
+    if not normalized:
+        return None
+    for keyword, label in MONDAY_CAUSE_STATUS_LABELS:
+        if keyword in normalized:
+            return label
+    return None
 
 
 def resolve_field_for_column(title: str) -> str | None:
@@ -100,6 +120,13 @@ def build_column_values(
 
         raw_value = values.get(field)
         if raw_value in (None, ""):
+            continue
+
+        if field == FIELD_CAUSE and column.column_type in {"status", "color"}:
+            mapped_cause = map_procon_cause_to_monday_status_label(str(raw_value))
+            if mapped_cause is None:
+                continue
+            column_values[column.id] = {"label": mapped_cause}
             continue
 
         column_values[column.id] = format_column_value(column.column_type, raw_value)

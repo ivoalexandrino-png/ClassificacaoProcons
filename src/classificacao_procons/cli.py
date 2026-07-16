@@ -15,7 +15,12 @@ from classificacao_procons.email.auth import (
     has_valid_token,
     save_token_from_code,
 )
-from classificacao_procons.pipeline import PipelineError, PipelineOptions, process_new_complaints
+from classificacao_procons.pipeline import (
+    PipelineError,
+    PipelineOptions,
+    process_new_complaints,
+    register_monday_for_access_code,
+)
 from classificacao_procons.response_pipeline import (
     ResponsePipelineError,
     ResponsePipelineOptions,
@@ -125,6 +130,28 @@ def _run_process(args: argparse.Namespace) -> int:
 
     if any(item.status == "error" for item in results):
         return 1
+    if any(item.monday_error for item in results):
+        return 1
+    return 0
+
+
+def _run_register_monday(args: argparse.Namespace) -> int:
+    if not has_valid_token(args.token):
+        print("Google não conectado. Rode: procon-email auth", file=sys.stderr)
+        return 1
+
+    options = PipelineOptions(
+        download_dir=Path(args.download_dir),
+        credentials_path=args.credentials,
+        token_path=args.token,
+    )
+    try:
+        result = register_monday_for_access_code(args.access_code, options=options)
+    except PipelineError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    print(json.dumps(_serialize_processed(result), ensure_ascii=False, indent=2))
     return 0
 
 
@@ -247,6 +274,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Só lista os casos que seriam elaborados.",
     )
 
+    register_monday_parser = subparsers.add_parser(
+        "register-monday",
+        help="Cadastrar no Monday um caso já salvo no Drive",
+    )
+    register_monday_parser.add_argument(
+        "--access-code",
+        required=True,
+        help="Código de acesso do portal Procon (do e-mail de notificação).",
+    )
+    register_monday_parser.add_argument("--download-dir", default="downloads")
+
     args = parser.parse_args(argv)
 
     if args.command == "auth":
@@ -257,6 +295,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_process(args)
     if args.command == "elaborate":
         return _run_elaborate(args)
+    if args.command == "register-monday":
+        return _run_register_monday(args)
 
     parser.print_help()
     return 0
