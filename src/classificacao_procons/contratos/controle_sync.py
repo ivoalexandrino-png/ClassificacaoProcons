@@ -17,6 +17,9 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_STATUS_AGUARDANDO_OUTROS,
     CONTROLE_STATUS_ASSINADO,
 )
+from classificacao_procons.contratos.contratos_routing import (
+    is_supplemental_document,
+)
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.monday_contracts import (
     build_controle_assinaturas_index,
@@ -160,10 +163,12 @@ def _create_controle_item(
         document=document,
         api_token=autentique_api_token,
     )
-    tipo = infer_monday_tipo(
-        document_name=document.name,
-        category=infer_category(document_name=document.name),
-    )
+    tipo = None
+    if not is_supplemental_document(document_name=document.name):
+        tipo = infer_monday_tipo(
+            document_name=document.name,
+            category=infer_category(document_name=document.name),
+        )
     group_id = _resolve_controle_group_id(document=document, groups=groups)
     status_label = _resolve_controle_status(document=document)
     signed_at = _resolve_signed_at(document=document)

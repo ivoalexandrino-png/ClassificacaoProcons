@@ -14,6 +14,7 @@ from classificacao_procons.contratos.autentique.client import (
     fetch_document,
 )
 from classificacao_procons.contratos.autentique.webhook import AutentiqueWebhookEvent
+from classificacao_procons.contratos.contratos_routing import resolve_contratos_registration_mode
 from classificacao_procons.contratos.drive_routing import (
     build_contract_pdf_filename,
     format_drive_folder_path,
@@ -26,7 +27,8 @@ from classificacao_procons.contratos.gemini_extractor import (
 )
 from classificacao_procons.contratos.monday_contracts import (
     find_controle_item,
-    register_contrato_item,
+    find_parent_contrato_item,
+    register_contrato_subitem,
     update_controle_assinado,
 )
 from classificacao_procons.drive.client import DriveClientError, upload_pdf_to_folder_path
@@ -61,6 +63,8 @@ class ContractPipelineResult:
     controle_item_id: str | None
     contratos_item_id: str | None
     contratos_item_url: str | None
+    contratos_registration_mode: str | None = None
+    contratos_parent_item_id: str | None = None
     skipped_duplicate: bool = False
 
 
@@ -193,14 +197,28 @@ def process_finished_document(
         )
 
     contratos_result = None
-    if monday_token:
+    registration_mode = resolve_contratos_registration_mode(
+        controle_tipo=tipo_label,
+        controle_item_found=controle_item is not None,
+    )
+    if monday_token and registration_mode == "subitem":
+        parent_item_id = find_parent_contrato_item(
+            api_token=monday_token,
+            document_name=document.name,
+            metadata=metadata,
+        )
+        if parent_item_id is None:
+            raise ContractPipelineError(
+                "Documento sem Tipo no Controle Assinaturas e contrato pai não encontrado "
+                f"no quadro Contratos: {document.name}"
+            )
         try:
-            contratos_result = register_contrato_item(
+            contratos_result = register_contrato_subitem(
                 api_token=monday_token,
+                parent_item_id=parent_item_id,
                 metadata=metadata,
                 document_name=document.name,
                 signed_pdf_url=drive_pdf_url,
-                tipo_label=tipo_label,
                 pdf_path=pdf_path,
             )
         except MondayClientError as exc:
@@ -217,6 +235,8 @@ def process_finished_document(
         controle_item_id=controle_item.item_id if controle_item else None,
         contratos_item_id=contratos_result.contratos_item_id if contratos_result else None,
         contratos_item_url=contratos_result.contratos_item_url if contratos_result else None,
+        contratos_registration_mode=registration_mode,
+        contratos_parent_item_id=contratos_result.parent_item_id if contratos_result else None,
     )
 
 

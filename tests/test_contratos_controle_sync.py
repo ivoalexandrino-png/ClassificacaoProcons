@@ -60,6 +60,41 @@ class TestControleSync:
         assert call_kwargs["status_label"] == "Assinado"
         assert call_kwargs["signed_at"] == date(2026, 1, 2)
 
+    @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.controle_sync.list_documents")
+    def test_should_not_fill_tipo_for_supplemental_documents(
+        self,
+        list_documents_mock,
+        build_index_mock,
+        load_groups_mock,
+        create_item_mock,
+    ) -> None:
+        document = AutentiqueDocumentSummary(
+            document_id="doc-aditivo",
+            name="Aditivo Locação Imóvel - Tower Bridge",
+            created_at="2026-01-01",
+            signed_pdf_url=None,
+            signatures=(),
+        )
+        list_documents_mock.return_value = [document]
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset(),
+        )
+        load_groups_mock.return_value = {"assinados": "novo_grupo"}
+        create_item_mock.return_value = ("222", None)
+
+        sync_controle_from_autentique(
+            monday_api_token="monday-token",
+            autentique_api_token="autentique-token",
+            dry_run=False,
+        )
+
+        call_kwargs = create_item_mock.call_args.kwargs
+        assert call_kwargs["tipo_label"] is None
+
     @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
     @patch("classificacao_procons.contratos.controle_sync.list_documents")

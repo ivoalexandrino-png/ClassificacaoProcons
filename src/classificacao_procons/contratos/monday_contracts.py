@@ -24,6 +24,10 @@ from classificacao_procons.contratos.constants import (
     MONDAY_CONTRATOS_BOARD_ID,
     MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
 )
+from classificacao_procons.contratos.contratos_routing import (
+    extract_parent_search_terms,
+    score_parent_name_match,
+)
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.monday.client import (
@@ -60,6 +64,8 @@ class MondayContractRegistrationResult:
     contratos_item_id: str | None
     contratos_item_url: str | None
     skipped_duplicate: bool = False
+    registration_mode: str | None = None
+    parent_item_id: str | None = None
 
 
 def find_controle_item(
@@ -573,7 +579,138 @@ def register_contrato_item(
         controle_item_id=None,
         contratos_item_id=item_id,
         contratos_item_url=item_url,
+        registration_mode="top_level",
     )
+
+
+def find_parent_contrato_item(
+    *,
+    api_token: str,
+    document_name: str,
+    metadata: ContractMetadata,
+    min_score: int = 70,
+) -> str | None:
+    """Localiza item pai no quadro Contratos para vincular aditivos como subitem."""
+    search_terms = extract_parent_search_terms(document_name=document_name, metadata=metadata)
+    if not search_terms:
+        return None
+
+    best_item_id: str | None = None
+    best_score = 0
+    cursor: str | None = None
+
+    for _ in range(50):
+        data = _graphql_request(
+            api_token=api_token,
+            query="""
+            query ($boardId: ID!, $limit: Int!, $cursor: String) {
+              boards(ids: [$boardId]) {
+                items_page(limit: $limit, cursor: $cursor) {
+                  cursor
+                  items {
+                    id
+                    name
+                  }
+                }
+              }
+            }
+            """,
+            variables={
+                "boardId": MONDAY_CONTRATOS_BOARD_ID,
+                "limit": 100,
+                "cursor": cursor,
+            },
+        )
+        page = data["boards"][0]["items_page"]
+        for item in page["items"]:
+            item_name = str(item.get("name", ""))
+            for term in search_terms:
+                score = score_parent_name_match(item_name=item_name, search_term=term)
+                if score > best_score:
+                    best_score = score
+                    best_item_id = str(item["id"])
+
+        cursor = page.get("cursor")
+        if not cursor:
+            break
+
+    if best_score < min_score:
+        return None
+    return best_item_id
+
+
+def register_contrato_subitem(
+    *,
+    api_token: str,
+    parent_item_id: str,
+    metadata: ContractMetadata,
+    document_name: str,
+    signed_pdf_url: str,
+    pdf_path: Path | None = None,
+) -> MondayContractRegistrationResult:
+    """Cria subitem no quadro Contratos vinculado ao contrato pai."""
+    board_context = load_board_metadata(
+        api_token=api_token,
+        board_id=MONDAY_CONTRATOS_BOARD_ID,
+    )
+    column_details = _load_contratos_column_details(api_token=api_token)
+    columns = [detail.column for detail in column_details]
+    item_name = document_name
+    column_values = _sanitize_column_values(
+        column_details,
+        _build_contratos_column_values(
+            columns,
+            metadata=metadata,
+            signed_pdf_url=signed_pdf_url,
+            document_name=document_name,
+        ),
+    )
+    item_id = _create_contratos_subitem(
+        api_token=api_token,
+        parent_item_id=parent_item_id,
+        item_name=item_name,
+    )
+    _apply_contratos_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
+        column_values=column_values,
+        pdf_path=pdf_path,
+    )
+    item_url = None
+    if board_context.account_slug:
+        item_url = (
+            f"https://{board_context.account_slug}.monday.com/boards/"
+            f"{MONDAY_CONTRATOS_BOARD_ID}/pulses/{item_id}"
+        )
+    return MondayContractRegistrationResult(
+        controle_item_id=None,
+        contratos_item_id=item_id,
+        contratos_item_url=item_url,
+        registration_mode="subitem",
+        parent_item_id=parent_item_id,
+    )
+
+
+def _create_contratos_subitem(
+    *,
+    api_token: str,
+    parent_item_id: str,
+    item_name: str,
+) -> str:
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($parentItemId: ID!, $itemName: String!) {
+          create_subitem(parent_item_id: $parentItemId, item_name: $itemName) { id }
+        }
+        """,
+        variables={
+            "parentItemId": parent_item_id,
+            "itemName": item_name,
+        },
+    )
+    return str(data["create_subitem"]["id"])
 
 
 def _normalize_group_title(value: str) -> str:
