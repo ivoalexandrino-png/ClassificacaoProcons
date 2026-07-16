@@ -28,11 +28,13 @@ from classificacao_procons.contratos.contratos_routing import (
     is_supplemental_document,
 )
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
+from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     build_controle_assinaturas_index,
     create_controle_assinatura_item,
     find_controle_item_by_autentique_id,
     load_controle_board_groups,
+    update_controle_item_progress,
 )
 from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
 
@@ -56,10 +58,23 @@ class ControleSyncResult:
     total_autentique: int
     already_in_monday: int
     created: int
+    updated: int
     skipped: int
     failed: int
     dry_run: bool
     items: tuple[ControleSyncItemResult, ...]
+
+
+@dataclass(frozen=True)
+class ControleReconcileResult:
+    document_id: str
+    document_name: str
+    monday_item_id: str | None
+    updated: bool
+    skipped: bool
+    skip_reason: str | None = None
+    group_id: str | None = None
+    status_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -147,14 +162,138 @@ def process_document_created_webhook_event(
     )
 
 
+def process_signature_accepted_webhook_event(
+    event: AutentiqueWebhookEvent,
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+) -> ControleReconcileResult | ControleRegistrationResult:
+    """Processa evento signature.accepted do Autentique."""
+    if event.event_type != "signature.accepted":
+        raise ControleSyncError(f"Evento não suportado: {event.event_type}")
+
+    monday_token = monday_api_token or get_api_token_from_env()
+    if not monday_token:
+        raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+
+    existing = find_controle_item_by_autentique_id(
+        api_token=monday_token,
+        document_id=event.document_id,
+    )
+    if not existing:
+        return register_document_in_controle(
+            document_id=event.document_id,
+            document_name=event.document_name or None,
+            monday_api_token=monday_token,
+            autentique_api_token=autentique_api_token,
+        )
+
+    try:
+        document = fetch_document_summary(
+            document_id=event.document_id,
+            api_token=autentique_api_token,
+        )
+    except AutentiqueClientError as exc:
+        raise ControleSyncError(str(exc)) from exc
+
+    groups = load_controle_board_groups(api_token=monday_token)
+    try:
+        return reconcile_controle_item_from_document(
+            document=document,
+            controle_item=existing,
+            api_token=monday_token,
+            groups=groups,
+        )
+    except MondayClientError as exc:
+        raise ControleSyncError(str(exc)) from exc
+
+
+def reconcile_controle_item_from_document(
+    *,
+    document: AutentiqueDocumentSummary,
+    controle_item: ControleAssinaturasItem,
+    api_token: str,
+    groups: dict[str, str],
+    dry_run: bool = False,
+) -> ControleReconcileResult:
+    """Alinha status e grupo do item Monday com o estado atual no Autentique."""
+    if _status_matches(controle_item.status, CONTROLE_STATUS_ASSINADO):
+        return ControleReconcileResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=controle_item.item_id,
+            updated=False,
+            skipped=True,
+            skip_reason="already_assinado",
+        )
+
+    if document.is_fully_signed:
+        return ControleReconcileResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=controle_item.item_id,
+            updated=False,
+            skipped=True,
+            skip_reason="awaiting_document_finished",
+        )
+
+    planned_group_id = _resolve_controle_group_id(document=document, groups=groups)
+    planned_status = _resolve_controle_status(document=document)
+    planned_signed_at = _resolve_signed_at(document=document)
+
+    status_changed = not _status_matches(controle_item.status, planned_status)
+    group_changed = controle_item.group_id != planned_group_id
+    if not status_changed and not group_changed:
+        return ControleReconcileResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=controle_item.item_id,
+            updated=False,
+            skipped=True,
+            skip_reason="already_up_to_date",
+            group_id=planned_group_id,
+            status_label=planned_status,
+        )
+
+    if dry_run:
+        return ControleReconcileResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=controle_item.item_id,
+            updated=True,
+            skipped=False,
+            group_id=planned_group_id,
+            status_label=planned_status,
+        )
+
+    update_controle_item_progress(
+        api_token=api_token,
+        item_id=controle_item.item_id,
+        group_id=planned_group_id,
+        status_label=planned_status,
+        signed_at=planned_signed_at,
+        current_group_id=controle_item.group_id,
+    )
+    return ControleReconcileResult(
+        document_id=document.document_id,
+        document_name=document.name,
+        monday_item_id=controle_item.item_id,
+        updated=True,
+        skipped=False,
+        group_id=planned_group_id,
+        status_label=planned_status,
+    )
+
+
 def sync_controle_from_autentique(
     *,
     monday_api_token: str | None = None,
     autentique_api_token: str | None = None,
     dry_run: bool = False,
     max_pages: int = 50,
+    update_existing: bool = True,
 ) -> ControleSyncResult:
-    """Cria itens faltantes no Controle Assinaturas a partir do Autentique."""
+    """Cria ou atualiza itens no Controle Assinaturas a partir do Autentique."""
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
@@ -168,11 +307,95 @@ def sync_controle_from_autentique(
     groups = load_controle_board_groups(api_token=monday_token)
     results: list[ControleSyncItemResult] = []
     created = 0
+    updated = 0
     skipped = 0
     failed = 0
     already = 0
 
     for document in documents:
+        existing_item = index.get_item(document.document_id)
+        if existing_item and update_existing:
+            if dry_run:
+                reconcile = reconcile_controle_item_from_document(
+                    document=document,
+                    controle_item=existing_item,
+                    api_token=monday_token,
+                    groups=groups,
+                    dry_run=True,
+                )
+                action = "would_update" if reconcile.updated else "unchanged"
+                if reconcile.updated:
+                    updated += 1
+                else:
+                    already += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action=action,
+                        monday_item_id=existing_item.item_id,
+                        detail=json.dumps(
+                            {
+                                "group_id": reconcile.group_id,
+                                "status": reconcile.status_label,
+                                "skip_reason": reconcile.skip_reason,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ),
+                )
+                continue
+
+            try:
+                reconcile = reconcile_controle_item_from_document(
+                    document=document,
+                    controle_item=existing_item,
+                    api_token=monday_token,
+                    groups=groups,
+                )
+            except MondayClientError as exc:
+                failed += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="failed",
+                        monday_item_id=existing_item.item_id,
+                        detail=str(exc),
+                    ),
+                )
+                continue
+
+            if reconcile.updated:
+                updated += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="updated",
+                        monday_item_id=existing_item.item_id,
+                        detail=json.dumps(
+                            {
+                                "group_id": reconcile.group_id,
+                                "status": reconcile.status_label,
+                            },
+                            ensure_ascii=False,
+                        ),
+                    ),
+                )
+            else:
+                already += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="unchanged",
+                        monday_item_id=existing_item.item_id,
+                        detail=reconcile.skip_reason,
+                    ),
+                )
+            continue
+
         if index.matches_document(document):
             already += 1
             results.append(
@@ -238,11 +461,18 @@ def sync_controle_from_autentique(
         total_autentique=len(documents),
         already_in_monday=already,
         created=created,
+        updated=updated,
         skipped=skipped,
         failed=failed,
         dry_run=dry_run,
         items=tuple(results),
     )
+
+
+def _status_matches(current: str | None, expected: str) -> bool:
+    if not current:
+        return False
+    return current.casefold().strip() == expected.casefold().strip()
 
 
 def _create_controle_item(

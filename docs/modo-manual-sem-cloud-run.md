@@ -6,7 +6,7 @@ Enquanto o serviço 24h no Google Cloud não estiver no ar, dá para usar **bot�
 
 | O que você quer | Onde clicar no GitHub | Quando usar |
 |-----------------|----------------------|-------------|
-| Criar itens faltantes no **Controle Assinaturas** | Actions → **Sync Controle Assinaturas** | Novos contratos no Autentique que ainda não aparecem no Monday |
+| Criar/atualizar itens no **Controle Assinaturas** | Actions → **Sync Controle Assinaturas** | Novos contratos ou status/grupo desatualizado |
 | Registrar **um** contrato específico | Actions → **Registrar contrato no Controle** | Só um documento novo (você tem o ID) |
 | Processar contrato **totalmente assinado** (Drive + Monday) | Actions → **Test contrato assinado** | Depois que Jan e Luciano assinaram |
 
@@ -16,7 +16,8 @@ Enquanto o serviço 24h no Google Cloud não estiver no ar, dá para usar **bot�
 2. Escolha **Sync Controle Assinaturas (Autentique)**
 3. Clique **Run workflow**
 4. Primeira vez: deixe **dry_run = true** (só simula, não cria nada)
-5. Veja o log — se estiver ok, rode de novo com **dry_run = false**
+5. Veja o log — confira `created` (novos) e `updated` (status/grupo corrigidos)
+6. Se estiver ok, rode de novo com **dry_run = false**
 
 **Resultado esperado:** itens novos no grupo **Jan** (com Tipo), sem duplicar os que já existem.
 
@@ -43,8 +44,8 @@ Enquanto o serviço 24h no Google Cloud não estiver no ar, dá para usar **bot�
 
 ## O que podemos adiantar no código (sem deploy)
 
-- Implementar `signature.accepted` (atualizar status quando Jan ou Luciano assina)
-- Melhorar o sync para **atualizar** itens existentes (mover Jan → Luciano, status “Aguardando outros”)
+- Implementar `signature.accepted` (atualizar status quando Jan ou Luciano assina) — **feito no código; ativo após deploy**
+- Melhorar o sync para **atualizar** itens existentes (mover Jan → Luciano, status “Aguardando outros”) — **feito**
 - Mesclar PRs pendentes no GitHub
 
 ## Secrets necessários no GitHub

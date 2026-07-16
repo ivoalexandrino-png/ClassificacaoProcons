@@ -21,6 +21,7 @@ from classificacao_procons.contratos.contratos_enrichment import (
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
     process_document_created_webhook_event,
+    process_signature_accepted_webhook_event,
     register_document_in_controle,
     sync_controle_from_autentique,
 )
@@ -68,6 +69,13 @@ def _dispatch_autentique_event(
             autentique_api_token=options.autentique_api_token,
         )
         return
+    if event.event_type == "signature.accepted":
+        process_signature_accepted_webhook_event(
+            event,
+            monday_api_token=options.monday_api_token,
+            autentique_api_token=options.autentique_api_token,
+        )
+        return
     if event.event_type == "document.finished":
         process_finished_webhook_event(event, options=options)
         return
@@ -75,7 +83,11 @@ def _dispatch_autentique_event(
 
 def _run_sync_controle(args: argparse.Namespace) -> int:
     try:
-        result = sync_controle_from_autentique(dry_run=args.dry_run, max_pages=args.max_pages)
+        result = sync_controle_from_autentique(
+            dry_run=args.dry_run,
+            max_pages=args.max_pages,
+            update_existing=not args.create_only,
+        )
     except ControleSyncError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 1
@@ -84,10 +96,15 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
         "total_autentique": result.total_autentique,
         "already_in_monday": result.already_in_monday,
         "created": result.created,
+        "updated": result.updated,
         "skipped": result.skipped,
         "failed": result.failed,
         "dry_run": result.dry_run,
-        "items": [item.__dict__ for item in result.items if item.action != "already_exists"],
+        "items": [
+            item.__dict__
+            for item in result.items
+            if item.action not in ("already_exists", "unchanged")
+        ],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if result.failed == 0 else 1
@@ -150,7 +167,8 @@ def _make_handler(*, options: ContractPipelineOptions, webhook_secret: str | Non
             self.end_headers()
             self.wfile.write(b'{"received":true}')
 
-            if event.event_type not in ("document.created", "document.finished"):
+            supported_events = ("document.created", "signature.accepted", "document.finished")
+            if event.event_type not in supported_events:
                 return
 
             def _process() -> None:
@@ -256,7 +274,7 @@ def _run_serve(args: argparse.Namespace) -> int:
     handler = _make_handler(options=options, webhook_secret=webhook_secret)
     server = ThreadingHTTPServer((args.host, args.port), handler)
     print(f"Webhook de contratos escutando em http://{args.host}:{args.port}/webhooks/autentique")
-    print("Eventos: document.created, document.finished")
+    print("Eventos: document.created, signature.accepted, document.finished")
     if not webhook_secret:
         print("Aviso: AUTENTIQUE_WEBHOOK_SECRET não configurado; assinatura não será validada.")
     try:
@@ -286,10 +304,15 @@ def main(argv: list[str] | None = None) -> int:
 
     sync_parser = subparsers.add_parser(
         "sync-controle",
-        help="Cria itens faltantes no Controle Assinaturas a partir do Autentique",
+        help="Cria ou atualiza itens no Controle Assinaturas a partir do Autentique",
     )
     sync_parser.add_argument("--dry-run", action="store_true")
     sync_parser.add_argument("--max-pages", type=int, default=50)
+    sync_parser.add_argument(
+        "--create-only",
+        action="store_true",
+        help="Não atualiza itens existentes (somente cria faltantes)",
+    )
     sync_parser.set_defaults(func=_run_sync_controle)
 
     register_parser = subparsers.add_parser(

@@ -214,6 +214,14 @@ def find_controle_item_by_autentique_id(
 class ControleAssinaturasIndex:
     document_ids: frozenset[str]
     exact_names: frozenset[str]
+    items_by_document_id: tuple[tuple[str, ControleAssinaturasItem], ...] = ()
+
+    def get_item(self, document_id: str) -> ControleAssinaturasItem | None:
+        target = document_id.casefold().strip()
+        for indexed_id, item in self.items_by_document_id:
+            if indexed_id == target:
+                return item
+        return None
 
     def matches_document(self, document: object) -> bool:
         """Verifica duplicata somente pelo ID do Autentique (evita falso positivo por nome)."""
@@ -251,6 +259,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
     """Indexa documentos já presentes no Controle Assinaturas."""
     document_ids: set[str] = set()
     exact_names: set[str] = set()
+    items_by_document_id: dict[str, ControleAssinaturasItem] = {}
     cursor: str | None = None
 
     for _ in range(50):
@@ -262,8 +271,11 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
                 items_page(limit: $limit, cursor: $cursor) {
                   cursor
                   items {
+                    id
                     name
-                    column_values(ids: ["long_text_mkvnwp6d"]) {
+                    group { id }
+                    column_values(ids: ["status", "status_1__1", "long_text_mkvnwp6d"]) {
+                      id
                       text
                       value
                     }
@@ -283,11 +295,29 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
             item_name = str(item.get("name", "")).casefold().strip()
             if item_name:
                 exact_names.add(item_name)
+            columns_by_id = {
+                column["id"]: column for column in item.get("column_values", [])
+            }
+            values = {column_id: column.get("text") for column_id, column in columns_by_id.items()}
+            signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
+            group = item.get("group") or {}
+            controle_item = ControleAssinaturasItem(
+                item_id=str(item["id"]),
+                name=str(item.get("name", "")),
+                status=values.get(CONTROLE_COL_STATUS),
+                tipo=values.get(CONTROLE_COL_TIPO),
+                signature_link=signature_link or None,
+                group_id=str(group.get("id")) if group.get("id") else None,
+            )
+            linked_ids: set[str] = set()
             for column in item.get("column_values", []):
                 text = str(column.get("text") or "")
                 value = str(column.get("value") or "")
                 for token in _extract_document_ids_from_text(f"{text}\n{value}"):
                     document_ids.add(token)
+                    linked_ids.add(token)
+            for token in linked_ids:
+                items_by_document_id[token] = controle_item
 
         cursor = page.get("cursor")
         if not cursor:
@@ -296,6 +326,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
     return ControleAssinaturasIndex(
         document_ids=frozenset(document_ids),
         exact_names=frozenset(exact_names),
+        items_by_document_id=tuple(items_by_document_id.items()),
     )
 
 
@@ -565,7 +596,54 @@ def _to_controle_item(
         tipo=values.get(CONTROLE_COL_TIPO),
         signature_link=signature_link or None,
         related_contract_item_ids=related_ids,
+        group_id=str(item.get("group", {}).get("id")) if item.get("group", {}).get("id") else None,
     )
+
+
+def update_controle_item_progress(
+    *,
+    api_token: str,
+    item_id: str,
+    group_id: str,
+    status_label: str,
+    signed_at: date | None = None,
+    current_group_id: str | None = None,
+) -> None:
+    """Atualiza status/grupo de item pendente no Controle (sem alterar Tipo)."""
+    column_values: dict[str, object] = {
+        CONTROLE_COL_STATUS: {"label": status_label},
+    }
+    if signed_at is not None:
+        column_values[CONTROLE_COL_DATA_ASSINATURA] = {"date": signed_at.isoformat()}
+
+    _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+          change_multiple_column_values(
+            board_id: $boardId
+            item_id: $itemId
+            column_values: $columnValues
+          ) { id }
+        }
+        """,
+        variables={
+            "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+            "itemId": item_id,
+            "columnValues": json.dumps(column_values),
+        },
+    )
+
+    if group_id and group_id != current_group_id:
+        _graphql_request(
+            api_token=api_token,
+            query="""
+            mutation ($itemId: ID!, $groupId: String!) {
+              move_item_to_group(item_id: $itemId, group_id: $groupId) { id }
+            }
+            """,
+            variables={"itemId": item_id, "groupId": group_id},
+        )
 
 
 def update_controle_assinado(

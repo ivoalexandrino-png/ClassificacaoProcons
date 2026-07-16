@@ -9,6 +9,7 @@ Fica na internet 24h escutando eventos do Autentique:
 | Evento | O que faz |
 |--------|-----------|
 | `document.created` | Cria item no Monday **Controle Assinaturas** (grupo Jan/Luciano, com Tipo só no grupo Jan) |
+| `signature.accepted` | Atualiza status e move entre grupos Jan/Luciano quando alguém assina |
 | `document.finished` | Baixa PDF assinado, extrai dados com Gemini, salva no Drive e atualiza Monday |
 
 Quando um contrato é totalmente assinado (`document.finished`):
@@ -65,7 +66,7 @@ Enviar esta URL ao jurídico.
 1. https://painel.autentique.com.br → Perfil → Webhooks
 2. Novo endpoint
 3. URL: a URL acima
-4. Eventos: `document.created` e `document.finished`
+4. Eventos: `document.created`, `signature.accepted` e `document.finished`
 5. Copiar o **secret** gerado
 6. Salvar no Secret Manager:
 
