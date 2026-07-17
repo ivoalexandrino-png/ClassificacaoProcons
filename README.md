@@ -115,6 +115,7 @@ Setup sem pasta local (GitHub): [`docs/ativar-24h-simples.md`](docs/ativar-24h-s
 | `MONDAY_BOARD_NAME` / `MONDAY_BOARD_ID` | Procon (opcional) | Board de reclamações |
 | `GEMINI_API_KEY` | Elaboração / contratos | Chave Gemini |
 | `GEMINI_MODEL` | Opcional | Override do modelo (padrão `gemini-3.5-flash`) |
+| `AUTENTIQUE_API_TOKEN` | Contratos | API token Autentique |
 | `AUTENTIQUE_WEBHOOK_SECRET` | Webhook contratos | Validação de assinatura |
 
 Em produção, secrets ficam no **Secret Manager** / GitHub Secrets — nunca no repositório.
@@ -160,10 +161,13 @@ print(result.portal_url, result.access_code)
 
 ```bash
 contratos-webhook serve --port 8080
+contratos-webhook serve-monday --port 8080
 contratos-webhook process --document-id "DOC_ID"
 contratos-webhook sync-controle
 contratos-webhook register-controle --document-id "DOC_ID"
 ```
+
+`serve` recebe eventos do Autentique; `serve-monday` recebe o evento de criação de item no quadro **Contratos** (Monday) para enriquecimento automático.
 
 ## Automação 24h
 
