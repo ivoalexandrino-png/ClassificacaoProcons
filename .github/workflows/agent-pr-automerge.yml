@@ -1,0 +1,101 @@
+name: Agent PR auto-merge
+
+# Habilita auto-merge (zero clique) em PRs criados por Cloud Agents e automações.
+# Aplica a qualquer branch com prefixo cursor/ (Procon, Contratos, futuros agentes).
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare-and-automerge:
+    if: startsWith(github.event.pull_request.head.ref, 'cursor/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare PR and enable auto-merge
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+
+            let { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            });
+
+            if (pr.state !== "open") {
+              core.info(`PR #${pullNumber} is not open (${pr.state}); skipping.`);
+              return;
+            }
+
+            if (pr.draft) {
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pullNumber,
+                draft: false,
+              });
+              ({ data: pr } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              }));
+              core.info(`Marked PR #${pullNumber} as ready for review.`);
+            }
+
+            if (pr.draft) {
+              core.info(`PR #${pullNumber} is still draft; waiting for ready_for_review.`);
+              return;
+            }
+
+            if (pr.auto_merge !== null) {
+              core.info(`Auto-merge already configured for PR #${pullNumber}.`);
+              return;
+            }
+
+            try {
+              await github.graphql(
+                `mutation ($pullRequestId: ID!) {
+                  enablePullRequestAutoMerge(input: {
+                    pullRequestId: $pullRequestId
+                    mergeMethod: MERGE
+                  }) {
+                    pullRequest { number }
+                  }
+                }`,
+                { pullRequestId: pr.node_id },
+              );
+              core.info(`Enabled auto-merge for PR #${pullNumber}.`);
+            } catch (error) {
+              core.warning(
+                `Could not enable auto-merge for PR #${pullNumber}: ${error.message}`,
+              );
+
+              const { data: refreshed } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              });
+
+              if (refreshed.mergeable && refreshed.mergeable_state === "clean") {
+                await github.rest.pulls.merge({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                  merge_method: "merge",
+                });
+                core.info(`Merged PR #${pullNumber} directly (no pending requirements).`);
+              } else {
+                throw error;
+              }
+            }
