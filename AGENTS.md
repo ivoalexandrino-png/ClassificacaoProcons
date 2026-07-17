@@ -17,7 +17,9 @@ pytest
 ## Estrutura
 
 - `src/classificacao_procons/email/` — parser e cliente Gmail
+- `src/classificacao_procons/juridico/` — agente jurídico (intimações, DataJud, providências)
 - `src/classificacao_procons/cli.py` — CLI `procon-email`
+- `src/classificacao_procons/juridico/cli.py` — CLI `juridico`
 - `tests/` — testes unitários
 
 ## Segredos

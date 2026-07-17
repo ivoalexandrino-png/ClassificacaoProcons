@@ -1,6 +1,6 @@
 # ClassificacaoProcons
 
-Agente de triagem e cadastro de reclamações do Procon-SP, com automação adicional de contratos assinados (Autentique).
+Agente de triagem e cadastro de reclamações do Procon-SP, com automação adicional de contratos assinados (Autentique) e agente jurídico de intimações judiciais.
 
 ## O que o repositório faz
 
@@ -34,6 +34,18 @@ Servidor de webhooks (`contratos-webhook`) que reage a eventos do Autentique e d
 | `document.finished` (Autentique) | Baixa o PDF assinado, extrai dados com Gemini, salva no Drive e atualiza Monday |
 | Item criado no quadro Contratos (Monday) | Enriquece o item com dados extraídos por Gemini |
 
+### 3. Agente jurídico (intimações → andamento → Monday)
+
+CLI `juridico` que monitora a caixa do jurídico em busca de intimações judiciais e pushes processuais e, para cada e-mail não lido:
+
+1. Extrai **número CNJ**, tipo (citação, sentença, audiência…), **prazo** e **audiência**
+2. Faz a triagem da **providência** (contestar, manifestar, comparecer, recurso, ciência) com prazo fatal em dias úteis
+3. Consulta o **andamento processual** na API pública do DataJud/CNJ (opcional, `DATAJUD_API_KEY`)
+4. Cadastra a providência no Monday (board `processos`) com prazo fatal e audiência
+5. Emite eventos em `data/juridico-events.jsonl` para os agentes futuros de **peças processuais** e **relatórios contingenciais**
+
+Detalhes em [`docs/agente-juridico.md`](docs/agente-juridico.md).
+
 ## Pré-requisitos
 
 - Python 3.11+
@@ -66,6 +78,8 @@ pip install -e ".[dev]"
 | `GEMINI_API_KEY` | `elaborate` e extração de contratos | Chave da API do Gemini |
 | `AUTENTIQUE_API_TOKEN` | Pipeline de contratos | Token da API do Autentique |
 | `AUTENTIQUE_WEBHOOK_SECRET` | Webhook de contratos (recomendado) | Valida assinatura dos webhooks |
+| `DATAJUD_API_KEY` | Agente jurídico: andamentos | Chave pública da API DataJud/CNJ |
+| `MONDAY_JURIDICO_BOARD_NAME` | — (padrão `processos`) | Board de processos do agente jurídico |
 
 Em produção, todos os segredos ficam no Secret Manager (ver `cloudbuild*.yaml`).
 
@@ -85,6 +99,16 @@ Comandos auxiliares:
 ```bash
 procon-portal --code "..."                 # só portal (download do PDF)
 procon-drive --consumer-name "..." --pdf downloads/arquivo.pdf
+```
+
+## Uso — agente jurídico
+
+```bash
+juridico list                              # intimações não lidas (JSON)
+juridico process                           # triagem + Monday + eventos de handoff
+juridico process --dry-run                 # só mostra a triagem
+juridico andamentos --numero "1001234-56.2026.8.26.0100"  # andamento (DataJud)
+juridico events --type elaborar_peca       # fila para os agentes futuros
 ```
 
 ### Agendamento (a cada 1 hora)
@@ -125,6 +149,7 @@ src/classificacao_procons/
 ├── monday/      # cliente e mapeamento Monday
 ├── gemini/      # cliente Gemini
 ├── contratos/   # Autentique, webhooks, sync Controle Assinaturas
+├── juridico/    # agente jurídico: intimações, DataJud, providências, eventos
 ├── cli.py       # CLI procon-email
 ├── pipeline.py  # pipeline principal (e-mail → portal → Drive → Monday)
 └── response_pipeline.py  # elaboração de respostas
@@ -150,7 +175,10 @@ print(result.portal_url, result.access_code)
 - [x] PDF da resposta + unificação de anexos SAC (`resposta-unificada.pdf` no Drive)
 - [x] Persistência de estado no GitHub Actions (evita reprocessar o mesmo caso)
 - [x] Contratos: webhooks Autentique + Monday, sync Controle Assinaturas
+- [x] Agente jurídico: intimações → triagem → Monday + eventos de handoff
 - [ ] Envio automático no portal Procon
+- [ ] Agente de elaboração/protocolo de peças processuais (consome `elaborar_peca`)
+- [ ] Agente de relatórios contingenciais (consome `atualizar_contingencia`)
 
 ## Validação
 

@@ -28,6 +28,7 @@ dev = [
 
 [project.scripts]
 procon-email = "classificacao_procons.cli:main"
+juridico = "classificacao_procons.juridico.cli:main"
 procon-portal = "classificacao_procons.portal_cli:main"
 procon-drive = "classificacao_procons.drive_cli:main"
 contratos-webhook = "classificacao_procons.contratos.webhook_cli:main"
