@@ -27,11 +27,50 @@ DEFAULT_TOKEN_PATH = "credentials/gmail-token.json"
 PENDING_AUTH_PATH = "credentials/oauth-pending.json"
 LOCALHOST_REDIRECT_URI = "http://localhost"
 
+ENV_OAUTH_CLIENT_JSON = "GMAIL_OAUTH_JSON"
+ENV_TOKEN_JSON = "GMAIL_TOKEN_JSON"
+
 DEFAULT_DRIVE_PARENT_FOLDER_ID = "1Ly7WYusnzXWSMb-T3a6TNCQSSduvB4Wh"
 
 
 class GoogleAuthError(RuntimeError):
     """Erro de autenticação Google."""
+
+
+def _write_credential_file(path: str, content: str) -> None:
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(content)
+    os.chmod(path, 0o600)
+
+
+def materialize_credentials_from_env(
+    *,
+    credentials_path: str = DEFAULT_CREDENTIALS_PATH,
+    token_path: str = DEFAULT_TOKEN_PATH,
+) -> None:
+    """Cria os arquivos de credenciais a partir das variáveis de ambiente.
+
+    Em ambientes sem a pasta ``credentials/`` (Cloud Agents, Cloud Run, CI),
+    os secrets ``GMAIL_OAUTH_JSON`` e ``GMAIL_TOKEN_JSON`` chegam como
+    variáveis de ambiente; este helper os grava em disco no primeiro uso.
+    Arquivos já existentes nunca são sobrescritos.
+    """
+    for env_name, path in (
+        (ENV_OAUTH_CLIENT_JSON, credentials_path),
+        (ENV_TOKEN_JSON, token_path),
+    ):
+        if os.path.exists(path):
+            continue
+        raw = os.environ.get(env_name, "").strip()
+        if not raw:
+            continue
+        try:
+            json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        _write_credential_file(path, raw)
 
 
 def _save_pending_auth(flow: InstalledAppFlow, state: str) -> None:
@@ -125,6 +164,7 @@ def save_token_from_code(
 
 def load_credentials(token_path: str = DEFAULT_TOKEN_PATH) -> Credentials:
     """Carrega credenciais salvas."""
+    materialize_credentials_from_env(token_path=token_path)
     if not os.path.exists(token_path):
         raise GoogleAuthError("Google ainda não conectado. Rode: procon-email auth")
 
@@ -142,6 +182,7 @@ def load_credentials(token_path: str = DEFAULT_TOKEN_PATH) -> Credentials:
 
 def has_valid_token(token_path: str = DEFAULT_TOKEN_PATH) -> bool:
     """Verifica se Gmail e Drive estão autorizados."""
+    materialize_credentials_from_env(token_path=token_path)
     if not os.path.exists(token_path):
         return False
 
