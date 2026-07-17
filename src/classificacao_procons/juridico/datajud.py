@@ -20,8 +20,21 @@ class DataJudError(RuntimeError):
     """Erro ao consultar a API pública do DataJud."""
 
 
+def _normalize_api_key(raw: str) -> str:
+    """Remove um prefixo ``APIKey``/``ApiKey`` colado junto ao valor do secret.
+
+    O header enviado é ``Authorization: APIKey {key}``; se o secret já vier com
+    o prefixo (formato comum na documentação do DataJud), ele seria duplicado
+    e a API responderia HTTP 401.
+    """
+    cleaned = raw.strip()
+    if cleaned.lower().startswith("apikey"):
+        cleaned = cleaned[len("apikey"):].lstrip(" :").strip()
+    return cleaned
+
+
 def get_api_key_from_env() -> str | None:
-    api_key = os.environ.get(ENV_DATAJUD_API_KEY, "").strip()
+    api_key = _normalize_api_key(os.environ.get(ENV_DATAJUD_API_KEY, ""))
     return api_key or None
 
 
@@ -54,7 +67,7 @@ def fetch_case_movements(
     limit: int = 20,
 ) -> list[CaseMovement]:
     """Busca os andamentos mais recentes de um processo pelo número CNJ."""
-    key = api_key or get_api_key_from_env()
+    key = _normalize_api_key(api_key) if api_key else get_api_key_from_env()
     if not key:
         raise DataJudError(
             "DATAJUD_API_KEY não configurada. "

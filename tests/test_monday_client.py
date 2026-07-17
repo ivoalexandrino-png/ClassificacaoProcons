@@ -50,7 +50,10 @@ UPDATE_ITEM_RESPONSE = {"change_multiple_column_values": {"id": "999"}}
 
 
 class TestMondayClient:
-    def test_should_return_none_when_token_missing(self) -> None:
+    def test_should_return_none_when_token_missing(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("MONDAY_API_TOKEN", raising=False)
         result = register_complaint(_processed_complaint(), api_token=None)
         assert result is None
 
