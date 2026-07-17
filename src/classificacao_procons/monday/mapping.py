@@ -18,6 +18,7 @@ FIELD_COMPLAINT_DATE = "complaint_date"
 FIELD_SAC_DEADLINE = "sac_deadline"
 FIELD_LEGAL_DEADLINE = "legal_deadline"
 FIELD_CAUSE = "cause"
+FIELD_ORIGIN = "origin"
 FIELD_DOCS_SAC = "docs_sac"
 FIELD_STATUS = "status"
 FIELD_RESPONSE_DATE = "response_date"
@@ -35,8 +36,14 @@ FIELD_TITLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     FIELD_PROTOCOL: ("cip", "fa", "protocolo", "numero"),
     FIELD_CPF: ("cpf",),
     FIELD_COMPLAINT_DATE: ("data reclamacao", "data da reclamacao", "data reclama", "abertura"),
-    FIELD_SAC_DEADLINE: ("prazo sac",),
-    FIELD_LEGAL_DEADLINE: ("prazo juridico", "prazo legal"),
+    FIELD_SAC_DEADLINE: ("prazo sac", "prazo resposta sac", "resposta sac"),
+    FIELD_LEGAL_DEADLINE: (
+        "prazo juridico",
+        "prazo legal",
+        "prazo resposta juridico",
+        "resposta juridico",
+    ),
+    FIELD_ORIGIN: ("origem",),
     FIELD_CAUSE: ("causa", "motivo", "classificacao", "assunto"),
     FIELD_DOCS_SAC: ("docs sac",),
     FIELD_STATUS: ("status",),
@@ -158,6 +165,22 @@ def sanitize_column_values(
     return sanitized
 
 
+def _should_apply_cause_to_column(column: MondayColumn) -> bool:
+    """Só preenche classificação na coluna Causa 1 (ou Classificação)."""
+    normalized = _normalize_title(column.title)
+    if "causa 2" in normalized:
+        return False
+    if column.column_type in {"status", "color"}:
+        return "causa 1" in normalized or "classificacao" in normalized
+    return False
+
+
+def _pdf_link_text(column_title: str) -> str:
+    if "notificacao" in _normalize_title(column_title):
+        return "Notificação Procon"
+    return "PDF Procon"
+
+
 def build_column_values(
     columns: list[MondayColumn],
     *,
@@ -170,6 +193,7 @@ def build_column_values(
     sac_deadline: date | None,
     legal_deadline: date | None,
     cause: str,
+    origin_label: str | None = None,
 ) -> dict[str, Any]:
     """Monta valores de colunas para create_item."""
     values: dict[str, str | date | None] = {
@@ -182,6 +206,7 @@ def build_column_values(
         FIELD_SAC_DEADLINE: sac_deadline,
         FIELD_LEGAL_DEADLINE: legal_deadline,
         FIELD_CAUSE: cause,
+        FIELD_ORIGIN: origin_label,
     }
 
     column_values: dict[str, Any] = {}
@@ -194,14 +219,23 @@ def build_column_values(
         if raw_value in (None, ""):
             continue
 
-        if field == FIELD_CAUSE and column.column_type in {"status", "color"}:
+        if field == FIELD_PDF_URL and column.column_type == "file":
+            continue
+
+        if field == FIELD_CAUSE:
+            if not _should_apply_cause_to_column(column):
+                continue
             mapped_cause = map_procon_cause_to_monday_status_label(str(raw_value))
             if mapped_cause is None:
                 continue
             column_values[column.id] = {"label": mapped_cause}
             continue
 
-        column_values[column.id] = format_column_value(column.column_type, raw_value)
+        column_values[column.id] = format_column_value(
+            column.column_type,
+            raw_value,
+            link_text=_pdf_link_text(column.title) if field == FIELD_PDF_URL else "PDF Procon",
+        )
 
     return column_values
 
