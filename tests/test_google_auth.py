@@ -12,6 +12,7 @@ from classificacao_procons.google_auth import (
     GoogleAuthError,
     _normalize_auth_code,
     get_authorization_url,
+    materialize_credentials_from_env,
     save_token_from_code,
 )
 
@@ -116,3 +117,70 @@ def test_save_token_from_code_should_raise_when_pending_missing_and_not_remote(
             token_path=str(token),
             remote=False,
         )
+
+
+class TestMaterializeCredentialsFromEnv:
+    def test_should_write_files_from_env_when_missing(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        credentials_path = tmp_path / "creds" / "gmail-oauth.json"
+        token_path = tmp_path / "creds" / "gmail-token.json"
+        monkeypatch.setenv("GMAIL_OAUTH_JSON", '{"installed": {"client_id": "abc"}}')
+        monkeypatch.setenv("GMAIL_TOKEN_JSON", '{"token": "xyz", "scopes": []}')
+
+        materialize_credentials_from_env(
+            credentials_path=str(credentials_path),
+            token_path=str(token_path),
+        )
+
+        assert json.loads(credentials_path.read_text()) == {"installed": {"client_id": "abc"}}
+        assert json.loads(token_path.read_text()) == {"token": "xyz", "scopes": []}
+
+    def test_should_not_overwrite_existing_files(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        token_path = tmp_path / "gmail-token.json"
+        token_path.write_text('{"token": "original"}', encoding="utf-8")
+        monkeypatch.setenv("GMAIL_TOKEN_JSON", '{"token": "novo"}')
+
+        materialize_credentials_from_env(
+            credentials_path=str(tmp_path / "gmail-oauth.json"),
+            token_path=str(token_path),
+        )
+
+        assert json.loads(token_path.read_text()) == {"token": "original"}
+
+    def test_should_ignore_invalid_json_in_env(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        token_path = tmp_path / "gmail-token.json"
+        monkeypatch.setenv("GMAIL_TOKEN_JSON", "não é json")
+
+        materialize_credentials_from_env(
+            credentials_path=str(tmp_path / "gmail-oauth.json"),
+            token_path=str(token_path),
+        )
+
+        assert not token_path.exists()
+
+    def test_should_do_nothing_when_env_is_empty(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("GMAIL_OAUTH_JSON", raising=False)
+        monkeypatch.delenv("GMAIL_TOKEN_JSON", raising=False)
+        token_path = tmp_path / "gmail-token.json"
+
+        materialize_credentials_from_env(
+            credentials_path=str(tmp_path / "gmail-oauth.json"),
+            token_path=str(token_path),
+        )
+
+        assert not token_path.exists()
