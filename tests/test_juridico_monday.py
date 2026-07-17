@@ -61,6 +61,10 @@ class TestResolveJuridicoFieldForColumn:
     def test_should_resolve_prazo_fatal_before_generic_prazo(self) -> None:
         assert resolve_juridico_field_for_column("Prazo Fatal") == "due_date"
 
+    def test_should_resolve_fatal_column_from_real_board(self) -> None:
+        # Título real da coluna de prazo no quadro "prazos"
+        assert resolve_juridico_field_for_column("Fatal") == "due_date"
+
     def test_should_resolve_audiencia_column(self) -> None:
         assert resolve_juridico_field_for_column("Audiência") == "hearing_datetime"
 
@@ -249,6 +253,61 @@ class TestLoadJuridicoBoardContext:
             )
 
 
+class TestFindExistingItemIdByName:
+    def test_should_return_id_when_name_matches_exactly(self) -> None:
+        response = {
+            "boards": [
+                {
+                    "items_page": {
+                        "items": [
+                            {"id": "12", "name": "1001234-56.2026.8.26.0100 — Outra coisa"},
+                            {
+                                "id": "34",
+                                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                            },
+                        ],
+                    },
+                },
+            ],
+        }
+        with patch.object(juridico_monday, "_graphql_request", return_value=response):
+            found = juridico_monday._find_existing_item_id_by_name(
+                api_token="token-teste",
+                board_id="123",
+                item_name="1001234-56.2026.8.26.0100 — Apresentar contestação",
+            )
+        assert found == "34"
+
+    def test_should_return_none_when_only_partial_match_exists(self) -> None:
+        response = {
+            "boards": [
+                {
+                    "items_page": {
+                        "items": [
+                            {"id": "12", "name": "1001234-56.2026.8.26.0100 — Analisar recurso"},
+                        ],
+                    },
+                },
+            ],
+        }
+        with patch.object(juridico_monday, "_graphql_request", return_value=response):
+            found = juridico_monday._find_existing_item_id_by_name(
+                api_token="token-teste",
+                board_id="123",
+                item_name="1001234-56.2026.8.26.0100 — Apresentar contestação",
+            )
+        assert found is None
+
+    def test_should_return_none_when_board_is_missing(self) -> None:
+        with patch.object(juridico_monday, "_graphql_request", return_value={"boards": []}):
+            found = juridico_monday._find_existing_item_id_by_name(
+                api_token="token-teste",
+                board_id="123",
+                item_name="qualquer",
+            )
+        assert found is None
+
+
 class TestRegisterProvidencia:
     def test_should_return_none_when_token_is_missing(
         self,
@@ -270,6 +329,7 @@ class TestRegisterProvidencia:
                 return_value=_board_context(),
             ),
             patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_find_existing_item_id_by_name", return_value=None),
             patch.object(juridico_monday, "_create_item", return_value="777") as create_item,
             patch.object(juridico_monday, "_apply_complaint_column_values") as apply_values,
         ):
@@ -312,6 +372,37 @@ class TestRegisterProvidencia:
         assert result.item_id == "555"
         create_item.assert_not_called()
 
+    def test_should_skip_duplicate_when_item_with_same_name_exists(self) -> None:
+        """Dois e-mails distintos da mesma intimação não podem duplicar o item."""
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(
+                juridico_monday,
+                "_find_existing_item_id_by_name",
+                return_value="999",
+            ) as find_by_name,
+            patch.object(juridico_monday, "_create_item") as create_item,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-outro-email",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is True
+        assert result.item_id == "999"
+        create_item.assert_not_called()
+        assert find_by_name.call_args.kwargs["item_name"] == (
+            "1001234-56.2026.8.26.0100 — Apresentar contestação"
+        )
+
 
 class TestRegisterAudiencia:
     def test_should_return_none_when_there_is_no_hearing(self) -> None:
@@ -337,6 +428,7 @@ class TestRegisterAudiencia:
                 return_value=_board_context(),
             ) as load_context,
             patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_find_existing_item_id_by_name", return_value=None),
             patch.object(juridico_monday, "_create_item", return_value="888") as create_item,
             patch.object(juridico_monday, "_apply_complaint_column_values") as apply_values,
         ):
