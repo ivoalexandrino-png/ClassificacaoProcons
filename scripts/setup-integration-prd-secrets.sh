@@ -92,7 +92,8 @@ upsert_text_secret "contratos-gemini-key" "${GEMINI_KEY:-}"
 
 echo ""
 echo "Secrets no projeto:"
-gcloud secrets list --project="${PROJECT_ID}" --filter="name:(procon-gmail OR contratos-)" --format="table(name)"
+gcloud secrets list --project="${PROJECT_ID}" --format="table(name)" \
+  | grep -E 'procon-gmail|contratos-' || true
 
 echo ""
 echo "Próximo passo:"
