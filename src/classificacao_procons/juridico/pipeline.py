@@ -282,6 +282,27 @@ def _error_result(
     )
 
 
+def _needs_review_result(
+    notification: JudicialNotificationEmail,
+    *,
+    reason: str,
+) -> ProcessedIntimacao:
+    """E-mail judicial sem dados extraíveis (ex.: PROJUDI sem número CNJ no corpo).
+
+    Fica não lido na caixa e marcado para revisão manual, sem derrubar a execução.
+    """
+    return ProcessedIntimacao(
+        status="needs_review",
+        message_id=notification.message_id,
+        process_number="",
+        notification_type="",
+        action_type="",
+        requires_action=True,
+        summary=f"{notification.subject} — de {notification.sender}",
+        error=reason,
+    )
+
+
 def _process_notification(
     notification: JudicialNotificationEmail,
     *,
@@ -425,7 +446,7 @@ def process_new_intimacoes(
                 fetcher=fetcher,
             )
         except IntimacaoParseError as exc:
-            result = _error_result(notification, error=str(exc))
+            result = _needs_review_result(notification, reason=str(exc))
         except GmailClientError as exc:
             result = _error_result(notification, error=str(exc))
 

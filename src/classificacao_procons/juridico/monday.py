@@ -67,11 +67,15 @@ _FIELD_TITLE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (FIELD_PROVIDENCIA, ("providencia", "acao necessaria")),
     (FIELD_ANALYSIS, ("analise", "o que aconteceu", "parecer", "entendimento")),
     (FIELD_NOTIFICATION_TYPE, ("tipo de intimacao", "tipo intimacao", "tipo")),
-    (FIELD_PROCESS_NUMBER, ("numero do processo", "processo", "cnj")),
+    (FIELD_PROCESS_NUMBER, ("numero do processo", "numero processo", "processo", "cnj")),
     (FIELD_TRIBUNAL, ("tribunal",)),
     (FIELD_COURT_UNIT, ("vara", "juizado", "comarca", "orgao")),
     (FIELD_SUMMARY, ("teor", "resumo", "descricao")),
 )
+
+# Colunas de outros domínios que não devem receber o número CNJ
+# (ex.: "Processo Administrativo" é o campo do Procon nos quadros de legal).
+_PROCESS_NUMBER_TITLE_DENYLIST: tuple[str, ...] = ("administrativo", "consumidor", "procon")
 
 NOTIFICATION_TYPE_LABELS: dict[str, str] = {
     NOTIFICATION_TYPE_CITACAO: "Citação",
@@ -241,9 +245,19 @@ def _load_juridico_board_context(
 def resolve_juridico_field_for_column(title: str) -> str | None:
     """Associa uma coluna do board jurídico a um campo do domínio pelo título."""
     normalized = _normalize_title(title)
+
+    # Colunas de pessoas/atribuição são gerenciadas manualmente pelo jurídico.
+    if "responsavel" in normalized:
+        return None
+
     for field, keywords in _FIELD_TITLE_KEYWORDS:
-        if any(keyword in normalized for keyword in keywords):
-            return field
+        if not any(keyword in normalized for keyword in keywords):
+            continue
+        if field == FIELD_PROCESS_NUMBER and any(
+            denied in normalized for denied in _PROCESS_NUMBER_TITLE_DENYLIST
+        ):
+            return None
+        return field
     return None
 
 
@@ -282,7 +296,9 @@ def build_providencia_column_values(
             continue
 
         if field == FIELD_HEARING:
-            if providencia.hearing_datetime is not None:
+            # Só colunas de data recebem a audiência; "Link Audiência",
+            # "Orientações de Audiência" etc. ficam para preenchimento manual.
+            if column.column_type == "date" and providencia.hearing_datetime is not None:
                 column_values[column.id] = _hearing_column_value(providencia.hearing_datetime)
             continue
 

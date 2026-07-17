@@ -151,6 +151,22 @@ ciência" não gera item (audiência marcada gera item no board de audiências
 mesmo assim). A deduplicação usa a coluna `ID Intimação` (se existir) e o
 estado local `data/juridico-processed.json`.
 
+Proteções do mapeamento (calibradas com os quadros reais):
+
+- A data da audiência só é escrita em colunas do tipo **data** — "Link
+  Audiência" e "Orientações de Audiência" ficam para preenchimento manual.
+- Colunas com "Responsável" no título nunca são preenchidas automaticamente.
+- "Processo Administrativo", "Processos Consumidores" e afins não recebem o
+  número CNJ (pertencem ao domínio Procon/consumidores).
+
+## E-mails sem número CNJ (`needs_review`)
+
+Alguns avisos (ex.: "ENC: [PROJUDI] Informação de intimação/citação") não
+trazem o número do processo no corpo. Eles saem com status `needs_review` no
+resultado do `process`: continuam **não lidos** na caixa, não entram no estado
+local (reaparecem a cada execução) e não derrubam a execução. Trate-os
+manualmente ou responda com o número CNJ para reprocessar.
+
 ## Handoff para os agentes futuros
 
 Cada intimação processada emite eventos append-only em

@@ -70,6 +70,19 @@ class TestResolveJuridicoFieldForColumn:
     def test_should_resolve_analysis_column(self) -> None:
         assert resolve_juridico_field_for_column("Análise do Caso") == "analysis"
 
+    def test_should_resolve_numero_processo_without_do(self) -> None:
+        # Título real do quadro "prazos"
+        assert resolve_juridico_field_for_column("Número Processo") == "process_number"
+
+    def test_should_not_map_procon_or_other_domain_columns_to_process_number(self) -> None:
+        # Títulos reais dos quadros de legal — pertencem a outros domínios
+        assert resolve_juridico_field_for_column("Processo Administrativo") is None
+        assert resolve_juridico_field_for_column("Processos Consumidores") is None
+
+    def test_should_never_map_responsavel_columns(self) -> None:
+        # Coluna real do quadro "audiências" — atribuição manual de pessoa
+        assert resolve_juridico_field_for_column("Responsável por comparecer") is None
+
     def test_should_return_none_for_unrelated_column(self) -> None:
         assert resolve_juridico_field_for_column("Responsável interno") is None
 
@@ -116,6 +129,32 @@ class TestBuildProvidenciaColumnValues:
             message_id="msg-002",
         )
         assert values["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+
+    def test_should_not_write_hearing_into_non_date_columns(self) -> None:
+        """"Link Audiência"/"Orientações de Audiência" (quadro real) ficam manuais."""
+        columns = BOARD_COLUMNS + [
+            MondayColumn(id="col_link_aud", title="Link Audiência", column_type="link"),
+            MondayColumn(
+                id="col_orient",
+                title="Orientações de Audiência",
+                column_type="long_text",
+            ),
+        ]
+        providencia = Providencia(
+            action_type=ACTION_COMPARECER_AUDIENCIA,
+            description="Preparar e comparecer à audiência",
+            requires_action=True,
+            hearing_datetime=datetime(2026, 8, 5, 14, 30),
+        )
+        values = build_providencia_column_values(
+            columns,
+            intimacao=INTIMACAO,
+            providencia=providencia,
+            message_id="msg-005",
+        )
+        assert values["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+        assert "col_link_aud" not in values
+        assert "col_orient" not in values
 
     def test_should_omit_time_when_hearing_has_no_time(self) -> None:
         providencia = Providencia(
