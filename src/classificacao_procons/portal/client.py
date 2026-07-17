@@ -51,6 +51,14 @@ def _labeled_value(lines: list[str], label: str) -> str:
     return ""
 
 
+def _build_cause_text(classification: str, complaint_details: str) -> str:
+    """Combina classificação Procon e detalhes para mapeamento no Monday."""
+    parts = [part.strip() for part in (classification, complaint_details) if part.strip()]
+    if not parts:
+        return ""
+    return " ".join(parts)
+
+
 def _complaint_details(lines: list[str]) -> str:
     start = -1
     for index, line in enumerate(lines):
@@ -123,7 +131,7 @@ def _extract_complaint_from_page(page: Page, access_code: str) -> ProconComplain
     cip_fa_number = _labeled_value(lines, "Protocolo")
     classification = _labeled_value(lines, "Classificação")
     complaint_details = _complaint_details(lines)
-    cause = classification or complaint_details
+    cause = _build_cause_text(classification, complaint_details)
 
     return ProconComplaint(
         access_code=access_code,

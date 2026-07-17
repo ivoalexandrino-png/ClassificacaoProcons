@@ -7,6 +7,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from classificacao_procons.portal.client import (
     ProconPortalError,
+    _build_cause_text,
     _complaint_details,
     _goto_portal_login,
     _labeled_value,
@@ -44,6 +45,15 @@ class TestPortalExtraction:
 
     def test_should_extract_complaint_details(self) -> None:
         assert _complaint_details(SAMPLE_PAGE_LINES) == "Produto não chegou no prazo."
+
+    def test_should_combine_classification_and_details_for_cause(self) -> None:
+        assert (
+            _build_cause_text("Demais Serviços", "Dificuldade para cancelar a assinatura")
+            == "Demais Serviços Dificuldade para cancelar a assinatura"
+        )
+
+    def test_should_use_details_when_classification_is_empty(self) -> None:
+        assert _build_cause_text("", "Cobrança indevida na fatura") == "Cobrança indevida na fatura"
 
 
 class TestPortalNavigation:
