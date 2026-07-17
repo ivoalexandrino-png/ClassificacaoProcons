@@ -1,25 +1,43 @@
 # ClassificacaoProcons
 
-Agente de triagem e cadastro de reclamações do Procon-SP.
+Agente de triagem e cadastro de reclamações do Procon-SP, com automação adicional de contratos assinados (Autentique).
 
-## Escopo atual (MVP — e-mail)
+## O que o repositório faz
 
-Monitora a caixa de entrada do Gmail em busca de notificações de CIP do Procon-SP e extrai:
+### 1. Pipeline Procon (e-mail → portal → Drive → Monday → resposta)
 
-- **URL do portal** (`fornecedor2.procon.sp.gov.br`)
-- **Código de acesso** (único por reclamação)
+Monitora a caixa de entrada do Gmail em busca de notificações de CIP do Procon-SP e, para cada e-mail não lido:
 
-### Critérios de identificação
+1. Extrai a **URL do portal** (`fornecedor2.procon.sp.gov.br`) e o **código de acesso**
+2. Acessa o portal (Playwright) e baixa o PDF da reclamação
+3. Cria pasta no Google Drive (nome da consumidora) e salva o PDF
+4. Cadastra o caso no Monday ("pendentes de resposta"), com origem, prazos e notificação
+5. Marca o e-mail como lido
+
+Depois, o comando `elaborate` gera a resposta com Gemini a partir dos Docs SAC e salva `resposta-unificada.pdf` no Drive.
+
+Critérios de identificação do e-mail:
 
 | Campo | Valor |
 |-------|-------|
 | Remetente | `procon.naoresponder@procon.sp.gov.br` |
 | Assunto | `Fundação Procon-SP - Notificação de emissão de CIP` |
 
+### 2. Pipeline Contratos (Autentique → Monday → Drive)
+
+Servidor de webhooks (`contratos-webhook`) que reage a eventos do Autentique e do Monday:
+
+| Evento | O que faz |
+|--------|-----------|
+| `document.created` (Autentique) | Cria item no Monday **Controle Assinaturas** |
+| `signature.accepted` (Autentique) | Atualiza status e move entre grupos quando alguém assina |
+| `document.finished` (Autentique) | Baixa o PDF assinado, extrai dados com Gemini, salva no Drive e atualiza Monday |
+| Item criado no quadro Contratos (Monday) | Enriquece o item com dados extraídos por Gemini |
+
 ## Pré-requisitos
 
 - Python 3.11+
-- Projeto no [Google Cloud Console](https://console.cloud.google.com/) com **Gmail API** habilitada
+- Projeto no [Google Cloud Console](https://console.cloud.google.com/) com **Gmail API** e **Drive API** habilitadas
 - Credenciais OAuth 2.0 (tipo "Desktop app") salvas em `credentials/gmail-oauth.json`
 
 ## Instalação
@@ -30,90 +48,86 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Configuração do Gmail
+## Configuração
 
-1. Crie credenciais OAuth no Google Cloud Console (Gmail API habilitada).
+### Google (Gmail + Drive)
+
+1. Crie credenciais OAuth no Google Cloud Console.
 2. Baixe o JSON e salve como `credentials/gmail-oauth.json` (não commitar).
-3. Na primeira execução, o fluxo OAuth abrirá o navegador e salvará o token em `credentials/gmail-token.json`.
+3. Rode `procon-email auth` e siga as instruções; o token fica em `credentials/gmail-token.json`.
 
-Variáveis opcionais:
+### Variáveis de ambiente
 
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `GMAIL_CREDENTIALS_PATH` | `credentials/gmail-oauth.json` | Client secrets OAuth |
-| `GMAIL_TOKEN_PATH` | `credentials/gmail-token.json` | Token autorizado |
+| Variável | Obrigatória para | Descrição |
+|----------|------------------|-----------|
+| `GMAIL_CREDENTIALS_PATH` | — (padrão `credentials/gmail-oauth.json`) | Client secrets OAuth |
+| `GMAIL_TOKEN_PATH` | — (padrão `credentials/gmail-token.json`) | Token autorizado |
+| `MONDAY_API_TOKEN` | Cadastro/atualização no Monday | Token da API do Monday |
+| `GEMINI_API_KEY` | `elaborate` e extração de contratos | Chave da API do Gemini |
+| `AUTENTIQUE_API_TOKEN` | Pipeline de contratos | Token da API do Autentique |
+| `AUTENTIQUE_WEBHOOK_SECRET` | Webhook de contratos (recomendado) | Valida assinatura dos webhooks |
 
-## Uso
+Em produção, todos os segredos ficam no Secret Manager (ver `cloudbuild*.yaml`).
 
-### Conectar Google (Gmail + Drive)
+## Uso — pipeline Procon
 
 ```bash
-procon-email auth
+procon-email auth                          # conectar Gmail + Drive
+procon-email process                       # e-mails novos: portal + Drive + Monday
+procon-email process --dry-run             # simular sem executar
+procon-email elaborate                     # gerar respostas (Gemini) para casos com Docs SAC
+procon-email register-monday --access-code "..."  # cadastrar no Monday um caso já salvo no Drive
+procon-email list                          # listar e-mails não lidos (JSON)
 ```
 
-### Processar reclamações novas (fluxo automático)
+Comandos auxiliares:
 
 ```bash
-procon-email process
-```
-
-Isso faz, para cada e-mail **não lido** do Procon:
-1. Lê o e-mail e extrai o código
-2. Acessa o portal e baixa o PDF
-3. Cria pasta no Drive (nome da consumidora) e salva o PDF
-4. Marca o e-mail como lido
-
-Simular sem executar:
-
-```bash
-procon-email process --dry-run
-```
-
-### Agendamento automático (a cada 1 hora)
-
-**Neste ambiente (recomendado):**
-
-```bash
-bash scripts/start-scheduler.sh
-```
-
-Inicia um agendador em background que roda o processamento **a cada 1 hora**.
-Logs em `logs/pipeline.log` e `logs/scheduler.log`.
-
-Para parar:
-
-```bash
-tmux -f /exec-daemon/tmux.portal.conf kill-session -t procon-scheduler
-```
-
-**Em servidor com cron:**
-
-```bash
-bash scripts/install-cron.sh
-```
-
-### Comandos individuais
-
-```bash
-procon-email list          # listar e-mails não lidos
-procon-portal --code "..." # só portal
+procon-portal --code "..."                 # só portal (download do PDF)
 procon-drive --consumer-name "..." --pdf downloads/arquivo.pdf
 ```
 
+### Agendamento (a cada 1 hora)
 
-Saída (JSON):
+- **GitHub Actions:** workflow `procon-hourly.yml` (estado persistido para evitar reprocessar).
+- **Cloud Run Job + Cloud Scheduler:** ver `docs/deploy-24h.md` e `cloudbuild.yaml`.
+- **Neste ambiente de desenvolvimento:** `bash scripts/start-scheduler.sh` (logs em `logs/`); parar com `tmux -f /exec-daemon/tmux.portal.conf kill-session -t procon-scheduler`.
+- **Servidor com cron:** `bash scripts/install-cron.sh`.
 
-```json
-[
-  {
-    "message_id": "abc123",
-    "subject": "Fundação Procon-SP - Notificação de emissão de CIP",
-    "sender": "procon.naoresponder@procon.sp.gov.br",
-    "received_at": "2025-07-14T10:00:00+00:00",
-    "portal_url": "https://fornecedor2.procon.sp.gov.br/login",
-    "access_code": "ABC123-XYZ789"
-  }
-]
+## Uso — pipeline Contratos
+
+```bash
+contratos-webhook serve                      # servidor HTTP p/ webhooks do Autentique (porta 8080)
+contratos-webhook serve-monday               # servidor HTTP p/ webhooks do Monday (quadro Contratos)
+contratos-webhook process --document-id "..."   # processar um documento assinado manualmente
+contratos-webhook sync-controle --dry-run    # sincronizar Controle Assinaturas a partir do Autentique
+contratos-webhook register-controle --document-id "..."  # registrar um documento no Controle
+```
+
+Sem Cloud Run, os workflows do GitHub Actions cobrem o fluxo manualmente (`contratos-sync-controle.yml`, `contratos-register-controle.yml`, `contratos-process-test.yml`) — ver `docs/modo-manual-sem-cloud-run.md`.
+
+## Deploy
+
+| Alvo | Arquivo | Descrição |
+|------|---------|-----------|
+| Cloud Run Job (Procon horário) | `cloudbuild.yaml` | Job `classificacao-procons-worker` disparado pelo Cloud Scheduler |
+| Cloud Run Service (webhook contratos) | `cloudbuild-contratos.yaml` | Serviço `contratos-webhook` (porta 8080) |
+
+Guias em `docs/`: `deploy-24h.md`, `deploy-contratos-webhook.md`, `ativar-24h-simples.md`, `modo-manual-sem-cloud-run.md`.
+
+## Estrutura
+
+```
+src/classificacao_procons/
+├── email/       # parser e cliente Gmail
+├── portal/      # portal Procon (Playwright)
+├── drive/       # Google Drive: upload, leitura, geração de PDF
+├── monday/      # cliente e mapeamento Monday
+├── gemini/      # cliente Gemini
+├── contratos/   # Autentique, webhooks, sync Controle Assinaturas
+├── cli.py       # CLI procon-email
+├── pipeline.py  # pipeline principal (e-mail → portal → Drive → Monday)
+└── response_pipeline.py  # elaboração de respostas
 ```
 
 ## Uso programático (parser)
@@ -135,6 +149,7 @@ print(result.portal_url, result.access_code)
 - [x] Elaboração de resposta com Gemini (requer `GEMINI_API_KEY`)
 - [x] PDF da resposta + unificação de anexos SAC (`resposta-unificada.pdf` no Drive)
 - [x] Persistência de estado no GitHub Actions (evita reprocessar o mesmo caso)
+- [x] Contratos: webhooks Autentique + Monday, sync Controle Assinaturas
 - [ ] Envio automático no portal Procon
 
 ## Validação
