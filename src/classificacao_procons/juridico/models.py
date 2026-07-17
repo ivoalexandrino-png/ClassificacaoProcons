@@ -68,6 +68,26 @@ class CaseMovement:
 
 
 @dataclass(frozen=True)
+class CaseCommunication:
+    """Comunicação do Domicílio Judicial Eletrônico (API Comunica do PJe/CNJ)."""
+
+    text: str
+    communication_type: str | None = None
+    tribunal: str | None = None
+    organ: str | None = None
+    available_date: str | None = None
+    link: str | None = None
+
+
+@dataclass(frozen=True)
+class CaseAnalysis:
+    """Entendimento do caso: o que aconteceu e o que fazer."""
+
+    text: str
+    source: str  # "gemini" ou "heuristica"
+
+
+@dataclass(frozen=True)
 class ProcessedIntimacao:
     """Resultado do fluxo e-mail → triagem → Monday → eventos."""
 
@@ -82,6 +102,9 @@ class ProcessedIntimacao:
     tribunal: str | None = None
     court_unit: str | None = None
     summary: str = ""
+    analysis: str = ""
+    analysis_source: str = ""
+    communications_count: int = 0
     monday_item_url: str | None = None
     monday_error: str | None = None
     events_emitted: list[str] = field(default_factory=list)

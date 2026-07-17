@@ -48,12 +48,14 @@ FIELD_PROVIDENCIA = "providencia"
 FIELD_DUE_DATE = "due_date"
 FIELD_HEARING = "hearing_datetime"
 FIELD_SUMMARY = "summary"
+FIELD_ANALYSIS = "analysis"
 
 _FIELD_TITLE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (FIELD_INTIMACAO_ID, ("id intimacao", "id da intimacao", "message id")),
     (FIELD_DUE_DATE, ("prazo fatal", "prazo final", "prazo")),
     (FIELD_HEARING, ("audiencia",)),
     (FIELD_PROVIDENCIA, ("providencia", "acao necessaria")),
+    (FIELD_ANALYSIS, ("analise", "o que aconteceu", "parecer", "entendimento")),
     (FIELD_NOTIFICATION_TYPE, ("tipo de intimacao", "tipo intimacao", "tipo")),
     (FIELD_PROCESS_NUMBER, ("numero do processo", "processo", "cnj")),
     (FIELD_TRIBUNAL, ("tribunal",)),
@@ -113,6 +115,7 @@ def build_providencia_column_values(
     intimacao: ParsedIntimacao,
     providencia: Providencia,
     message_id: str,
+    analysis: str | None = None,
 ) -> dict[str, Any]:
     """Monta valores de colunas do board jurídico a partir da triagem."""
     values: dict[str, Any] = {
@@ -124,6 +127,7 @@ def build_providencia_column_values(
         FIELD_PROVIDENCIA: providencia.description,
         FIELD_DUE_DATE: providencia.due_date,
         FIELD_SUMMARY: intimacao.summary,
+        FIELD_ANALYSIS: analysis,
     }
 
     column_values: dict[str, Any] = {}
@@ -157,6 +161,7 @@ def register_providencia(
     intimacao: ParsedIntimacao,
     providencia: Providencia,
     message_id: str,
+    analysis: str | None = None,
     api_token: str | None = None,
     board_name: str | None = None,
     group_name: str | None = None,
@@ -200,6 +205,7 @@ def register_providencia(
             intimacao=intimacao,
             providencia=providencia,
             message_id=message_id,
+            analysis=analysis,
         ),
     )
 

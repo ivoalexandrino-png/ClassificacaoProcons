@@ -17,17 +17,28 @@ from classificacao_procons.email.gmail import (
 from classificacao_procons.email.parser import _html_to_text
 from classificacao_procons.google_auth import load_credentials
 from classificacao_procons.juridico.models import JudicialNotificationEmail
-from classificacao_procons.juridico.parser import is_judicial_notification
+from classificacao_procons.juridico.parser import (
+    get_forwarder_emails_from_env,
+    is_judicial_notification,
+)
 
 ENV_GMAIL_QUERY = "JURIDICO_GMAIL_QUERY"
 DEFAULT_GMAIL_QUERY = (
-    '(from:jus.br OR subject:(intimação OR citação OR audiência OR "movimentação processual"))'
+    "(from:jus.br OR subject:(intimação OR citação OR audiência OR "
+    '"movimentação processual" OR "domicílio judicial" OR "comunicação processual"))'
 )
 
 
 def get_gmail_query_from_env() -> str:
     query = os.environ.get(ENV_GMAIL_QUERY, "").strip()
-    return query or DEFAULT_GMAIL_QUERY
+    if query:
+        return query
+
+    forwarders = get_forwarder_emails_from_env()
+    if not forwarders:
+        return DEFAULT_GMAIL_QUERY
+    forwarder_filter = " OR ".join(f"from:{address}" for address in forwarders)
+    return f"({DEFAULT_GMAIL_QUERY} OR {forwarder_filter})"
 
 
 class GmailJuridicoFetcher:
@@ -90,14 +101,14 @@ class GmailJuridicoFetcher:
         subject = _header_value(headers, "Subject")
         sender = _header_value(headers, "From")
 
-        if not is_judicial_notification(subject=subject, sender=sender):
-            return None
-
         text_plain, text_html = _extract_bodies(payload)
         body_text = text_plain or ""
         if text_html:
             body_text = f"{body_text}\n{_html_to_text(text_html)}".strip()
         if not body_text:
+            return None
+
+        if not is_judicial_notification(subject=subject, sender=sender, body=body_text):
             return None
 
         return JudicialNotificationEmail(

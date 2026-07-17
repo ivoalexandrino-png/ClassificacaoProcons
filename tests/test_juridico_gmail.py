@@ -42,12 +42,33 @@ class TestGmailJuridicoFetcher:
         assert result.subject == "Intimação eletrônica"
         assert "1001234-56.2026.8.26.0100" in result.body_text
 
+    def test_should_fetch_forwarded_notification_from_personal_email(self) -> None:
+        body = (
+            "---------- Forwarded message ----------\n"
+            "De: PJe TJSP <naoresponda@tjsp.jus.br>\n\n"
+            "Processo 1001234-56.2026.8.26.0100. Prazo de 15 dias úteis."
+        )
+        service = MagicMock()
+        messages = service.users.return_value.messages.return_value
+        messages.get.return_value.execute.return_value = _build_gmail_message(
+            subject="Fwd: segue",
+            sender="advogado.pessoal@gmail.com",
+            body=body,
+        )
+
+        fetcher = GmailJuridicoFetcher(service)
+        result = fetcher.fetch_notification("msg-fwd")
+
+        assert result is not None
+        assert "1001234-56.2026.8.26.0100" in result.body_text
+
     def test_should_return_none_when_email_is_not_judicial(self) -> None:
         service = MagicMock()
         messages = service.users.return_value.messages.return_value
         messages.get.return_value.execute.return_value = _build_gmail_message(
             subject="Newsletter semanal",
             sender="news@empresa.com.br",
+            body="Confira as novidades da semana e as promoções da loja.",
         )
 
         fetcher = GmailJuridicoFetcher(service)

@@ -51,6 +51,12 @@ class TestIsJudicialNotification:
             sender="PJe TJSP <naoresponda@tjsp.jus.br>",
         )
 
+    def test_should_match_domicilio_judicial_eletronico(self) -> None:
+        assert is_judicial_notification(
+            subject="Domicílio Judicial Eletrônico — nova comunicação processual",
+            sender="nao-responda@comunica.pje.jus.br",
+        )
+
     def test_should_match_when_subject_has_push_keyword(self) -> None:
         assert is_judicial_notification(
             subject="Push: nova movimentação processual",
@@ -63,10 +69,68 @@ class TestIsJudicialNotification:
             sender="alguem@example.com",
         )
 
+    def test_should_match_forwarded_email_with_fwd_prefix(self) -> None:
+        assert is_judicial_notification(
+            subject="Fwd: Intimação eletrônica",
+            sender="advogado.pessoal@gmail.com",
+        )
+
+    def test_should_match_forwarded_email_with_jus_br_in_body(self) -> None:
+        body = (
+            "---------- Forwarded message ----------\n"
+            "De: PJe TJSP <naoresponda@tjsp.jus.br>\n"
+            "Assunto: Expediente\n\n"
+            "Processo 1001234-56.2026.8.26.0100."
+        )
+        assert is_judicial_notification(
+            subject="Olha isso aqui",
+            sender="advogado.pessoal@gmail.com",
+            body=body,
+        )
+
+    def test_should_match_forwarder_email_with_judicial_body(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv(
+            "JURIDICO_FORWARDER_EMAILS",
+            "advogado.pessoal@gmail.com, outro@gmail.com",
+        )
+        assert is_judicial_notification(
+            subject="Segue para providências",
+            sender="Advogado <advogado.pessoal@gmail.com>",
+            body="Processo 1001234-56.2026.8.26.0100 — prazo de 15 dias na 1ª Vara Cível.",
+        )
+
+    def test_should_not_match_forwarder_email_without_judicial_content(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("JURIDICO_FORWARDER_EMAILS", "advogado.pessoal@gmail.com")
+        assert not is_judicial_notification(
+            subject="Almoço amanhã?",
+            sender="advogado.pessoal@gmail.com",
+            body="Confirma o horário do restaurante.",
+        )
+
+    def test_should_match_any_sender_when_body_has_cnj_and_judicial_terms(self) -> None:
+        assert is_judicial_notification(
+            subject="Encaminhando",
+            sender="alguem@example.com",
+            body="Intimação no processo 1001234-56.2026.8.26.0100, prazo de 5 dias.",
+        )
+
     def test_should_not_match_when_sender_and_subject_are_unrelated(self) -> None:
         assert not is_judicial_notification(
             subject="Promoção imperdível",
             sender="marketing@loja.com.br",
+        )
+
+    def test_should_not_match_marketing_email_with_body(self) -> None:
+        assert not is_judicial_notification(
+            subject="Promoção imperdível",
+            sender="marketing@loja.com.br",
+            body="Aproveite 50% de desconto em toda a loja!",
         )
 
 

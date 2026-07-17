@@ -34,14 +34,14 @@ Servidor de webhooks (`contratos-webhook`) que reage a eventos do Autentique e d
 | `document.finished` (Autentique) | Baixa o PDF assinado, extrai dados com Gemini, salva no Drive e atualiza Monday |
 | Item criado no quadro Contratos (Monday) | Enriquece o item com dados extraídos por Gemini |
 
-### 3. Agente jurídico (intimações → andamento → Monday)
+### 3. Agente jurídico (e-mail → processo → análise → Monday)
 
-CLI `juridico` que monitora a caixa do jurídico em busca de intimações judiciais e pushes processuais e, para cada e-mail não lido:
+CLI `juridico`. Os prazos chegam por e-mail — encaminhados do e-mail pessoal para a caixa corporativa (`JURIDICO_FORWARDER_EMAILS`) ou vindos do Domicílio Judicial Eletrônico/andamentos do CNJ — e o Monday é o caminho final. Para cada e-mail não lido:
 
-1. Extrai **número CNJ**, tipo (citação, sentença, audiência…), **prazo** e **audiência**
-2. Faz a triagem da **providência** (contestar, manifestar, comparecer, recurso, ciência) com prazo fatal em dias úteis
-3. Consulta o **andamento processual** na API pública do DataJud/CNJ (opcional, `DATAJUD_API_KEY`)
-4. Cadastra a providência no Monday (board `processos`) com prazo fatal e audiência
+1. Identifica a intimação (direta, DJE ou encaminhada com `Fwd:`/`Enc:`) e extrai **número CNJ**, tipo, **prazo** e **audiência**
+2. **Entra no processo**: busca o teor integral das comunicações (API Comunica/PJe do Domicílio Judicial, sem chave) e os andamentos (DataJud, `DATAJUD_API_KEY`)
+3. **Entende o que aconteceu**: análise caso a caso (Gemini se `GEMINI_API_KEY`, senão resumo heurístico) e triagem da providência com prazo fatal em dias úteis
+4. Cadastra no Monday (board `processos`) com providência, prazo fatal, audiência, teor e análise
 5. Emite eventos em `data/juridico-events.jsonl` para os agentes futuros de **peças processuais** e **relatórios contingenciais**
 
 Detalhes em [`docs/agente-juridico.md`](docs/agente-juridico.md).
@@ -79,6 +79,7 @@ pip install -e ".[dev]"
 | `AUTENTIQUE_API_TOKEN` | Pipeline de contratos | Token da API do Autentique |
 | `AUTENTIQUE_WEBHOOK_SECRET` | Webhook de contratos (recomendado) | Valida assinatura dos webhooks |
 | `DATAJUD_API_KEY` | Agente jurídico: andamentos | Chave pública da API DataJud/CNJ |
+| `JURIDICO_FORWARDER_EMAILS` | Agente jurídico: encaminhados | E-mails pessoais autorizados a encaminhar intimações |
 | `MONDAY_JURIDICO_BOARD_NAME` | — (padrão `processos`) | Board de processos do agente jurídico |
 
 Em produção, todos os segredos ficam no Secret Manager (ver `cloudbuild*.yaml`).
@@ -105,8 +106,9 @@ procon-drive --consumer-name "..." --pdf downloads/arquivo.pdf
 
 ```bash
 juridico list                              # intimações não lidas (JSON)
-juridico process                           # triagem + Monday + eventos de handoff
+juridico process                           # processo + análise + Monday + eventos
 juridico process --dry-run                 # só mostra a triagem
+juridico comunicacoes --numero "1001234-56.2026.8.26.0100"  # teor (Domicílio Judicial)
 juridico andamentos --numero "1001234-56.2026.8.26.0100"  # andamento (DataJud)
 juridico events --type elaborar_peca       # fila para os agentes futuros
 ```

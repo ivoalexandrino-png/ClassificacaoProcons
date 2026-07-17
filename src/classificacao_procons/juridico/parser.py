@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from datetime import date, datetime
@@ -20,6 +21,8 @@ from classificacao_procons.juridico.models import (
 
 JUDICIAL_SENDER_DOMAIN: Final = ".jus.br"
 
+ENV_FORWARDER_EMAILS: Final = "JURIDICO_FORWARDER_EMAILS"
+
 JUDICIAL_SUBJECT_KEYWORDS: Final[tuple[str, ...]] = (
     "intimacao",
     "citacao",
@@ -29,7 +32,25 @@ JUDICIAL_SUBJECT_KEYWORDS: Final[tuple[str, ...]] = (
     "movimentacao processual",
     "andamento processual",
     "diario de justica",
+    "domicilio judicial",
+    "comunicacao processual",
+    "teor da comunicacao",
     "push",
+)
+
+JUDICIAL_BODY_KEYWORDS: Final[tuple[str, ...]] = JUDICIAL_SUBJECT_KEYWORDS + (
+    "vara",
+    "juizado",
+    "tribunal",
+    "poder judiciario",
+    "prazo",
+    "sentenca",
+    "despacho",
+)
+
+_FORWARDED_SENDER_PATTERN = re.compile(
+    r"(?:^|\n)\s*(?:de|from)\s*:\s*[^\n<]*<?([\w.+-]+@[\w.-]+\.jus\.br)>?",
+    re.IGNORECASE,
 )
 
 _SUMMARY_MAX_LENGTH: Final = 600
@@ -76,14 +97,53 @@ def _normalize(value: str) -> str:
     return re.sub(r"\s+", " ", _strip_accents(value).casefold()).strip()
 
 
-def is_judicial_notification(*, subject: str, sender: str) -> bool:
-    """Retorna True para e-mails de tribunais (.jus.br) ou pushes processuais."""
+def get_forwarder_emails_from_env() -> tuple[str, ...]:
+    """E-mails pessoais autorizados a encaminhar intimações (separados por vírgula)."""
+    raw = os.environ.get(ENV_FORWARDER_EMAILS, "")
+    return tuple(
+        address.strip().lower() for address in raw.split(",") if address.strip()
+    )
+
+
+def _has_judicial_signals(*, normalized_subject: str, body: str | None) -> bool:
+    if any(keyword in normalized_subject for keyword in JUDICIAL_SUBJECT_KEYWORDS):
+        return True
+    if not body:
+        return False
+    if extract_process_number(body) is None:
+        return False
+    normalized_body = _normalize(body)
+    return any(keyword in normalized_body for keyword in JUDICIAL_BODY_KEYWORDS)
+
+
+def is_judicial_notification(
+    *,
+    subject: str,
+    sender: str,
+    body: str | None = None,
+) -> bool:
+    """
+    Retorna True para intimações judiciais recebidas por três caminhos:
+
+    - e-mail direto de tribunal/CNJ (remetente ``.jus.br``, inclui o
+      Domicílio Judicial Eletrônico);
+    - encaminhamento do e-mail pessoal cadastrado em ``JURIDICO_FORWARDER_EMAILS``
+      (qualquer conteúdo com sinais judiciais no assunto/corpo);
+    - qualquer remetente, desde que assunto ou corpo tenham sinais judiciais
+      claros (número CNJ + termos processuais, "Fwd:/Enc:" incluídos).
+    """
     sender_address = normalize_email_address(sender)
     if sender_address.endswith(JUDICIAL_SENDER_DOMAIN):
         return True
 
     normalized_subject = _normalize(subject)
-    return any(keyword in normalized_subject for keyword in JUDICIAL_SUBJECT_KEYWORDS)
+    if sender_address in get_forwarder_emails_from_env():
+        return _has_judicial_signals(normalized_subject=normalized_subject, body=body)
+
+    if body and _FORWARDED_SENDER_PATTERN.search(body):
+        return True
+
+    return _has_judicial_signals(normalized_subject=normalized_subject, body=body)
 
 
 def _detect_notification_type(normalized_text: str) -> str:

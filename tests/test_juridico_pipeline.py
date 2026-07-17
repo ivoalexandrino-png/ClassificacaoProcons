@@ -13,7 +13,7 @@ from classificacao_procons.juridico.events import (
     EVENT_ELABORAR_PECA,
     list_events,
 )
-from classificacao_procons.juridico.models import JudicialNotificationEmail
+from classificacao_procons.juridico.models import CaseCommunication, JudicialNotificationEmail
 from classificacao_procons.juridico.pipeline import (
     JuridicoPipelineError,
     JuridicoPipelineOptions,
@@ -67,6 +67,7 @@ def _patch_pipeline(
     fetcher: FakeFetcher,
     *,
     registration: MondayRegistrationResult | Exception | None = None,
+    communications: list | None = None,
 ) -> list[dict]:
     register_calls: list[dict] = []
 
@@ -85,6 +86,12 @@ def _patch_pipeline(
     )
     monkeypatch.setattr(juridico_pipeline, "register_providencia", fake_register)
     monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: None)
+    monkeypatch.setattr(
+        juridico_pipeline,
+        "fetch_case_communications",
+        lambda process_number, *, limit=5: communications or [],
+    )
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     return register_calls
 
 
@@ -118,7 +125,11 @@ class TestProcessNewIntimacoes:
             EVENT_ELABORAR_PECA,
         ]
 
+        assert result.analysis != ""
+        assert result.analysis_source == "heuristica"
+
         assert len(register_calls) == 1
+        assert register_calls[0]["analysis"] == result.analysis
         assert fetcher.marked_read == ["msg-001"]
 
         state = json.loads(options.state_path.read_text(encoding="utf-8"))
@@ -233,6 +244,68 @@ class TestProcessNewIntimacoes:
         # ciência ainda alimenta o agente futuro de contingência
         events = list_events(events_path=options.events_path)
         assert [event.event_type for event in events] == [EVENT_ATUALIZAR_CONTINGENCIA]
+
+    def test_should_enrich_forwarded_email_with_official_communication(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        """E-mail encaminhado sem detalhes; o teor do Domicílio Judicial define a triagem."""
+        forwarded = _notification(
+            body=(
+                "---------- Forwarded message ----------\n"
+                "De: PJe TJSP <naoresponda@tjsp.jus.br>\n\n"
+                "Nova comunicação no processo 1001234-56.2026.8.26.0100."
+            ),
+            subject="Fwd: Intimação eletrônica",
+        )
+        communication = CaseCommunication(
+            text=(
+                "CITAÇÃO da parte ré para apresentar contestação no prazo de "
+                "15 (quinze) dias úteis, na 4ª Vara Cível de São Paulo."
+            ),
+            communication_type="Citação",
+            tribunal="TJSP",
+        )
+        _patch_pipeline(
+            monkeypatch,
+            FakeFetcher([forwarded]),
+            registration=None,
+            communications=[communication],
+        )
+
+        results = process_new_intimacoes(options)
+        result = results[0]
+
+        assert result.status == "success"
+        assert result.notification_type == "citacao"
+        assert result.action_type == "contestar"
+        assert result.due_date is not None
+        assert result.due_date.isoformat() == "2026-08-07"
+        assert result.communications_count == 1
+        assert "Vara Civel de Sao Paulo" in (result.court_unit or "")
+
+    def test_should_tolerate_comunica_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        from classificacao_procons.juridico.comunica import ComunicaError
+
+        fetcher = FakeFetcher([_notification()])
+        _patch_pipeline(monkeypatch, fetcher, registration=None)
+
+        def broken_fetch(process_number, *, limit=5):
+            raise ComunicaError("Comunica indisponível: timeout")
+
+        monkeypatch.setattr(juridico_pipeline, "fetch_case_communications", broken_fetch)
+
+        results = process_new_intimacoes(options)
+
+        assert results[0].status == "success"
+        assert results[0].error is not None
+        assert "Comunica indisponível" in results[0].error
+        assert results[0].action_type == "contestar"
 
     def test_should_raise_when_google_token_is_missing(
         self,

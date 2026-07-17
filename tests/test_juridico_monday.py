@@ -30,6 +30,7 @@ BOARD_COLUMNS = [
     MondayColumn(id="col_prazo", title="Prazo Fatal", column_type="date"),
     MondayColumn(id="col_aud", title="Audiência", column_type="date"),
     MondayColumn(id="col_teor", title="Teor da Intimação", column_type="long_text"),
+    MondayColumn(id="col_analise", title="Análise do Caso", column_type="long_text"),
 ]
 
 INTIMACAO = ParsedIntimacao(
@@ -62,6 +63,9 @@ class TestResolveJuridicoFieldForColumn:
     def test_should_resolve_intimacao_id_column(self) -> None:
         assert resolve_juridico_field_for_column("ID Intimação") == "intimacao_id"
 
+    def test_should_resolve_analysis_column(self) -> None:
+        assert resolve_juridico_field_for_column("Análise do Caso") == "analysis"
+
     def test_should_return_none_for_unrelated_column(self) -> None:
         assert resolve_juridico_field_for_column("Responsável interno") is None
 
@@ -73,6 +77,7 @@ class TestBuildProvidenciaColumnValues:
             intimacao=INTIMACAO,
             providencia=PROVIDENCIA,
             message_id="msg-001",
+            analysis="O que aconteceu: citação recebida; contestar até 07/08.",
         )
 
         assert values["col_id"] == "msg-001"
@@ -83,6 +88,9 @@ class TestBuildProvidenciaColumnValues:
         assert values["col_prov"] == "Apresentar contestação"
         assert values["col_prazo"] == {"date": "2026-08-07"}
         assert values["col_teor"] == {"text": "Citação para contestar em 15 dias úteis."}
+        assert values["col_analise"] == {
+            "text": "O que aconteceu: citação recebida; contestar até 07/08.",
+        }
         assert "col_aud" not in values
 
     def test_should_fill_hearing_with_date_and_time(self) -> None:

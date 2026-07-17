@@ -12,6 +12,7 @@ from pathlib import Path
 from classificacao_procons.email.gmail import GmailClientError
 from classificacao_procons.google_auth import has_valid_token
 from classificacao_procons.juridico.cnj import extract_process_number
+from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 from classificacao_procons.juridico.datajud import DataJudError, fetch_case_movements
 from classificacao_procons.juridico.events import AgentEventError, list_events
 from classificacao_procons.juridico.gmail import GmailJuridicoFetcher
@@ -83,6 +84,7 @@ def _run_process(args: argparse.Namespace) -> int:
         credentials_path=args.credentials,
         token_path=args.token,
         consult_datajud=not args.no_datajud,
+        consult_comunica=not args.no_comunica,
     )
 
     try:
@@ -98,6 +100,18 @@ def _run_process(args: argparse.Namespace) -> int:
         return 1
     if any(item.monday_error for item in results):
         return 1
+    return 0
+
+
+def _run_comunicacoes(args: argparse.Namespace) -> int:
+    try:
+        communications = fetch_case_communications(args.numero, limit=args.limit)
+    except ComunicaError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    output = [_serialize_dataclass(item) for item in communications]
+    print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -171,6 +185,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Não consulta o andamento processual no DataJud.",
     )
+    process_parser.add_argument(
+        "--no-comunica",
+        action="store_true",
+        help="Não busca o teor das comunicações no Domicílio Judicial (Comunica).",
+    )
+
+    comunicacoes_parser = subparsers.add_parser(
+        "comunicacoes",
+        help="Consultar o teor das comunicações no Domicílio Judicial Eletrônico",
+    )
+    comunicacoes_parser.add_argument(
+        "--numero",
+        required=True,
+        help="Número do processo no formato CNJ.",
+    )
+    comunicacoes_parser.add_argument("--limit", type=int, default=5)
 
     andamentos_parser = subparsers.add_parser(
         "andamentos",
@@ -208,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_list(args)
     if args.command == "process":
         return _run_process(args)
+    if args.command == "comunicacoes":
+        return _run_comunicacoes(args)
     if args.command == "andamentos":
         return _run_andamentos(args)
     if args.command == "events":

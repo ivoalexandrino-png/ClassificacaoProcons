@@ -1,9 +1,9 @@
-"""Fluxo automático do jurídico: intimação → triagem → Monday → eventos."""
+"""Fluxo automático do jurídico: intimação → processo → análise → Monday → eventos."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 from classificacao_procons.email.gmail import GmailClientError
@@ -12,6 +12,8 @@ from classificacao_procons.google_auth import (
     has_gmail_modify_access,
     has_valid_token,
 )
+from classificacao_procons.juridico.analise import analyze_case
+from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 from classificacao_procons.juridico.datajud import (
     DataJudError,
     fetch_case_movements,
@@ -26,6 +28,8 @@ from classificacao_procons.juridico.events import (
 )
 from classificacao_procons.juridico.gmail import GmailJuridicoFetcher
 from classificacao_procons.juridico.models import (
+    CaseAnalysis,
+    CaseCommunication,
     CaseMovement,
     JudicialNotificationEmail,
     ParsedIntimacao,
@@ -61,6 +65,8 @@ class JuridicoPipelineOptions:
     register_on_monday: bool = True
     consult_datajud: bool = True
     datajud_limit: int = 5
+    consult_comunica: bool = True
+    comunica_limit: int = 5
 
 
 def _load_processed_messages(state_path: Path) -> set[str]:
@@ -97,10 +103,52 @@ def _fetch_movements_if_configured(
     return movements, None
 
 
+def _fetch_communications_if_configured(
+    intimacao: ParsedIntimacao,
+    *,
+    options: JuridicoPipelineOptions,
+) -> tuple[list[CaseCommunication], str | None]:
+    """Busca o teor no Domicílio Judicial (Comunica); falha não bloqueia o fluxo."""
+    if not options.consult_comunica:
+        return [], None
+    try:
+        communications = fetch_case_communications(
+            intimacao.process_number,
+            limit=options.comunica_limit,
+        )
+    except ComunicaError as exc:
+        return [], str(exc)
+    return communications, None
+
+
+def _enrich_with_communications(
+    intimacao: ParsedIntimacao,
+    *,
+    subject: str,
+    email_text: str,
+    communications: list[CaseCommunication],
+) -> ParsedIntimacao:
+    """Reprocessa a intimação incluindo o teor oficial — melhora tipo, prazo e vara."""
+    if not communications:
+        return intimacao
+    teor_blocks = "\n\n".join(
+        f"TEOR DA COMUNICAÇÃO OFICIAL:\n{communication.text}"
+        for communication in communications
+    )
+    try:
+        return parse_judicial_notification_body(
+            text=f"{email_text}\n\n{teor_blocks}",
+            subject=subject,
+        )
+    except IntimacaoParseError:
+        return intimacao
+
+
 def _register_on_monday_if_configured(
     *,
     intimacao: ParsedIntimacao,
     providencia: Providencia,
+    analysis: CaseAnalysis,
     message_id: str,
     options: JuridicoPipelineOptions,
 ) -> tuple[str | None, str | None]:
@@ -111,6 +159,7 @@ def _register_on_monday_if_configured(
             intimacao=intimacao,
             providencia=providencia,
             message_id=message_id,
+            analysis=analysis.text,
             api_token=options.monday_api_token,
             board_name=options.monday_board_name,
             group_name=options.monday_group_name,
@@ -126,6 +175,7 @@ def _emit_handoff_events(
     *,
     intimacao: ParsedIntimacao,
     providencia: Providencia,
+    analysis: CaseAnalysis,
     movements: list[CaseMovement],
     monday_item_url: str | None,
     options: JuridicoPipelineOptions,
@@ -147,6 +197,7 @@ def _emit_handoff_events(
                     "tribunal": intimacao.tribunal,
                     "court_unit": intimacao.court_unit,
                     "summary": intimacao.summary,
+                    "analysis": analysis.text,
                 },
             ),
             events_path=options.events_path,
@@ -174,6 +225,7 @@ def _emit_handoff_events(
             payload={
                 "notification_type": intimacao.notification_type,
                 "summary": intimacao.summary,
+                "analysis": analysis.text,
                 "movements": movements_payload,
                 "affects_contingency": (
                     providencia.affects_contingency or affects_contingency(movement_text)
@@ -210,34 +262,55 @@ def _process_notification(
     processed_messages: set[str],
     fetcher: GmailJuridicoFetcher,
 ) -> ProcessedIntimacao:
+    # 1. E-mail (direto do tribunal, DJE ou encaminhado do e-mail pessoal)
     intimacao = parse_judicial_notification_body(
         text=notification.body_text,
         subject=notification.subject,
     )
-    providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
-
-    base_result = ProcessedIntimacao(
-        status="dry_run" if options.dry_run else "success",
-        message_id=notification.message_id,
-        process_number=intimacao.process_number,
-        notification_type=intimacao.notification_type,
-        action_type=providencia.action_type,
-        requires_action=providencia.requires_action,
-        due_date=providencia.due_date,
-        hearing_datetime=providencia.hearing_datetime,
-        tribunal=intimacao.tribunal,
-        court_unit=intimacao.court_unit,
-        summary=intimacao.summary,
-    )
 
     if options.dry_run:
-        return base_result
+        providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
+        return ProcessedIntimacao(
+            status="dry_run",
+            message_id=notification.message_id,
+            process_number=intimacao.process_number,
+            notification_type=intimacao.notification_type,
+            action_type=providencia.action_type,
+            requires_action=providencia.requires_action,
+            due_date=providencia.due_date,
+            hearing_datetime=providencia.hearing_datetime,
+            tribunal=intimacao.tribunal,
+            court_unit=intimacao.court_unit,
+            summary=intimacao.summary,
+        )
 
+    # 2. Entrar no processo: teor oficial (Domicílio Judicial) + andamentos (DataJud)
+    communications, comunica_error = _fetch_communications_if_configured(
+        intimacao,
+        options=options,
+    )
+    intimacao = _enrich_with_communications(
+        intimacao,
+        subject=notification.subject,
+        email_text=notification.body_text,
+        communications=communications,
+    )
     movements, datajud_error = _fetch_movements_if_configured(intimacao, options=options)
 
+    # 3. Triagem + entendimento caso a caso
+    providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
+    analysis = analyze_case(
+        intimacao=intimacao,
+        providencia=providencia,
+        communications=communications,
+        movements=movements,
+    )
+
+    # 4. Monday (caminho final) + eventos para os agentes futuros
     monday_item_url, monday_error = _register_on_monday_if_configured(
         intimacao=intimacao,
         providencia=providencia,
+        analysis=analysis,
         message_id=notification.message_id,
         options=options,
     )
@@ -245,6 +318,7 @@ def _process_notification(
     events_emitted = _emit_handoff_events(
         intimacao=intimacao,
         providencia=providencia,
+        analysis=analysis,
         movements=movements,
         monday_item_url=monday_item_url,
         options=options,
@@ -256,12 +330,26 @@ def _process_notification(
     if options.mark_read and has_gmail_modify_access(options.token_path):
         fetcher.mark_as_read(notification.message_id)
 
-    return replace(
-        base_result,
+    lookup_errors = "; ".join(error for error in (comunica_error, datajud_error) if error)
+    return ProcessedIntimacao(
+        status="success",
+        message_id=notification.message_id,
+        process_number=intimacao.process_number,
+        notification_type=intimacao.notification_type,
+        action_type=providencia.action_type,
+        requires_action=providencia.requires_action,
+        due_date=providencia.due_date,
+        hearing_datetime=providencia.hearing_datetime,
+        tribunal=intimacao.tribunal,
+        court_unit=intimacao.court_unit,
+        summary=intimacao.summary,
+        analysis=analysis.text,
+        analysis_source=analysis.source,
+        communications_count=len(communications),
         monday_item_url=monday_item_url,
         monday_error=monday_error,
         events_emitted=events_emitted,
-        error=datajud_error,
+        error=lookup_errors or None,
     )
 
 
