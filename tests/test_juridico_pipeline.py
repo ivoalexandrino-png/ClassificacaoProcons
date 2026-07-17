@@ -209,21 +209,32 @@ class TestProcessNewIntimacoes:
         assert results[0].monday_item_url is None
         assert len(list_events(events_path=options.events_path)) == 2
 
-    def test_should_return_error_when_process_number_is_missing(
+    def test_should_flag_for_review_when_process_number_is_missing(
         self,
         monkeypatch: pytest.MonkeyPatch,
         options: JuridicoPipelineOptions,
     ) -> None:
+        """Ex.: encaminhamentos do PROJUDI sem número CNJ no corpo do e-mail."""
         fetcher = FakeFetcher(
-            [_notification(body="Intimação sem número de processo.", subject="Intimação")],
+            [
+                _notification(
+                    body="Informamos que há uma nova intimação. Acesse o sistema PROJUDI.",
+                    subject="ENC: [PROJUDI] Informação de intimação/citação",
+                ),
+            ],
         )
         _patch_pipeline(monkeypatch, fetcher, registration=None)
 
         results = process_new_intimacoes(options)
 
-        assert results[0].status == "error"
+        assert results[0].status == "needs_review"
+        assert results[0].requires_action is True
+        assert "[PROJUDI]" in results[0].summary
         assert results[0].error is not None
         assert "Número de processo" in results[0].error
+        # continua não lido e fora do estado — reaparece até alguém tratar
+        assert fetcher.marked_read == []
+        assert not options.state_path.exists()
 
     def test_should_not_register_on_monday_when_only_ciencia(
         self,
