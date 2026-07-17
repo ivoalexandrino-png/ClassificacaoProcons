@@ -5,6 +5,9 @@ import pytest
 from classificacao_procons.gemini.client import (
     DEFAULT_GEMINI_MODEL,
     GeminiClientError,
+    _gemini_retry_delay_seconds,
+    _is_retryable_gemini_http_error,
+    _ordered_model_candidates,
     apply_multa_replacement,
     enforce_portal_character_limit,
     get_model_from_env,
@@ -63,3 +66,21 @@ class TestResolveGeminiModel:
                 available_models=["embedding-001"],
                 preferred="gemini-3.5-flash",
             )
+
+    def test_should_mark_503_as_retryable(self) -> None:
+        assert _is_retryable_gemini_http_error(503) is True
+        assert _is_retryable_gemini_http_error(400) is False
+
+    def test_should_increase_retry_delay_for_503(self) -> None:
+        assert _gemini_retry_delay_seconds(code=503, attempt=0) < _gemini_retry_delay_seconds(
+            code=503,
+            attempt=2,
+        )
+
+    def test_should_order_model_candidates_with_preferred_first(self) -> None:
+        ordered = _ordered_model_candidates(
+            available_models=["gemini-3.5-flash", "gemini-2.5-flash", "gemini-flash-latest"],
+            preferred="gemini-2.5-flash",
+        )
+        assert ordered[0] == "gemini-2.5-flash"
+        assert "gemini-3.5-flash" in ordered

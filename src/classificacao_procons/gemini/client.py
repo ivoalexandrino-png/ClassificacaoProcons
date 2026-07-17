@@ -22,7 +22,8 @@ MODEL_PREFERENCE_ORDER = (
 )
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"
 ENV_GEMINI_MODEL = "GEMINI_MODEL"
-MAX_GEMINI_RETRIES = 3
+MAX_GEMINI_RETRIES = 5
+RETRYABLE_GEMINI_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
 MAX_PORTAL_CHARACTERS = 1024
 MULTA_40_PATTERN = re.compile(r"multa de 40\s*%", re.IGNORECASE)
 MULTA_REPLACEMENT = "multa proporcional ao tempo restante"
@@ -130,6 +131,16 @@ def enforce_portal_character_limit(text: str, *, max_chars: int = MAX_PORTAL_CHA
     return truncated
 
 
+def _is_retryable_gemini_http_error(code: int) -> bool:
+    return code in RETRYABLE_GEMINI_HTTP_CODES
+
+
+def _gemini_retry_delay_seconds(*, code: int, attempt: int) -> int:
+    if code == 429:
+        return 8 * (attempt + 1)
+    return 4 * (2**attempt)
+
+
 def _gemini_request(
     *,
     api_key: str,
@@ -152,8 +163,8 @@ def _gemini_request(
                 body = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            if exc.code == 429 and attempt < MAX_GEMINI_RETRIES - 1:
-                time.sleep(8 * (attempt + 1))
+            if _is_retryable_gemini_http_error(exc.code) and attempt < MAX_GEMINI_RETRIES - 1:
+                time.sleep(_gemini_retry_delay_seconds(code=exc.code, attempt=attempt))
                 continue
             if exc.code == 429:
                 raise GeminiClientError(
@@ -166,7 +177,8 @@ def _gemini_request(
                     "Defina GEMINI_MODEL com um modelo válido (ex.: gemini-3.5-flash) "
                     "em https://ai.google.dev/gemini-api/docs/models",
                 ) from exc
-            raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
+            last_error = GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}")
+            raise last_error from exc
         except urllib.error.URLError as exc:
             raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
         except json.JSONDecodeError as exc:
@@ -193,6 +205,34 @@ def _pdf_part(pdf_path: Path) -> dict[str, object]:
     return {"inline_data": {"mime_type": "application/pdf", "data": encoded}}
 
 
+def _ordered_model_candidates(
+    *,
+    available_models: list[str],
+    preferred: str | None,
+) -> list[str]:
+    candidates: list[str] = []
+    if preferred:
+        candidates.append(preferred)
+    candidates.append(DEFAULT_GEMINI_MODEL)
+    candidates.extend(MODEL_PREFERENCE_ORDER)
+
+    available_set = set(available_models)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for model in candidates:
+        normalized = normalize_model_name(model)
+        if not normalized or normalized in seen or normalized not in available_set:
+            continue
+        seen.add(normalized)
+        ordered.append(normalized)
+
+    for name in available_models:
+        if ("flash" in name or "pro" in name) and name not in seen:
+            ordered.append(name)
+            seen.add(name)
+    return ordered
+
+
 def generate_procon_response(
     *,
     complaint_pdf_path: Path,
@@ -209,12 +249,21 @@ def generate_procon_response(
         raise GeminiClientError("GEMINI_API_KEY não configurada.")
 
     selected_model = model
+    available_models: list[str] = []
     if not selected_model:
         available_models = list_generate_content_models(api_key=key)
         selected_model = resolve_gemini_model(
             available_models=available_models,
             preferred=get_model_from_env(),
         )
+    model_candidates = (
+        [normalize_model_name(selected_model)]
+        if model
+        else _ordered_model_candidates(
+            available_models=available_models,
+            preferred=get_model_from_env(),
+        )
+    )
 
     if not complaint_pdf_path.exists():
         raise GeminiClientError(f"PDF da reclamação não encontrado: {complaint_pdf_path}")
@@ -231,11 +280,26 @@ def generate_procon_response(
         "3) riscos e oportunidades de defesa.\n"
         "Responda em português do Brasil."
     )
-    analysis = _gemini_request(
-        api_key=key,
-        model=selected_model,
-        parts=[{"text": analysis_prompt}, _pdf_part(complaint_pdf_path)],
-    )
+
+    last_error: GeminiClientError | None = None
+    for candidate_model in model_candidates:
+        try:
+            analysis = _gemini_request(
+                api_key=key,
+                model=candidate_model,
+                parts=[{"text": analysis_prompt}, _pdf_part(complaint_pdf_path)],
+            )
+            selected_model = candidate_model
+            break
+        except GeminiClientError as exc:
+            last_error = exc
+            message = str(exc)
+            if not any(code in message for code in ("HTTP 503", "HTTP 502", "HTTP 504")):
+                raise
+    else:
+        if last_error is not None:
+            raise last_error
+        raise GeminiClientError("Gemini indisponível para todos os modelos candidatos.")
 
     draft_prompt = (
         "Com base na análise abaixo e no relato do SAC, redija uma resposta inicial ao Procon.\n\n"
