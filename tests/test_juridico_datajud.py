@@ -11,6 +11,7 @@ import pytest
 from classificacao_procons.juridico.datajud import (
     DataJudError,
     fetch_case_movements,
+    get_api_key_from_env,
 )
 
 PROCESS_NUMBER = "1001234-56.2026.8.26.0100"
@@ -80,6 +81,13 @@ class TestFetchCaseMovements:
         with pytest.raises(DataJudError, match="DATAJUD_API_KEY"):
             fetch_case_movements(PROCESS_NUMBER)
 
+    def test_should_strip_apikey_prefix_from_explicit_key(self) -> None:
+        payload = _datajud_response([])
+        with patch("urllib.request.urlopen", _mock_urlopen(payload)) as urlopen:
+            fetch_case_movements(PROCESS_NUMBER, api_key="APIKey chave-teste")
+        request = urlopen.call_args.args[0]
+        assert request.headers["Authorization"] == "APIKey chave-teste"
+
     def test_should_raise_when_tribunal_is_not_supported(self) -> None:
         with pytest.raises(DataJudError, match="Tribunal não suportado"):
             fetch_case_movements("1001234-56.2026.1.00.0000", api_key="chave")
@@ -110,3 +118,31 @@ class TestFetchCaseMovements:
         with patch("urllib.request.urlopen", _mock_urlopen(payload)):
             movements = fetch_case_movements(PROCESS_NUMBER, api_key="chave")
         assert movements[0].movement_datetime == datetime(2026, 5, 6)
+
+
+class TestGetApiKeyFromEnv:
+    def test_should_return_none_when_env_is_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DATAJUD_API_KEY", "   ")
+        assert get_api_key_from_env() is None
+
+    def test_should_return_key_as_is_when_no_prefix(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("DATAJUD_API_KEY", " chave-teste ")
+        assert get_api_key_from_env() == "chave-teste"
+
+    @pytest.mark.parametrize(
+        "raw",
+        ["APIKey chave-teste", "ApiKey chave-teste", "apikey: chave-teste", "APIKey  chave-teste"],
+    )
+    def test_should_strip_apikey_prefix_when_present(
+        self, raw: str, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("DATAJUD_API_KEY", raw)
+        assert get_api_key_from_env() == "chave-teste"
+
+    def test_should_return_none_when_env_has_only_prefix(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("DATAJUD_API_KEY", "APIKey ")
+        assert get_api_key_from_env() is None
