@@ -18,6 +18,8 @@ pytest
 
 - `src/classificacao_procons/email/` — parser e cliente Gmail
 - `src/classificacao_procons/cli.py` — CLI `procon-email`
+- `src/classificacao_procons/litigio/` — agente de monitoramento de litígio (DJEN → providência → Monday)
+- `src/classificacao_procons/litigio_cli.py` — CLI `litigio-agent`
 - `tests/` — testes unitários
 
 ## Segredos

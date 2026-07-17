@@ -23,7 +23,28 @@ Critérios de identificação do e-mail:
 | Remetente | `procon.naoresponder@procon.sp.gov.br` |
 | Assunto | `Fundação Procon-SP - Notificação de emissão de CIP` |
 
-### 2. Pipeline Contratos (Autentique → Monday → Drive)
+### 2. Agente de Litígio (DJEN → providência → Monday)
+
+Monitora intimações/citações de processos judiciais para o jurídico interno:
+
+1. Consulta a API pública do DJEN/Comunica PJe (`comunicaapi.pje.jus.br`) por OAB (todas as variantes de sufixo do tribunal) e por janela de datas.
+2. Classifica cada intimação nova com uma heurística de palavras-chave: `audiencia`, `manifestacao`, `recurso`, `pagamento_deposito`, `ciencia` ou `indefinida` — e extrai prazo (dias) e data de audiência quando presentes no texto.
+3. Quando a intimação exige providência (todo tipo, exceto `ciencia`), cria ou atualiza um item no board Monday **"processos judiciais"** com prazo, data de audiência, tipo de providência e link da certidão.
+4. Registra cada intimação processada em `data/litigio-eventos.jsonl` e dispara os *handlers* registrados em `classificacao_procons.litigio.hooks` — o ponto de extensão pensado para os dois agentes futuros (elaboração/protocolo de peças e relatórios contingenciais), que ainda não existem.
+
+```bash
+litigio-agent monitor --numero-oab "123456" --uf-oab "SP"   # consulta DJEN e sincroniza Monday
+litigio-agent monitor --numero-oab "123456" --uf-oab "SP" --dry-run   # só lista, sem gravar estado
+litigio-agent parse --tipo-documento "Despacho" < intimacao.txt        # testar a heurística offline
+```
+
+> **Importante — pontos que dependem de confirmação/dados reais antes de ir para produção:**
+> - A API do DJEN geo-bloqueia IPs fora do Brasil (HTTP 403); rodar em região BR (ex.: Cloud Run `southamerica-east1`).
+> - As heurísticas de `prazo`/`audiência`/tipo de providência em `litigio/parser.py` são conservadoras, mas não substituem a leitura da certidão pelo advogado — casos `indefinida` sempre aparecem no Monday para revisão manual.
+> - O board "processos judiciais" e as colunas (Número do processo, Tribunal, Providência, Prazo, Data Audiência, Status, Link Certidão) ainda não existem no Monday da empresa — precisam ser criados/confirmados antes do primeiro uso real (nomes configuráveis via `MONDAY_LITIGIO_BOARD_NAME`/`MONDAY_LITIGIO_BOARD_ID`).
+> - Falta confirmar a(s) OAB(s)/CNPJ a monitorar, o que qualifica juridicamente uma "providência" para este time e se há mais de um tribunal/sistema (PJe, e-SAJ, Projudi) que precise de integração além do DJEN.
+
+### 3. Pipeline Contratos (Autentique → Monday → Drive)
 
 Servidor de webhooks (`contratos-webhook`) que reage a eventos do Autentique e do Monday:
 
@@ -66,6 +87,11 @@ pip install -e ".[dev]"
 | `GEMINI_API_KEY` | `elaborate` e extração de contratos | Chave da API do Gemini |
 | `AUTENTIQUE_API_TOKEN` | Pipeline de contratos | Token da API do Autentique |
 | `AUTENTIQUE_WEBHOOK_SECRET` | Webhook de contratos (recomendado) | Valida assinatura dos webhooks |
+| `DJEN_NUMERO_OAB` | `litigio-agent monitor` | OAB monitorada no DJEN (padrão do comando, sem sufixo) |
+| `DJEN_UF_OAB` | `litigio-agent monitor` | UF da OAB monitorada (ex.: `SP`) |
+| `MONDAY_LITIGIO_BOARD_NAME` | — (padrão `processos judiciais`) | Nome do board de litígio no Monday |
+| `MONDAY_LITIGIO_BOARD_ID` | — (opcional, evita busca por nome) | ID do board de litígio no Monday |
+| `MONDAY_LITIGIO_GROUP_NAME` | — (padrão `acompanhamento`) | Grupo onde novos itens são criados |
 
 Em produção, todos os segredos ficam no Secret Manager (ver `cloudbuild*.yaml`).
 
@@ -85,6 +111,14 @@ Comandos auxiliares:
 ```bash
 procon-portal --code "..."                 # só portal (download do PDF)
 procon-drive --consumer-name "..." --pdf downloads/arquivo.pdf
+```
+
+## Uso — agente de Litígio
+
+```bash
+litigio-agent monitor --numero-oab "123456" --uf-oab "SP"          # DJEN + Monday
+litigio-agent monitor --numero-oab "123456" --uf-oab "SP" --dry-run
+litigio-agent parse --tipo-documento "Despacho" < intimacao.txt    # heurística offline, sem DJEN
 ```
 
 ### Agendamento (a cada 1 hora)
@@ -125,7 +159,9 @@ src/classificacao_procons/
 ├── monday/      # cliente e mapeamento Monday
 ├── gemini/      # cliente Gemini
 ├── contratos/   # Autentique, webhooks, sync Controle Assinaturas
+├── litigio/     # DJEN, análise de providência, Monday, hooks para futuros agentes
 ├── cli.py       # CLI procon-email
+├── litigio_cli.py  # CLI litigio-agent
 ├── pipeline.py  # pipeline principal (e-mail → portal → Drive → Monday)
 └── response_pipeline.py  # elaboração de respostas
 ```
@@ -151,6 +187,9 @@ print(result.portal_url, result.access_code)
 - [x] Persistência de estado no GitHub Actions (evita reprocessar o mesmo caso)
 - [x] Contratos: webhooks Autentique + Monday, sync Controle Assinaturas
 - [ ] Envio automático no portal Procon
+- [x] Litígio: monitoramento de intimações via DJEN + classificação de providência + Monday
+- [ ] Litígio: agente de elaboração e protocolo de peças processuais (consumidor dos hooks)
+- [ ] Litígio: agente de relatórios contingenciais (andamentos, depósitos, provisões)
 
 ## Validação
 
