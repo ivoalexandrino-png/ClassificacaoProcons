@@ -185,7 +185,10 @@ def main(argv: list[str] | None = None) -> int:
     process_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Só mostra a triagem, sem Monday, eventos ou marcação de lido.",
+        help=(
+            "Só mostra a triagem (consultando DataJud/Comunica, somente leitura), "
+            "sem Monday, eventos ou marcação de lido."
+        ),
     )
     process_parser.add_argument(
         "--no-mark-read",

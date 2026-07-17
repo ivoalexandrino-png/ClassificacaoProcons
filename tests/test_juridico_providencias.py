@@ -13,9 +13,15 @@ from classificacao_procons.juridico.models import (
     NOTIFICATION_TYPE_DECISAO,
     NOTIFICATION_TYPE_INTIMACAO,
     NOTIFICATION_TYPE_SENTENCA,
+    CaseMovement,
     ParsedIntimacao,
+    Providencia,
 )
-from classificacao_procons.juridico.providencias import affects_contingency, classify_providencia
+from classificacao_procons.juridico.providencias import (
+    affects_contingency,
+    classify_providencia,
+    downgrade_providencia_for_stage,
+)
 
 BASE_DATE = date(2026, 7, 17)  # sexta-feira
 
@@ -130,6 +136,119 @@ class TestClassifyProvidencia:
         )
         assert result.action_type == ACTION_MANIFESTAR
         assert result.due_date == date(2026, 7, 31)  # 10 dias úteis
+
+
+def _providencia_contestar() -> Providencia:
+    return Providencia(
+        action_type=ACTION_CONTESTAR,
+        description="Apresentar contestação",
+        requires_action=True,
+        due_date=date(2026, 8, 7),
+        requires_legal_document=True,
+    )
+
+
+class TestDowngradeProvidenciaForStage:
+    def test_should_downgrade_contestar_when_acordo_homologado_in_movements(self) -> None:
+        # Caso real 0001206-20.2026.8.16.0195: push de citação chegou depois
+        # de o processo já ter contestação, acordo homologado e sentença.
+        movements = [
+            CaseMovement(
+                movement_name="Homologação de Transação",
+                movement_code=466,
+                movement_datetime=datetime(2026, 6, 20, 15, 2),
+            ),
+        ]
+        result = downgrade_providencia_for_stage(_providencia_contestar(), movements)
+
+        assert result.action_type == ACTION_TOMAR_CIENCIA
+        assert result.requires_action is False
+        assert result.requires_legal_document is False
+        assert result.due_date is None
+        assert result.stage_note is not None
+        assert "Homologação de Transação" in result.stage_note
+        assert "20/06/2026" in result.stage_note
+
+    def test_should_downgrade_contestar_when_contestacao_already_filed(self) -> None:
+        movements = [CaseMovement(movement_name="Juntada de Contestação")]
+        result = downgrade_providencia_for_stage(_providencia_contestar(), movements)
+        assert result.action_type == ACTION_TOMAR_CIENCIA
+        assert result.stage_note is not None
+        assert "data não informada" in result.stage_note
+
+    def test_should_downgrade_contestar_when_sentenca_exists(self) -> None:
+        movements = [CaseMovement(movement_name="Sentença de Procedência em Parte")]
+        result = downgrade_providencia_for_stage(_providencia_contestar(), movements)
+        assert result.action_type == ACTION_TOMAR_CIENCIA
+
+    def test_should_keep_contestar_when_movements_do_not_supersede(self) -> None:
+        movements = [
+            CaseMovement(movement_name="Distribuição"),
+            CaseMovement(movement_name="Expedição de documento"),
+            CaseMovement(movement_name="Petição"),
+        ]
+        result = downgrade_providencia_for_stage(_providencia_contestar(), movements)
+        assert result == _providencia_contestar()
+
+    def test_should_keep_providencia_when_there_are_no_movements(self) -> None:
+        result = downgrade_providencia_for_stage(_providencia_contestar(), [])
+        assert result == _providencia_contestar()
+
+    def test_should_downgrade_recurso_when_transito_em_julgado(self) -> None:
+        providencia = Providencia(
+            action_type=ACTION_ANALISAR_RECURSO,
+            description="Analisar sentença e avaliar recurso",
+            requires_action=True,
+            due_date=date(2026, 8, 5),
+            requires_legal_document=True,
+        )
+        movements = [CaseMovement(movement_name="Trânsito em Julgado")]
+        result = downgrade_providencia_for_stage(providencia, movements)
+        assert result.action_type == ACTION_TOMAR_CIENCIA
+
+    def test_should_not_downgrade_recurso_because_of_sentenca(self) -> None:
+        # A sentença é justamente o gatilho do recurso — não pode rebaixar.
+        providencia = Providencia(
+            action_type=ACTION_ANALISAR_RECURSO,
+            description="Analisar sentença e avaliar recurso",
+            requires_action=True,
+            due_date=date(2026, 8, 5),
+        )
+        movements = [CaseMovement(movement_name="Sentença de Improcedência")]
+        assert downgrade_providencia_for_stage(providencia, movements) == providencia
+
+    def test_should_downgrade_manifestar_when_arquivamento(self) -> None:
+        providencia = Providencia(
+            action_type=ACTION_MANIFESTAR,
+            description="Apresentar manifestação",
+            requires_action=True,
+            due_date=date(2026, 7, 24),
+        )
+        movements = [CaseMovement(movement_name="Arquivamento Definitivo")]
+        result = downgrade_providencia_for_stage(providencia, movements)
+        assert result.action_type == ACTION_TOMAR_CIENCIA
+
+    def test_should_keep_tomar_ciencia_unchanged(self) -> None:
+        providencia = Providencia(
+            action_type=ACTION_TOMAR_CIENCIA,
+            description="Tomar ciência do andamento",
+            requires_action=False,
+        )
+        movements = [CaseMovement(movement_name="Sentença")]
+        assert downgrade_providencia_for_stage(providencia, movements) == providencia
+
+    def test_should_preserve_hearing_and_contingency_flags_when_downgrading(self) -> None:
+        providencia = Providencia(
+            action_type=ACTION_CONTESTAR,
+            description="Apresentar contestação",
+            requires_action=True,
+            hearing_datetime=datetime(2026, 8, 5, 14, 30),
+            affects_contingency=True,
+        )
+        movements = [CaseMovement(movement_name="Homologação de Transação")]
+        result = downgrade_providencia_for_stage(providencia, movements)
+        assert result.hearing_datetime == datetime(2026, 8, 5, 14, 30)
+        assert result.affects_contingency is True
 
 
 class TestAffectsContingency:

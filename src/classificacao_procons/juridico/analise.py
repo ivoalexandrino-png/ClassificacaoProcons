@@ -87,6 +87,8 @@ def build_heuristic_analysis(
         f"Últimos andamentos: {_format_movements(movements)[:600]}",
         f"Providência sugerida: {providencia.description} (prazo fatal: {due}).",
     ]
+    if providencia.stage_note:
+        lines.append(providencia.stage_note)
     if hearing:
         lines.append(f"Audiência: {hearing}.")
     lines.append("Análise heurística — revisar antes de dar andamento.")
@@ -101,6 +103,7 @@ def _build_gemini_prompt(
     movements: list[CaseMovement],
 ) -> str:
     due = providencia.due_date.isoformat() if providencia.due_date else "não identificado"
+    stage_block = f"\nNOTA DA TRIAGEM: {providencia.stage_note}" if providencia.stage_note else ""
     return (
         "Você é advogado(a) interno(a) da empresa (polo passivo). Analise a intimação "
         "abaixo junto com o teor das comunicações do Domicílio Judicial Eletrônico e os "
@@ -114,7 +117,8 @@ def _build_gemini_prompt(
         f"PROCESSO: {intimacao.process_number} "
         f"({intimacao.tribunal or 'tribunal não identificado'})\n"
         f"VARA/ÓRGÃO: {intimacao.court_unit or 'não identificado'}\n"
-        f"TRIAGEM AUTOMÁTICA: {providencia.description} — prazo fatal {due}\n\n"
+        f"TRIAGEM AUTOMÁTICA: {providencia.description} — prazo fatal {due}"
+        f"{stage_block}\n\n"
         f"E-MAIL/INTIMAÇÃO RECEBIDA:\n{intimacao.summary}\n\n"
         f"TEOR DAS COMUNICAÇÕES (Domicílio Judicial Eletrônico):\n"
         f"{_format_communications(communications)}\n\n"

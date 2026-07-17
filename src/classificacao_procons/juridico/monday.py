@@ -9,6 +9,10 @@ from datetime import datetime
 from typing import Any
 
 from classificacao_procons.juridico.models import (
+    ACTION_ANALISAR_RECURSO,
+    ACTION_COMPARECER_AUDIENCIA,
+    ACTION_CONTESTAR,
+    ACTION_MANIFESTAR,
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
     NOTIFICATION_TYPE_DECISAO,
@@ -17,6 +21,7 @@ from classificacao_procons.juridico.models import (
     ParsedIntimacao,
     Providencia,
 )
+from classificacao_procons.juridico.providencias import ACTION_LABELS
 from classificacao_procons.monday.client import (
     MondayBoardContext,
     MondayClientError,
@@ -319,6 +324,46 @@ def _find_intimacao_id_column(columns: list[MondayColumn]) -> MondayColumn | Non
     return None
 
 
+def _search_items_by_name(
+    *,
+    api_token: str,
+    board_id: str,
+    name_contains: str,
+) -> list[dict[str, str]]:
+    """Itens do board cujo nome contém o texto (ex.: número do processo)."""
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: ID!, $itemName: CompareValue!) {
+          boards(ids: [$boardId]) {
+            items_page(
+              limit: 25
+              query_params: {
+                rules: [{column_id: "name", compare_value: $itemName, operator: contains_text}]
+              }
+            ) {
+              items {
+                id
+                name
+              }
+            }
+          }
+        }
+        """,
+        variables={"boardId": board_id, "itemName": name_contains},
+    )
+
+    boards = data.get("boards", [])
+    if not boards:
+        return []
+    items = boards[0].get("items_page", {}).get("items", [])
+    return [
+        {"id": str(item["id"]), "name": str(item.get("name", "")).strip()}
+        for item in items
+        if item.get("id")
+    ]
+
+
 def _find_existing_item_id_by_name(
     *,
     api_token: str,
@@ -332,36 +377,110 @@ def _find_existing_item_id_by_name(
     uma providência nova (ex.: sentença meses depois) gera nome diferente e
     cria item novo.
     """
-    data = _graphql_request(
+    items = _search_items_by_name(
+        api_token=api_token,
+        board_id=board_id,
+        name_contains=item_name,
+    )
+    for item in items:
+        if item["name"] == item_name:
+            return item["id"]
+    return None
+
+
+# Ordem das fases processuais das providências: um item existente de fase
+# igual ou posterior torna redundante uma providência nova de fase anterior.
+_ACTION_STAGE_RANK: dict[str, int] = {
+    ACTION_CONTESTAR: 1,
+    ACTION_MANIFESTAR: 2,
+    ACTION_COMPARECER_AUDIENCIA: 2,
+    ACTION_ANALISAR_RECURSO: 3,
+}
+
+_DESCRIPTION_TO_ACTION: dict[str, str] = {
+    _normalize_title(description): action for action, description in ACTION_LABELS.items()
+}
+
+
+def _action_for_item_name(item_name: str) -> str | None:
+    """Extrai a providência de um nome de item no formato "processo — descrição"."""
+    _, separator, description = item_name.partition("—")
+    if not separator:
+        return None
+    return _DESCRIPTION_TO_ACTION.get(_normalize_title(description))
+
+
+def _find_covering_item_for_process(
+    *,
+    api_token: str,
+    board_id: str,
+    process_number: str,
+    action_type: str,
+) -> dict[str, str] | None:
+    """Item aberto do mesmo processo que já cobre a providência nova.
+
+    Cobre quando a providência existente é a mesma, ou de fase posterior
+    (ex.: item "Analisar sentença" torna redundante um novo "Apresentar
+    contestação" vindo de push atrasado do mesmo processo).
+    """
+    new_rank = _ACTION_STAGE_RANK.get(action_type)
+    items = _search_items_by_name(
+        api_token=api_token,
+        board_id=board_id,
+        name_contains=process_number,
+    )
+    for item in items:
+        if process_number not in item["name"]:
+            continue
+        existing_action = _action_for_item_name(item["name"])
+        if existing_action is None:
+            continue
+        if existing_action == action_type:
+            return item
+        existing_rank = _ACTION_STAGE_RANK.get(existing_action)
+        if new_rank is not None and existing_rank is not None and existing_rank > new_rank:
+            return item
+    return None
+
+
+def _create_update(*, api_token: str, item_id: str, body: str) -> None:
+    """Anota o item existente (update na timeline do Monday)."""
+    _graphql_request(
         api_token=api_token,
         query="""
-        query ($boardId: ID!, $itemName: CompareValue!) {
-          boards(ids: [$boardId]) {
-            items_page(
-              limit: 10
-              query_params: {
-                rules: [{column_id: "name", compare_value: $itemName, operator: contains_text}]
-              }
-            ) {
-              items {
-                id
-                name
-              }
-            }
+        mutation ($itemId: ID!, $body: String!) {
+          create_update(item_id: $itemId, body: $body) {
+            id
           }
         }
         """,
-        variables={"boardId": board_id, "itemName": item_name},
+        variables={"itemId": item_id, "body": body},
     )
 
-    boards = data.get("boards", [])
-    if not boards:
-        return None
-    items = boards[0].get("items_page", {}).get("items", [])
-    for item in items:
-        if str(item.get("name", "")).strip() == item_name:
-            return str(item["id"])
-    return None
+
+def _skipped_duplicate_result(
+    *,
+    api_token: str,
+    context: MondayBoardContext,
+    existing_item_id: str,
+    duplicate_note: str | None,
+) -> MondayRegistrationResult:
+    if duplicate_note:
+        _create_update(
+            api_token=api_token,
+            item_id=existing_item_id,
+            body=duplicate_note,
+        )
+    return MondayRegistrationResult(
+        item_id=existing_item_id,
+        board_id=context.board_id,
+        item_url=_build_item_url(
+            account_slug=context.account_slug,
+            board_id=context.board_id,
+            item_id=existing_item_id,
+        ),
+        skipped_duplicate=True,
+    )
 
 
 def _create_item_with_dedupe(
@@ -371,15 +490,18 @@ def _create_item_with_dedupe(
     item_name: str,
     column_values: dict[str, Any],
     dedupe_value: str,
+    process_number: str | None = None,
+    action_type: str | None = None,
+    duplicate_note: str | None = None,
 ) -> MondayRegistrationResult:
     """Cria item no board, pulando quando a intimação já foi cadastrada.
 
-    Deduplica em duas camadas: pela coluna "ID Intimação" (quando o board
-    tiver uma) e pelo nome do item (processo + providência), que cobre
-    e-mails distintos sobre a mesma intimação.
+    Deduplica em três camadas: pela coluna "ID Intimação" (quando o board
+    tiver uma), pelo nome do item (processo + providência) e — quando
+    ``process_number``/``action_type`` são informados — por conteúdo: item
+    existente do mesmo processo com a mesma providência ou de fase posterior
+    não é recriado; o item existente recebe uma anotação (``duplicate_note``).
     """
-    existing_item_id: str | None = None
-
     intimacao_id_column = _find_intimacao_id_column(context.columns)
     if intimacao_id_column is not None:
         existing_item_id = _find_existing_item_id(
@@ -388,25 +510,42 @@ def _create_item_with_dedupe(
             protocol_column=intimacao_id_column,
             protocol_number=dedupe_value,
         )
+        if existing_item_id is not None:
+            # Mesmo e-mail reprocessado: nada novo para anotar.
+            return _skipped_duplicate_result(
+                api_token=api_token,
+                context=context,
+                existing_item_id=existing_item_id,
+                duplicate_note=None,
+            )
 
-    if existing_item_id is None:
+    if process_number and action_type:
+        covering_item = _find_covering_item_for_process(
+            api_token=api_token,
+            board_id=context.board_id,
+            process_number=process_number,
+            action_type=action_type,
+        )
+        if covering_item is not None:
+            return _skipped_duplicate_result(
+                api_token=api_token,
+                context=context,
+                existing_item_id=covering_item["id"],
+                duplicate_note=duplicate_note,
+            )
+    else:
         existing_item_id = _find_existing_item_id_by_name(
             api_token=api_token,
             board_id=context.board_id,
             item_name=item_name,
         )
-
-    if existing_item_id is not None:
-        return MondayRegistrationResult(
-            item_id=existing_item_id,
-            board_id=context.board_id,
-            item_url=_build_item_url(
-                account_slug=context.account_slug,
-                board_id=context.board_id,
-                item_id=existing_item_id,
-            ),
-            skipped_duplicate=True,
-        )
+        if existing_item_id is not None:
+            return _skipped_duplicate_result(
+                api_token=api_token,
+                context=context,
+                existing_item_id=existing_item_id,
+                duplicate_note=duplicate_note,
+            )
 
     item_id = _create_item(
         api_token=api_token,
@@ -463,12 +602,21 @@ def register_providencia(
             analysis=analysis,
         ),
     )
+    due = providencia.due_date.strftime("%d/%m/%Y") if providencia.due_date else "sem prazo"
+    duplicate_note = (
+        f"Nova intimação recebida (e-mail {message_id}): providência sugerida "
+        f'"{providencia.description}" (prazo {due}) já coberta por este item — '
+        "nenhum item novo foi criado. Revisar se algo mudou."
+    )
     return _create_item_with_dedupe(
         api_token=token,
         context=context,
         item_name=f"{intimacao.process_number} — {providencia.description}",
         column_values=column_values,
         dedupe_value=message_id,
+        process_number=intimacao.process_number,
+        action_type=providencia.action_type,
+        duplicate_note=duplicate_note,
     )
 
 

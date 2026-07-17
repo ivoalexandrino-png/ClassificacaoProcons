@@ -45,7 +45,11 @@ from classificacao_procons.juridico.parser import (
     IntimacaoParseError,
     parse_judicial_notification_body,
 )
-from classificacao_procons.juridico.providencias import affects_contingency, classify_providencia
+from classificacao_procons.juridico.providencias import (
+    affects_contingency,
+    classify_providencia,
+    downgrade_providencia_for_stage,
+)
 
 DEFAULT_STATE_PATH = Path("data/juridico-processed.json")
 
@@ -155,16 +159,17 @@ def _register_on_monday_if_configured(
     analysis: CaseAnalysis,
     message_id: str,
     options: JuridicoPipelineOptions,
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, bool, str | None]:
     """Registra o prazo no board "prazos" e, havendo audiência, no board "audiências".
 
-    Retorna (url do item de prazo, url do item de audiência, erros combinados).
+    Retorna (url do prazo, url da audiência, prazo deduplicado, erros combinados).
     """
     if not options.register_on_monday:
-        return None, None, None
+        return None, None, False, None
 
     prazo_url: str | None = None
     audiencia_url: str | None = None
+    prazo_skipped_duplicate = False
     errors: list[str] = []
 
     if providencia.requires_action:
@@ -179,6 +184,7 @@ def _register_on_monday_if_configured(
                 group_name=options.monday_group_name,
             )
             prazo_url = registration.item_url if registration else None
+            prazo_skipped_duplicate = bool(registration and registration.skipped_duplicate)
         except MondayClientError as exc:
             errors.append(f"prazos: {exc}")
 
@@ -195,7 +201,7 @@ def _register_on_monday_if_configured(
         except MondayClientError as exc:
             errors.append(f"audiencias: {exc}")
 
-    return prazo_url, audiencia_url, "; ".join(errors) or None
+    return prazo_url, audiencia_url, prazo_skipped_duplicate, "; ".join(errors) or None
 
 
 def _emit_handoff_events(
@@ -316,22 +322,6 @@ def _process_notification(
         subject=notification.subject,
     )
 
-    if options.dry_run:
-        providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
-        return ProcessedIntimacao(
-            status="dry_run",
-            message_id=notification.message_id,
-            process_number=intimacao.process_number,
-            notification_type=intimacao.notification_type,
-            action_type=providencia.action_type,
-            requires_action=providencia.requires_action,
-            due_date=providencia.due_date,
-            hearing_datetime=providencia.hearing_datetime,
-            tribunal=intimacao.tribunal,
-            court_unit=intimacao.court_unit,
-            summary=intimacao.summary,
-        )
-
     # 2. Entrar no processo: teor oficial (Domicílio Judicial) + andamentos (DataJud)
     communications, comunica_error = _fetch_communications_if_configured(
         intimacao,
@@ -345,8 +335,28 @@ def _process_notification(
     )
     movements, datajud_error = _fetch_movements_if_configured(intimacao, options=options)
 
-    # 3. Triagem + entendimento caso a caso
+    # 3. Triagem ciente do estágio: se o DataJud mostra contestação/acordo/
+    # sentença posteriores, a providência do e-mail já foi superada.
     providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
+    providencia = downgrade_providencia_for_stage(providencia, movements)
+
+    if options.dry_run:
+        return ProcessedIntimacao(
+            status="dry_run",
+            message_id=notification.message_id,
+            process_number=intimacao.process_number,
+            notification_type=intimacao.notification_type,
+            action_type=providencia.action_type,
+            requires_action=providencia.requires_action,
+            due_date=providencia.due_date,
+            hearing_datetime=providencia.hearing_datetime,
+            tribunal=intimacao.tribunal,
+            court_unit=intimacao.court_unit,
+            summary=intimacao.summary,
+            stage_note=providencia.stage_note,
+            error="; ".join(error for error in (comunica_error, datajud_error) if error) or None,
+        )
+
     analysis = analyze_case(
         intimacao=intimacao,
         providencia=providencia,
@@ -355,7 +365,12 @@ def _process_notification(
     )
 
     # 4. Monday (caminho final) + eventos para os agentes futuros
-    monday_item_url, monday_audiencia_url, monday_error = _register_on_monday_if_configured(
+    (
+        monday_item_url,
+        monday_audiencia_url,
+        monday_prazo_skipped_duplicate,
+        monday_error,
+    ) = _register_on_monday_if_configured(
         intimacao=intimacao,
         providencia=providencia,
         analysis=analysis,
@@ -394,8 +409,10 @@ def _process_notification(
         analysis=analysis.text,
         analysis_source=analysis.source,
         communications_count=len(communications),
+        stage_note=providencia.stage_note,
         monday_item_url=monday_item_url,
         monday_audiencia_url=monday_audiencia_url,
+        monday_prazo_skipped_duplicate=monday_prazo_skipped_duplicate,
         monday_error=monday_error,
         events_emitted=events_emitted,
         error=lookup_errors or None,

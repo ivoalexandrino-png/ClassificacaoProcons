@@ -56,6 +56,7 @@ class Providencia:
     hearing_datetime: datetime | None = None
     requires_legal_document: bool = False
     affects_contingency: bool = False
+    stage_note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -105,8 +106,10 @@ class ProcessedIntimacao:
     analysis: str = ""
     analysis_source: str = ""
     communications_count: int = 0
+    stage_note: str | None = None
     monday_item_url: str | None = None
     monday_audiencia_url: str | None = None
+    monday_prazo_skipped_duplicate: bool = False
     monday_error: str | None = None
     events_emitted: list[str] = field(default_factory=list)
     error: str | None = None

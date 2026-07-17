@@ -85,6 +85,25 @@ Prazos em dias úteis excluem o dia do começo e prorrogam o termo final para o
 próximo dia útil (fins de semana; feriados forenses exigem calendário do
 tribunal e ficam fora do MVP — confira o termo final no sistema do tribunal).
 
+### Triagem ciente do estágio do processo
+
+Pushes chegam atrasados ou repetidos: um aviso de citação pode se referir a um
+processo que já teve contestação, acordo e sentença. Antes de fechar a
+providência, o agente cruza a triagem do e-mail com os andamentos do DataJud —
+se eles mostram estágio já superado, a providência é **rebaixada para ciência**
+(sem prazo, sem item no quadro, sem evento de peça) e o motivo fica registrado
+em `stage_note` (também aparece na análise do caso):
+
+| Providência do e-mail | Rebaixada quando o DataJud mostra |
+|-----------------------|------------------------------------|
+| Apresentar contestação | contestação, acordo homologado, sentença, extinção, trânsito em julgado, arquivamento |
+| Apresentar manifestação | trânsito em julgado, arquivamento, baixa definitiva |
+| Analisar sentença/recurso | acordo homologado, trânsito em julgado, arquivamento, baixa definitiva |
+
+O `--dry-run` também consulta o DataJud/Comunica (somente leitura), então a
+triagem exibida já é a ciente do estágio. Sem `DATAJUD_API_KEY` (ou com
+`--no-datajud`), o rebaixamento não acontece — revise a providência sugerida.
+
 ## Entrar no processo: teor + andamentos
 
 Antes de cadastrar no Monday, o agente "entra no processo" por duas fontes
@@ -158,10 +177,19 @@ mesmo assim).
 A deduplicação tem três camadas:
 
 1. estado local `data/juridico-processed.json` (mesmo e-mail nunca reprocessa);
-2. coluna `ID Intimação`, quando o board tiver uma;
-3. **nome do item** (`processo — providência`): dois e-mails distintos sobre a
-   mesma intimação geram o mesmo nome e não duplicam; uma providência nova do
-   mesmo processo (ex.: sentença meses depois) gera nome diferente e cria item.
+2. coluna `ID Intimação`, quando o board tiver uma (mesmo e-mail reprocessado);
+3. **conteúdo, por processo** (board `prazos`): antes de criar, o agente busca
+   itens do mesmo processo. Se já existe item com a **mesma providência**, ou
+   com providência de **fase posterior** (ex.: "Analisar sentença" já no board
+   e chega um push atrasado de citação pedindo "Apresentar contestação"), o
+   item novo **não é criado** — o existente recebe uma anotação (update) com o
+   e-mail novo e o prazo sugerido. Providência de fase mais avançada que a do
+   item existente cria item novo normalmente. No board `audiências` a
+   deduplicação continua pelo nome do item (`processo — Audiência data`).
+
+A ordem de fases usada na camada 3 é: contestação → manifestação/audiência →
+recurso. Itens com nome fora do padrão `processo — providência` são ignorados
+pela deduplicação (nunca bloqueiam a criação).
 
 Proteções do mapeamento (calibradas com os quadros reais):
 
@@ -193,6 +221,18 @@ não implementados:
   contingenciais** (emitido para toda intimação). Payload: resumo, andamentos
   do DataJud e a flag `affects_contingency` (depósitos, penhoras, alvarás,
   condenações, execução).
+
+## Execução horária (GitHub Actions)
+
+O workflow `juridico-hourly.yml` roda `juridico process --max-results 20
+--no-comunica` a cada hora (minuto 30, deslocado do `procon-hourly`), com os
+secrets `GMAIL_OAUTH_JSON`/`GMAIL_TOKEN_JSON`, `MONDAY_API_TOKEN`,
+`GEMINI_API_KEY` e `DATAJUD_API_KEY`. O estado `data/` (intimações já
+processadas + eventos de handoff) persiste entre execuções via cache do
+Actions com chave rolante (`juridico-pipeline-state-<run_id>`, restaurada por
+prefixo). O `workflow_dispatch` aceita `dry_run` para inspecionar a triagem
+sem efeitos colaterais. `--no-comunica` porque os runners ficam fora do Brasil
+e o CloudFront do CNJ responde 403.
 
 ## Variáveis de ambiente
 

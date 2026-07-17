@@ -16,6 +16,7 @@ from classificacao_procons.juridico.models import (
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
     NOTIFICATION_TYPE_SENTENCA,
+    CaseMovement,
     ParsedIntimacao,
     Providencia,
 )
@@ -58,6 +59,39 @@ _NO_ACTION_KEYWORDS: Final[tuple[str, ...]] = (
     "apenas para ciencia",
     "sem necessidade de manifestacao",
 )
+
+# Andamentos (nome TPU/DataJud, normalizado) que indicam estágio processual
+# já superado para cada providência. Ex.: se o DataJud mostra contestação
+# apresentada, acordo homologado ou sentença, "Apresentar contestação" já
+# não faz sentido — o push de citação chegou atrasado ou repetido.
+_SUPERSEDING_MOVEMENT_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
+    ACTION_CONTESTAR: (
+        "contestacao",
+        "homologacao de transacao",
+        "homologacao do acordo",
+        "acordo homologado",
+        "sentenca",
+        "procedencia",
+        "improcedencia",
+        "extincao",
+        "transito em julgado",
+        "arquivamento",
+        "baixa definitiva",
+    ),
+    ACTION_MANIFESTAR: (
+        "transito em julgado",
+        "arquivamento",
+        "baixa definitiva",
+    ),
+    ACTION_ANALISAR_RECURSO: (
+        "homologacao de transacao",
+        "homologacao do acordo",
+        "acordo homologado",
+        "transito em julgado",
+        "arquivamento",
+        "baixa definitiva",
+    ),
+}
 
 CONTINGENCY_KEYWORDS: Final[tuple[str, ...]] = (
     "deposito",
@@ -111,6 +145,59 @@ def affects_contingency(text: str) -> bool:
     """Andamentos com impacto financeiro (depósitos, penhoras, condenações)."""
     normalized = _normalize(text)
     return any(keyword in normalized for keyword in CONTINGENCY_KEYWORDS)
+
+
+def find_superseding_movement(
+    action_type: str,
+    movements: list[CaseMovement],
+) -> CaseMovement | None:
+    """Andamento mais recente que indica que a providência já foi superada."""
+    keywords = _SUPERSEDING_MOVEMENT_KEYWORDS.get(action_type)
+    if not keywords:
+        return None
+    for movement in movements:
+        normalized = _normalize(movement.movement_name)
+        if any(keyword in normalized for keyword in keywords):
+            return movement
+    return None
+
+
+def downgrade_providencia_for_stage(
+    providencia: Providencia,
+    movements: list[CaseMovement],
+) -> Providencia:
+    """Rebaixa a providência para ciência quando o processo já passou do estágio.
+
+    Cruza a triagem do e-mail com os andamentos do DataJud: se eles mostram
+    contestação apresentada, acordo homologado, sentença, trânsito em julgado
+    ou arquivamento, o prazo sugerido pelo e-mail já não existe — a providência
+    vira "tomar ciência" com uma nota explicando o motivo, e nenhum item de
+    prazo é criado no Monday.
+    """
+    superseding = find_superseding_movement(providencia.action_type, movements)
+    if superseding is None:
+        return providencia
+
+    moment = (
+        superseding.movement_datetime.strftime("%d/%m/%Y")
+        if superseding.movement_datetime
+        else "data não informada"
+    )
+    stage_note = (
+        f'Providência "{providencia.description}" rebaixada para ciência: '
+        f'o DataJud mostra "{superseding.movement_name}" em {moment} — '
+        "o processo já passou desse estágio. Revisar antes de agir."
+    )
+    return Providencia(
+        action_type=ACTION_TOMAR_CIENCIA,
+        description=ACTION_LABELS[ACTION_TOMAR_CIENCIA],
+        requires_action=False,
+        due_date=None,
+        hearing_datetime=providencia.hearing_datetime,
+        requires_legal_document=False,
+        affects_contingency=providencia.affects_contingency,
+        stage_note=stage_note,
+    )
 
 
 def classify_providencia(intimacao: ParsedIntimacao, *, base_date: date) -> Providencia:

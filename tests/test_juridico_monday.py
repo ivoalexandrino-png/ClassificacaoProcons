@@ -7,6 +7,7 @@ import pytest
 
 from classificacao_procons.juridico import monday as juridico_monday
 from classificacao_procons.juridico.models import (
+    ACTION_ANALISAR_RECURSO,
     ACTION_COMPARECER_AUDIENCIA,
     ACTION_CONTESTAR,
     NOTIFICATION_TYPE_AUDIENCIA,
@@ -329,7 +330,7 @@ class TestRegisterProvidencia:
                 return_value=_board_context(),
             ),
             patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
-            patch.object(juridico_monday, "_find_existing_item_id_by_name", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
             patch.object(juridico_monday, "_create_item", return_value="777") as create_item,
             patch.object(juridico_monday, "_apply_complaint_column_values") as apply_values,
         ):
@@ -374,6 +375,9 @@ class TestRegisterProvidencia:
 
     def test_should_skip_duplicate_when_item_with_same_name_exists(self) -> None:
         """Dois e-mails distintos da mesma intimação não podem duplicar o item."""
+        existing = [
+            {"id": "999", "name": "1001234-56.2026.8.26.0100 — Apresentar contestação"},
+        ]
         with (
             patch.object(
                 juridico_monday,
@@ -383,9 +387,10 @@ class TestRegisterProvidencia:
             patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
             patch.object(
                 juridico_monday,
-                "_find_existing_item_id_by_name",
-                return_value="999",
-            ) as find_by_name,
+                "_search_items_by_name",
+                return_value=existing,
+            ) as search_items,
+            patch.object(juridico_monday, "_create_update") as create_update,
             patch.object(juridico_monday, "_create_item") as create_item,
         ):
             result = register_providencia(
@@ -399,9 +404,106 @@ class TestRegisterProvidencia:
         assert result.skipped_duplicate is True
         assert result.item_id == "999"
         create_item.assert_not_called()
-        assert find_by_name.call_args.kwargs["item_name"] == (
-            "1001234-56.2026.8.26.0100 — Apresentar contestação"
+        assert search_items.call_args.kwargs["name_contains"] == "1001234-56.2026.8.26.0100"
+        note = create_update.call_args.kwargs["body"]
+        assert "msg-outro-email" in note
+        assert "Apresentar contestação" in note
+
+    def test_should_skip_when_existing_item_has_later_stage_providencia(self) -> None:
+        """Push atrasado de citação não recria prazo se o processo já está em recurso."""
+        existing = [
+            {
+                "id": "1000",
+                "name": "1001234-56.2026.8.26.0100 — Analisar sentença e avaliar recurso",
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item") as create_item,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-push-atrasado",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is True
+        assert result.item_id == "1000"
+        create_item.assert_not_called()
+        create_update.assert_called_once()
+
+    def test_should_create_item_when_existing_providencia_is_earlier_stage(self) -> None:
+        """Sentença nova cria item mesmo com prazo de contestação antigo no board."""
+        existing = [
+            {"id": "555", "name": "1001234-56.2026.8.26.0100 — Apresentar contestação"},
+        ]
+        providencia = Providencia(
+            action_type=ACTION_ANALISAR_RECURSO,
+            description="Analisar sentença e avaliar recurso",
+            requires_action=True,
+            due_date=date(2026, 9, 1),
+            requires_legal_document=True,
         )
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item", return_value="556") as create_item,
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=providencia,
+                message_id="msg-sentenca",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        assert result.item_id == "556"
+        create_item.assert_called_once()
+        create_update.assert_not_called()
+
+    def test_should_ignore_items_of_other_processes_or_unknown_names(self) -> None:
+        existing = [
+            {"id": "1", "name": "9999999-99.2026.8.26.0999 — Apresentar contestação"},
+            {"id": "2", "name": "Item manual sem padrão"},
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_item", return_value="3") as create_item,
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-001",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        create_item.assert_called_once()
 
 
 class TestRegisterAudiencia:

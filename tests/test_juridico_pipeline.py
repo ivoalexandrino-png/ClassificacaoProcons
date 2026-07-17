@@ -13,7 +13,11 @@ from classificacao_procons.juridico.events import (
     EVENT_ELABORAR_PECA,
     list_events,
 )
-from classificacao_procons.juridico.models import CaseCommunication, JudicialNotificationEmail
+from classificacao_procons.juridico.models import (
+    CaseCommunication,
+    CaseMovement,
+    JudicialNotificationEmail,
+)
 from classificacao_procons.juridico.pipeline import (
     JuridicoPipelineError,
     JuridicoPipelineOptions,
@@ -189,6 +193,95 @@ class TestProcessNewIntimacoes:
         assert fetcher.marked_read == []
         assert not options.state_path.exists()
         assert not options.events_path.exists()
+
+    def test_should_downgrade_providencia_when_datajud_shows_superseding_stage(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        """Caso real: push de citação de processo que já tem acordo homologado."""
+        fetcher = FakeFetcher([_notification()])
+        register_calls = _patch_pipeline(monkeypatch, fetcher, registration=None)
+        monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
+        monkeypatch.setattr(
+            juridico_pipeline,
+            "fetch_case_movements",
+            lambda process_number, *, limit=5: [
+                CaseMovement(
+                    movement_name="Homologação de Transação",
+                    movement_code=466,
+                    movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
+                ),
+            ],
+        )
+
+        results = process_new_intimacoes(options)
+        result = results[0]
+
+        assert result.status == "success"
+        assert result.action_type == "tomar_ciencia"
+        assert result.requires_action is False
+        assert result.due_date is None
+        assert result.stage_note is not None
+        assert "Homologação de Transação" in result.stage_note
+        assert result.stage_note in result.analysis
+        # providência rebaixada não cria item de prazo nem evento de peça
+        assert register_calls == []
+        events = list_events(events_path=options.events_path)
+        assert [event.event_type for event in events] == [EVENT_ATUALIZAR_CONTINGENCIA]
+
+    def test_should_consult_datajud_and_downgrade_on_dry_run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        """O dry-run agora é ciente do estágio: consulta o DataJud (só leitura)."""
+        fetcher = FakeFetcher([_notification()])
+        register_calls = _patch_pipeline(monkeypatch, fetcher, registration=None)
+        monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
+        monkeypatch.setattr(
+            juridico_pipeline,
+            "fetch_case_movements",
+            lambda process_number, *, limit=5: [
+                CaseMovement(movement_name="Homologação de Transação"),
+            ],
+        )
+
+        dry_options = JuridicoPipelineOptions(
+            state_path=options.state_path,
+            events_path=options.events_path,
+            dry_run=True,
+        )
+        results = process_new_intimacoes(dry_options)
+        result = results[0]
+
+        assert result.status == "dry_run"
+        assert result.action_type == "tomar_ciencia"
+        assert result.stage_note is not None
+        assert register_calls == []
+        assert fetcher.marked_read == []
+        assert not options.state_path.exists()
+        assert not options.events_path.exists()
+
+    def test_should_flag_result_when_prazo_item_was_deduplicated(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        fetcher = FakeFetcher([_notification()])
+        registration = MondayRegistrationResult(
+            item_id="777",
+            board_id="123",
+            item_url="https://empresa.monday.com/boards/123/pulses/777",
+            skipped_duplicate=True,
+        )
+        _patch_pipeline(monkeypatch, fetcher, registration=registration)
+
+        results = process_new_intimacoes(options)
+
+        assert results[0].status == "success"
+        assert results[0].monday_prazo_skipped_duplicate is True
+        assert results[0].monday_item_url == "https://empresa.monday.com/boards/123/pulses/777"
 
     def test_should_report_monday_error_without_losing_events(
         self,
