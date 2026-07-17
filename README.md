@@ -23,7 +23,26 @@ Critérios de identificação do e-mail:
 | Remetente | `procon.naoresponder@procon.sp.gov.br` |
 | Assunto | `Fundação Procon-SP - Notificação de emissão de CIP` |
 
-### 2. Pipeline Contratos (Autentique → Monday → Drive)
+### 2. Agente Jurídico (intimações → andamento → Monday)
+
+Agente para o jurídico interno: lê intimações/pushes por e-mail, identifica o
+processo (nº CNJ, tribunal, vara), o tipo de movimento e extrai prazos e
+audiências. Quando há **providência**, registra no Monday para controlar prazos e
+audiências. Foi desenhado para, no futuro, acionar dois agentes ainda inexistentes
+(elaboração/protocolo de peças e atualização de relatórios contingenciais) via
+interfaces plugáveis.
+
+```bash
+procon-juridico parse --file intimacao.txt   # extrair processo + providência (offline)
+procon-juridico list                         # intimações não lidas (JSON)
+procon-juridico process                      # providência + Monday
+procon-juridico process --dry-run            # simular
+```
+
+Detalhes, board do Monday, variáveis de ambiente, regras de prazo (CPC dias úteis)
+e pontos de extensão dos agentes futuros: [`docs/agente-juridico.md`](docs/agente-juridico.md).
+
+### 3. Pipeline Contratos (Autentique → Monday → Drive)
 
 Servidor de webhooks (`contratos-webhook`) que reage a eventos do Autentique e do Monday:
 
@@ -124,6 +143,7 @@ src/classificacao_procons/
 ├── drive/       # Google Drive: upload, leitura, geração de PDF
 ├── monday/      # cliente e mapeamento Monday
 ├── gemini/      # cliente Gemini
+├── juridico/    # agente jurídico (intimações → andamento → Monday)
 ├── contratos/   # Autentique, webhooks, sync Controle Assinaturas
 ├── cli.py       # CLI procon-email
 ├── pipeline.py  # pipeline principal (e-mail → portal → Drive → Monday)
