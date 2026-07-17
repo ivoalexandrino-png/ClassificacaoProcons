@@ -3,10 +3,15 @@
 from datetime import date
 
 from classificacao_procons.monday.mapping import (
+    ORIGIN_LABEL_GLAM_CLUBE,
+    ORIGIN_LABEL_GLAM_LOJA,
+    ORIGIN_LABEL_MENS_CLUBE,
+    ORIGIN_LABEL_MENS_LOJA,
     MondayColumn,
     MondayColumnDetails,
     allowed_labels,
     build_column_values,
+    map_complaint_to_origin_label,
     map_procon_cause_to_monday_status_label,
     resolve_field_for_column,
     sanitize_column_values,
@@ -20,6 +25,9 @@ class TestMondayColumnMapping:
         assert resolve_field_for_column("Link PDF Drive") == "pdf_url"
         assert resolve_field_for_column("Notificação Procon") == "pdf_url"
         assert resolve_field_for_column("Procon/Órgão") == "state"
+        assert resolve_field_for_column("Origem") == "origin"
+        assert resolve_field_for_column("Prazo resposta SAC") == "sac_deadline"
+        assert resolve_field_for_column("Prazo Resposta Jurídico") == "legal_deadline"
         assert resolve_field_for_column("Prazo SAC") == "sac_deadline"
         assert resolve_field_for_column("Prazo Jurídico") == "legal_deadline"
 
@@ -34,9 +42,41 @@ class TestMondayColumnMapping:
         )
         assert map_procon_cause_to_monday_status_label(cause) == "Problemas com Cancelamento"
 
+    def test_should_map_glam_subscription_cause_to_glam_clube_origin(self) -> None:
+        cause = (
+            "Demais ServiçosServiços de Beleza e Cuidados PessoaisContrato / Oferta"
+            "Dificuldade para alterar ou cancelar o contrato /serviço"
+        )
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_GLAM_CLUBE
+
+    def test_should_map_glam_purchase_cause_to_glam_loja_origin(self) -> None:
+        cause = (
+            "Demais ProdutosArtigos de Uso PessoalEntrega do Produto"
+            "Atraso na entrega do produto"
+        )
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_GLAM_LOJA
+
+    def test_should_map_mens_subscription_cause_to_mens_clube_origin(self) -> None:
+        cause = "Men's Club assinatura cancelamento renovacao automatica"
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_MENS_CLUBE
+
+    def test_should_map_mens_purchase_cause_to_mens_loja_origin(self) -> None:
+        cause = "Men's loja compra pedido entrega produto"
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_MENS_LOJA
+
+    def test_should_use_fallback_when_origin_cannot_be_inferred(self) -> None:
+        assert (
+            map_complaint_to_origin_label("", fallback=ORIGIN_LABEL_GLAM_CLUBE)
+            == ORIGIN_LABEL_GLAM_CLUBE
+        )
+        assert (
+            map_complaint_to_origin_label("problema generico", fallback=ORIGIN_LABEL_GLAM_LOJA)
+            == ORIGIN_LABEL_GLAM_LOJA
+        )
+
     def test_should_skip_unmapped_cause_on_status_column(self) -> None:
         columns = [
-            MondayColumn(id="status_cause", title="Classificação", column_type="status"),
+            MondayColumn(id="status_cause", title="Causa 1", column_type="status"),
         ]
         values = build_column_values(
             columns,
@@ -80,6 +120,53 @@ class TestMondayColumnMapping:
         }
         assert values["date_sac"] == {"date": "2026-07-19"}
         assert values["status_uf"] == {"label": "SP"}
+
+    def test_should_fill_origin_and_deadline_columns(self) -> None:
+        columns = [
+            MondayColumn(id="status_origin", title="Origem", column_type="status"),
+            MondayColumn(id="date_sac", title="Prazo resposta SAC", column_type="date"),
+            MondayColumn(id="date_legal", title="Prazo Resposta Jurídico", column_type="date"),
+            MondayColumn(id="link_pdf", title="Notificação Procon", column_type="link"),
+        ]
+        values = build_column_values(
+            columns,
+            consumer_name="GABRIELLE LIMA MARINO",
+            state="SP",
+            pdf_url="https://drive.google.com/file/d/abc/view",
+            protocol_number="1663732/2026",
+            consumer_cpf="49119340850",
+            complaint_date=date(2026, 7, 17),
+            sac_deadline=date(2026, 7, 22),
+            legal_deadline=date(2026, 7, 23),
+            cause="",
+            origin_label='Glam "Clube"',
+        )
+        assert values["status_origin"] == {"label": 'Glam "Clube"'}
+        assert values["date_sac"] == {"date": "2026-07-22"}
+        assert values["date_legal"] == {"date": "2026-07-23"}
+        assert values["link_pdf"] == {
+            "url": "https://drive.google.com/file/d/abc/view",
+            "text": "Notificação Procon",
+        }
+
+    def test_should_skip_file_column_for_notification_pdf(self) -> None:
+        columns = [
+            MondayColumn(id="file_pdf", title="Notificação Procon", column_type="file"),
+        ]
+        values = build_column_values(
+            columns,
+            consumer_name="GABRIELLE",
+            state="SP",
+            pdf_url="https://drive.google.com/file/d/abc/view",
+            protocol_number="1663732/2026",
+            consumer_cpf="49119340850",
+            complaint_date=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            origin_label='Glam "Clube"',
+        )
+        assert values == {}
 
     def test_should_ignore_unknown_columns(self) -> None:
         columns = [MondayColumn(id="text_extra", title="Observações internas", column_type="text")]

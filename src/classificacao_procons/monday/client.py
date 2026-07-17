@@ -15,11 +15,14 @@ from pathlib import Path
 
 from classificacao_procons.models import ProcessedComplaint
 from classificacao_procons.monday.mapping import (
+    FIELD_PDF_URL,
     MondayColumn,
     MondayColumnDetails,
     build_column_values,
     build_response_column_values,
+    find_column_by_field,
     find_protocol_column,
+    map_complaint_to_origin_label,
     sanitize_column_values,
 )
 
@@ -31,6 +34,10 @@ DEFAULT_GROUP_NAME = "pendentes de resposta"
 ENV_API_TOKEN = "MONDAY_API_TOKEN"
 ENV_BOARD_NAME = "MONDAY_BOARD_NAME"
 ENV_BOARD_ID = "MONDAY_BOARD_ID"
+ENV_ORIGIN_LABEL = "MONDAY_ORIGIN_LABEL"
+ENV_TOKEN_PATH = "GMAIL_TOKEN_PATH"
+DEFAULT_ORIGIN_LABEL = 'Glam "Clube"'
+DEFAULT_TOKEN_PATH = "credentials/gmail-token.json"
 BOARD_PAGE_SIZE = 100
 MAX_BOARD_PAGES = 20
 GRAPHQL_MAX_RETRIES = 3
@@ -71,6 +78,16 @@ def get_board_name_from_env() -> str:
 def get_board_id_from_env() -> str | None:
     board_id = os.environ.get(ENV_BOARD_ID, "").strip()
     return board_id or None
+
+
+def get_origin_label_from_env() -> str:
+    origin = os.environ.get(ENV_ORIGIN_LABEL, DEFAULT_ORIGIN_LABEL).strip()
+    return origin or DEFAULT_ORIGIN_LABEL
+
+
+def get_token_path_from_env() -> str:
+    token_path = os.environ.get(ENV_TOKEN_PATH, DEFAULT_TOKEN_PATH).strip()
+    return token_path or DEFAULT_TOKEN_PATH
 
 
 def _normalize_name(value: str) -> str:
@@ -527,6 +544,33 @@ def _apply_complaint_column_values(
             continue
 
 
+def _upload_notification_pdf_column(
+    *,
+    api_token: str,
+    item_id: str,
+    column: MondayColumn,
+    pdf_url: str,
+    token_path: str,
+    work_dir: Path,
+) -> None:
+    """Envia PDF da notificação para coluna file do Monday."""
+    from classificacao_procons.drive.reader import download_drive_file, extract_drive_resource_id
+
+    file_id = extract_drive_resource_id(pdf_url)
+    destination = work_dir / f"monday-notificacao-{file_id}.pdf"
+    download_drive_file(
+        file_id=file_id,
+        destination=destination,
+        token_path=token_path,
+    )
+    upload_file_to_column(
+        api_token=api_token,
+        item_id=item_id,
+        column_id=column.id,
+        file_path=destination,
+    )
+
+
 def register_complaint(
     complaint: ProcessedComplaint,
     *,
@@ -582,7 +626,18 @@ def register_complaint(
             sac_deadline=complaint.sac_deadline,
             legal_deadline=complaint.legal_deadline,
             cause=complaint.cause,
+            origin_label=map_complaint_to_origin_label(
+                complaint.cause,
+                fallback=get_origin_label_from_env(),
+            ),
         ),
+    )
+
+    notification_pdf_column = find_column_by_field(context.columns, FIELD_PDF_URL)
+    notification_pdf_is_file = (
+        notification_pdf_column is not None
+        and notification_pdf_column.column_type == "file"
+        and complaint.pdf_url
     )
 
     item_id = _create_item(
@@ -598,6 +653,18 @@ def register_complaint(
         column_details=context.column_details,
         column_values=column_values,
     )
+    if notification_pdf_is_file and notification_pdf_column is not None:
+        try:
+            _upload_notification_pdf_column(
+                api_token=token,
+                item_id=item_id,
+                column=notification_pdf_column,
+                pdf_url=complaint.pdf_url or "",
+                token_path=get_token_path_from_env(),
+                work_dir=Path("downloads/monday-uploads"),
+            )
+        except MondayClientError:
+            pass
     return MondayRegistrationResult(
         item_id=item_id,
         board_id=context.board_id,
