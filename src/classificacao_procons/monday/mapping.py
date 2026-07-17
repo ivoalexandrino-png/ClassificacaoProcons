@@ -72,10 +72,24 @@ def _normalize_title(value: str) -> str:
 
 MONDAY_CAUSE_STATUS_LABELS: tuple[tuple[str, str], ...] = (
     ("cancel", "Problemas com Cancelamento"),
+    ("rescis", "Problemas com Cancelamento"),
     ("renov", "Renovação Automática"),
-    ("experi", "Problemas na experiência"),
+    ("cobranc", "Problemas no pagamento"),
+    ("cobran", "Problemas no pagamento"),
+    ("indevid", "Problemas no pagamento"),
+    ("duplic", "Problemas no pagamento"),
+    ("estorno", "Problemas no pagamento"),
     ("pagamento", "Problemas no pagamento"),
+    ("pagament", "Problemas no pagamento"),
+    ("nao entrega", "Problemas com entrega"),
+    ("demora", "Problemas com entrega"),
+    ("atraso", "Problemas com entrega"),
     ("entrega", "Problemas com entrega"),
+    ("vicio", "Problemas na experiência"),
+    ("defeito", "Problemas na experiência"),
+    ("propag", "Problemas na experiência"),
+    ("atend", "Problemas na experiência"),
+    ("experi", "Problemas na experiência"),
 )
 
 ORIGIN_LABEL_GLAM_CLUBE = 'Glam "Clube"'

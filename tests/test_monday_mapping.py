@@ -42,6 +42,22 @@ class TestMondayColumnMapping:
         )
         assert map_procon_cause_to_monday_status_label(cause) == "Problemas com Cancelamento"
 
+    def test_should_map_cobranca_indevida_to_pagamento_label(self) -> None:
+        assert (
+            map_procon_cause_to_monday_status_label("Cobrança indevida")
+            == "Problemas no pagamento"
+        )
+
+    def test_should_map_classification_with_details_to_cancelamento_label(self) -> None:
+        cause = "Demais Serviços Dificuldade para cancelar a assinatura glam"
+        assert map_procon_cause_to_monday_status_label(cause) == "Problemas com Cancelamento"
+
+    def test_should_map_vicio_do_produto_to_experiencia_label(self) -> None:
+        assert (
+            map_procon_cause_to_monday_status_label("Vício do produto")
+            == "Problemas na experiência"
+        )
+
     def test_should_map_glam_subscription_cause_to_glam_clube_origin(self) -> None:
         cause = (
             "Demais ServiçosServiços de Beleza e Cuidados PessoaisContrato / Oferta"
