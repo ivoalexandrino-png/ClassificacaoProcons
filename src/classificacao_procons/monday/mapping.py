@@ -78,6 +78,53 @@ MONDAY_CAUSE_STATUS_LABELS: tuple[tuple[str, str], ...] = (
     ("entrega", "Problemas com entrega"),
 )
 
+ORIGIN_LABEL_GLAM_CLUBE = 'Glam "Clube"'
+ORIGIN_LABEL_GLAM_LOJA = 'Glam "Loja"'
+ORIGIN_LABEL_MENS_CLUBE = 'Men\'s "Clube"'
+ORIGIN_LABEL_MENS_LOJA = 'Men\'s "Loja"'
+
+MENS_BRAND_KEYWORDS: tuple[str, ...] = (
+    "men's",
+    "mens ",
+    " mens",
+    "men s",
+    "mensclub",
+    "men's club",
+)
+SUBSCRIPTION_KEYWORDS: tuple[str, ...] = (
+    "assinatura",
+    "clube",
+    "renov",
+    "cancel",
+    "contrato",
+    "servico",
+    "servicos",
+    "plano",
+    "mensalidade",
+    "recorren",
+    "oferta",
+)
+PURCHASE_KEYWORDS: tuple[str, ...] = (
+    "compra",
+    "pedido",
+    "entrega",
+    "produto",
+    "produtos",
+    "loja",
+    "vestuario",
+    "e-commerce",
+    "ecommerce",
+    "mercadoria",
+    "artigos de uso pessoal",
+)
+
+ORIGIN_BY_BRAND_CHANNEL: dict[tuple[str, str], str] = {
+    ("glam", "clube"): ORIGIN_LABEL_GLAM_CLUBE,
+    ("glam", "loja"): ORIGIN_LABEL_GLAM_LOJA,
+    ("mens", "clube"): ORIGIN_LABEL_MENS_CLUBE,
+    ("mens", "loja"): ORIGIN_LABEL_MENS_LOJA,
+}
+
 
 def map_procon_cause_to_monday_status_label(cause: str) -> str | None:
     """Mapeia texto do Procon para rótulo de status do Monday (classificação)."""
@@ -88,6 +135,46 @@ def map_procon_cause_to_monday_status_label(cause: str) -> str | None:
         if keyword in normalized:
             return label
     return None
+
+
+def _detect_origin_brand(normalized_cause: str) -> str:
+    if any(keyword in normalized_cause for keyword in MENS_BRAND_KEYWORDS):
+        return "mens"
+    return "glam"
+
+
+def _score_keywords(normalized_cause: str, keywords: tuple[str, ...]) -> int:
+    return sum(1 for keyword in keywords if keyword in normalized_cause)
+
+
+def _detect_origin_channel(normalized_cause: str) -> str | None:
+    if "demais produtos" in normalized_cause or "entrega do produto" in normalized_cause:
+        return "loja"
+    if "demais servicos" in normalized_cause or "servicos de beleza" in normalized_cause:
+        return "clube"
+
+    subscription_score = _score_keywords(normalized_cause, SUBSCRIPTION_KEYWORDS)
+    purchase_score = _score_keywords(normalized_cause, PURCHASE_KEYWORDS)
+
+    if subscription_score > purchase_score:
+        return "clube"
+    if purchase_score > subscription_score:
+        return "loja"
+    return None
+
+
+def map_complaint_to_origin_label(cause: str, *, fallback: str | None = None) -> str | None:
+    """Infere Origem (Glam/Men's × Clube/Loja) a partir do texto da reclamação."""
+    normalized = _normalize_title(cause)
+    if not normalized:
+        return fallback
+
+    channel = _detect_origin_channel(normalized)
+    if channel is None:
+        return fallback
+
+    brand = _detect_origin_brand(normalized)
+    return ORIGIN_BY_BRAND_CHANNEL.get((brand, channel), fallback)
 
 
 def resolve_field_for_column(title: str) -> str | None:

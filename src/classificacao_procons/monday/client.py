@@ -22,6 +22,7 @@ from classificacao_procons.monday.mapping import (
     build_response_column_values,
     find_column_by_field,
     find_protocol_column,
+    map_complaint_to_origin_label,
     sanitize_column_values,
 )
 
@@ -625,7 +626,10 @@ def register_complaint(
             sac_deadline=complaint.sac_deadline,
             legal_deadline=complaint.legal_deadline,
             cause=complaint.cause,
-            origin_label=get_origin_label_from_env(),
+            origin_label=map_complaint_to_origin_label(
+                complaint.cause,
+                fallback=get_origin_label_from_env(),
+            ),
         ),
     )
 

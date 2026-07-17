@@ -3,10 +3,15 @@
 from datetime import date
 
 from classificacao_procons.monday.mapping import (
+    ORIGIN_LABEL_GLAM_CLUBE,
+    ORIGIN_LABEL_GLAM_LOJA,
+    ORIGIN_LABEL_MENS_CLUBE,
+    ORIGIN_LABEL_MENS_LOJA,
     MondayColumn,
     MondayColumnDetails,
     allowed_labels,
     build_column_values,
+    map_complaint_to_origin_label,
     map_procon_cause_to_monday_status_label,
     resolve_field_for_column,
     sanitize_column_values,
@@ -36,6 +41,38 @@ class TestMondayColumnMapping:
             "Dificuldade para alterar ou cancelar o contrato /serviço"
         )
         assert map_procon_cause_to_monday_status_label(cause) == "Problemas com Cancelamento"
+
+    def test_should_map_glam_subscription_cause_to_glam_clube_origin(self) -> None:
+        cause = (
+            "Demais ServiçosServiços de Beleza e Cuidados PessoaisContrato / Oferta"
+            "Dificuldade para alterar ou cancelar o contrato /serviço"
+        )
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_GLAM_CLUBE
+
+    def test_should_map_glam_purchase_cause_to_glam_loja_origin(self) -> None:
+        cause = (
+            "Demais ProdutosArtigos de Uso PessoalEntrega do Produto"
+            "Atraso na entrega do produto"
+        )
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_GLAM_LOJA
+
+    def test_should_map_mens_subscription_cause_to_mens_clube_origin(self) -> None:
+        cause = "Men's Club assinatura cancelamento renovacao automatica"
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_MENS_CLUBE
+
+    def test_should_map_mens_purchase_cause_to_mens_loja_origin(self) -> None:
+        cause = "Men's loja compra pedido entrega produto"
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_MENS_LOJA
+
+    def test_should_use_fallback_when_origin_cannot_be_inferred(self) -> None:
+        assert (
+            map_complaint_to_origin_label("", fallback=ORIGIN_LABEL_GLAM_CLUBE)
+            == ORIGIN_LABEL_GLAM_CLUBE
+        )
+        assert (
+            map_complaint_to_origin_label("problema generico", fallback=ORIGIN_LABEL_GLAM_LOJA)
+            == ORIGIN_LABEL_GLAM_LOJA
+        )
 
     def test_should_skip_unmapped_cause_on_status_column(self) -> None:
         columns = [
