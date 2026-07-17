@@ -23,6 +23,16 @@ JUDICIAL_SENDER_DOMAIN: Final = ".jus.br"
 
 ENV_FORWARDER_EMAILS: Final = "JURIDICO_FORWARDER_EMAILS"
 
+# E-mails pessoais que encaminham intimações para a caixa corporativa.
+DEFAULT_FORWARDER_EMAILS: Final[tuple[str, ...]] = (
+    "ivo.alexandrino@hotmail.com",
+    "adv.ialexandrino@gmail.com",
+    "adv.ivoalexandrino@gmail.com",
+)
+
+# Remetente oficial do Domicílio Judicial Eletrônico (já coberto por .jus.br).
+DJE_SENDER: Final = "domicilio.comunicacoes@cnj.jus.br"
+
 JUDICIAL_SUBJECT_KEYWORDS: Final[tuple[str, ...]] = (
     "intimacao",
     "citacao",
@@ -100,9 +110,10 @@ def _normalize(value: str) -> str:
 def get_forwarder_emails_from_env() -> tuple[str, ...]:
     """E-mails pessoais autorizados a encaminhar intimações (separados por vírgula)."""
     raw = os.environ.get(ENV_FORWARDER_EMAILS, "")
-    return tuple(
+    configured = tuple(
         address.strip().lower() for address in raw.split(",") if address.strip()
     )
+    return configured or DEFAULT_FORWARDER_EMAILS
 
 
 def _has_judicial_signals(*, normalized_subject: str, body: str | None) -> bool:

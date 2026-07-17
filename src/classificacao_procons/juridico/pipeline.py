@@ -36,7 +36,11 @@ from classificacao_procons.juridico.models import (
     ProcessedIntimacao,
     Providencia,
 )
-from classificacao_procons.juridico.monday import MondayClientError, register_providencia
+from classificacao_procons.juridico.monday import (
+    MondayClientError,
+    register_audiencia,
+    register_providencia,
+)
 from classificacao_procons.juridico.parser import (
     IntimacaoParseError,
     parse_judicial_notification_body,
@@ -151,24 +155,47 @@ def _register_on_monday_if_configured(
     analysis: CaseAnalysis,
     message_id: str,
     options: JuridicoPipelineOptions,
-) -> tuple[str | None, str | None]:
-    if not options.register_on_monday or not providencia.requires_action:
-        return None, None
-    try:
-        registration = register_providencia(
-            intimacao=intimacao,
-            providencia=providencia,
-            message_id=message_id,
-            analysis=analysis.text,
-            api_token=options.monday_api_token,
-            board_name=options.monday_board_name,
-            group_name=options.monday_group_name,
-        )
-    except MondayClientError as exc:
-        return None, str(exc)
-    if registration is None:
-        return None, None
-    return registration.item_url, None
+) -> tuple[str | None, str | None, str | None]:
+    """Registra o prazo no board "prazos" e, havendo audiência, no board "audiências".
+
+    Retorna (url do item de prazo, url do item de audiência, erros combinados).
+    """
+    if not options.register_on_monday:
+        return None, None, None
+
+    prazo_url: str | None = None
+    audiencia_url: str | None = None
+    errors: list[str] = []
+
+    if providencia.requires_action:
+        try:
+            registration = register_providencia(
+                intimacao=intimacao,
+                providencia=providencia,
+                message_id=message_id,
+                analysis=analysis.text,
+                api_token=options.monday_api_token,
+                board_name=options.monday_board_name,
+                group_name=options.monday_group_name,
+            )
+            prazo_url = registration.item_url if registration else None
+        except MondayClientError as exc:
+            errors.append(f"prazos: {exc}")
+
+    if providencia.hearing_datetime is not None:
+        try:
+            registration = register_audiencia(
+                intimacao=intimacao,
+                providencia=providencia,
+                message_id=message_id,
+                analysis=analysis.text,
+                api_token=options.monday_api_token,
+            )
+            audiencia_url = registration.item_url if registration else None
+        except MondayClientError as exc:
+            errors.append(f"audiencias: {exc}")
+
+    return prazo_url, audiencia_url, "; ".join(errors) or None
 
 
 def _emit_handoff_events(
@@ -307,7 +334,7 @@ def _process_notification(
     )
 
     # 4. Monday (caminho final) + eventos para os agentes futuros
-    monday_item_url, monday_error = _register_on_monday_if_configured(
+    monday_item_url, monday_audiencia_url, monday_error = _register_on_monday_if_configured(
         intimacao=intimacao,
         providencia=providencia,
         analysis=analysis,
@@ -347,6 +374,7 @@ def _process_notification(
         analysis_source=analysis.source,
         communications_count=len(communications),
         monday_item_url=monday_item_url,
+        monday_audiencia_url=monday_audiencia_url,
         monday_error=monday_error,
         events_emitted=events_emitted,
         error=lookup_errors or None,

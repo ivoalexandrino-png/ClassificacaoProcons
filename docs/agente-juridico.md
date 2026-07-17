@@ -38,6 +38,7 @@ juridico process --no-datajud      # não consulta andamento no DataJud
 juridico process --no-comunica     # não busca teor no Domicílio Judicial
 juridico comunicacoes --numero "1001234-56.2026.8.26.0100" # teor das comunicações
 juridico andamentos --numero "1001234-56.2026.8.26.0100"   # andamento processual
+juridico boards --filter prazos    # inspeciona quadros do Monday e o mapeamento
 juridico events --type elaborar_peca                        # fila p/ agentes futuros
 ```
 
@@ -48,12 +49,14 @@ A autenticação Google é compartilhada com o pipeline Procon: `procon-email au
 
 O agente reconhece intimações por três caminhos:
 
-1. **Encaminhados do e-mail pessoal** para a caixa corporativa. Cadastre os
-   remetentes autorizados em `JURIDICO_FORWARDER_EMAILS`
-   (ex.: `JURIDICO_FORWARDER_EMAILS="seu.email@gmail.com"`); e-mails desses
-   remetentes são aceitos sempre que o assunto/corpo tiver sinais judiciais
-   (número CNJ + termos processuais), incluindo prefixos `Fwd:`/`Enc:`.
-2. **Domicílio Judicial Eletrônico / tribunais** — qualquer remetente `.jus.br`.
+1. **Encaminhados do e-mail pessoal** para a caixa corporativa (a mesma do
+   Procon). Remetentes autorizados por padrão: `ivo.alexandrino@hotmail.com`,
+   `adv.ialexandrino@gmail.com` e `adv.ivoalexandrino@gmail.com`
+   (sobrescreva com `JURIDICO_FORWARDER_EMAILS`, separados por vírgula).
+   E-mails desses remetentes são aceitos sempre que o assunto/corpo tiver
+   sinais judiciais (número CNJ + termos processuais), incluindo `Fwd:`/`Enc:`.
+2. **Domicílio Judicial Eletrônico / tribunais** — qualquer remetente
+   `.jus.br`, incluindo o oficial `domicilio.comunicacoes@cnj.jus.br`.
 3. **Qualquer outro remetente** cujo corpo contenha um encaminhamento de
    `.jus.br` ou número CNJ com termos processuais claros.
 
@@ -107,11 +110,28 @@ do e-mail, do teor das comunicações e dos andamentos. Sem a chave (ou se o
 Gemini falhar), cai para um resumo heurístico estruturado. A análise vai para a
 coluna `Análise` do Monday e para os eventos de handoff.
 
-## Monday
+## Monday (caminho final)
 
-O item é criado no board definido por `MONDAY_JURIDICO_BOARD_NAME` (padrão
-`processos`; ou `MONDAY_JURIDICO_BOARD_ID`), grupo `MONDAY_JURIDICO_GROUP_NAME`
-(padrão `providencias pendentes`). Colunas são mapeadas por título:
+Dois quadros recebem itens automaticamente:
+
+- **`prazos`** — toda providência com prazo (contestar, manifestar, recurso…).
+  Board configurável via `MONDAY_JURIDICO_BOARD_NAME`/`_ID` (padrão `prazos`).
+- **`audiências`** — quando a intimação marca audiência, o agente também cria
+  item no board de audiências (`MONDAY_AUDIENCIAS_BOARD_NAME`/`_ID`, padrão
+  `audiencias`), **sem excluir o prazo**: um mesmo processo pode ter prazo de
+  contestação no `prazos` e audiência no `audiências`.
+
+O grupo é configurável (`MONDAY_JURIDICO_GROUP_NAME` / `MONDAY_AUDIENCIAS_GROUP_NAME`);
+sem configuração, o item entra no primeiro grupo do board. O board é localizado
+por nome normalizado (aceita "Prazos", "prazos" etc.). Use `juridico boards
+--filter prazos` para inspecionar os quadros visíveis, seus grupos, colunas e o
+mapeamento que o agente detecta em cada coluna.
+
+Os quadros `processos judiciais`, `processos trabalhistas` e `kpi processos
+consumidores` fazem parte do roadmap (status do processo, contingências/
+depósitos e KPIs) e ainda não recebem escrita automática.
+
+Colunas são mapeadas por título:
 
 | Coluna (título contém) | Conteúdo | Tipo sugerido |
 |------------------------|----------|---------------|
@@ -126,9 +146,10 @@ O item é criado no board definido por `MONDAY_JURIDICO_BOARD_NAME` (padrão
 | Análise / O que aconteceu | parecer do caso (Gemini ou heurístico) | long_text |
 | ID Intimação | id do e-mail (deduplicação) | text |
 
-Itens só são criados quando a triagem exige providência; "tomar ciência" não
-gera item. A deduplicação usa a coluna `ID Intimação` (se existir) e o estado
-local `data/juridico-processed.json`.
+Itens de prazo só são criados quando a triagem exige providência; "tomar
+ciência" não gera item (audiência marcada gera item no board de audiências
+mesmo assim). A deduplicação usa a coluna `ID Intimação` (se existir) e o
+estado local `data/juridico-processed.json`.
 
 ## Handoff para os agentes futuros
 
@@ -149,13 +170,16 @@ não implementados:
 
 | Variável | Obrigatória para | Descrição |
 |----------|------------------|-----------|
-| `JURIDICO_FORWARDER_EMAILS` | e-mails encaminhados do pessoal | Remetentes autorizados, separados por vírgula |
+| `JURIDICO_FORWARDER_EMAILS` | — (padrão: e-mails do Ivo) | Remetentes autorizados, separados por vírgula |
 | `DATAJUD_API_KEY` | consulta de andamentos | Chave pública da API DataJud/CNJ |
 | `GEMINI_API_KEY` | análise com IA (opcional) | Mesma chave do pipeline Procon |
 | `MONDAY_API_TOKEN` | cadastro no Monday | Mesmo token do pipeline Procon |
-| `MONDAY_JURIDICO_BOARD_NAME` | — (padrão `processos`) | Board de processos judiciais |
-| `MONDAY_JURIDICO_BOARD_ID` | — | Id do board (vence o nome) |
-| `MONDAY_JURIDICO_GROUP_NAME` | — (padrão `providencias pendentes`) | Grupo do board |
+| `MONDAY_JURIDICO_BOARD_NAME` | — (padrão `prazos`) | Board de prazos |
+| `MONDAY_JURIDICO_BOARD_ID` | — | Id do board de prazos (vence o nome) |
+| `MONDAY_JURIDICO_GROUP_NAME` | — (padrão: primeiro grupo) | Grupo do board de prazos |
+| `MONDAY_AUDIENCIAS_BOARD_NAME` | — (padrão `audiencias`) | Board de audiências |
+| `MONDAY_AUDIENCIAS_BOARD_ID` | — | Id do board de audiências (vence o nome) |
+| `MONDAY_AUDIENCIAS_GROUP_NAME` | — (padrão: primeiro grupo) | Grupo do board de audiências |
 | `JURIDICO_GMAIL_QUERY` | — | Sobrescreve o filtro Gmail padrão |
 
 ## Limitações do MVP

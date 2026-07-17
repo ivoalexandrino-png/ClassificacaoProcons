@@ -38,10 +38,10 @@ Servidor de webhooks (`contratos-webhook`) que reage a eventos do Autentique e d
 
 CLI `juridico`. Os prazos chegam por e-mail — encaminhados do e-mail pessoal para a caixa corporativa (`JURIDICO_FORWARDER_EMAILS`) ou vindos do Domicílio Judicial Eletrônico/andamentos do CNJ — e o Monday é o caminho final. Para cada e-mail não lido:
 
-1. Identifica a intimação (direta, DJE ou encaminhada com `Fwd:`/`Enc:`) e extrai **número CNJ**, tipo, **prazo** e **audiência**
+1. Identifica a intimação (direta, DJE — `domicilio.comunicacoes@cnj.jus.br` — ou encaminhada com `Fwd:`/`Enc:` dos e-mails pessoais autorizados) e extrai **número CNJ**, tipo, **prazo** e **audiência**
 2. **Entra no processo**: busca o teor integral das comunicações (API Comunica/PJe do Domicílio Judicial, sem chave) e os andamentos (DataJud, `DATAJUD_API_KEY`)
 3. **Entende o que aconteceu**: análise caso a caso (Gemini se `GEMINI_API_KEY`, senão resumo heurístico) e triagem da providência com prazo fatal em dias úteis
-4. Cadastra no Monday (board `processos`) com providência, prazo fatal, audiência, teor e análise
+4. Cadastra no Monday: prazos no board **`prazos`** e, havendo audiência marcada, também no board **`audiências`** (sem excluir o prazo)
 5. Emite eventos em `data/juridico-events.jsonl` para os agentes futuros de **peças processuais** e **relatórios contingenciais**
 
 Detalhes em [`docs/agente-juridico.md`](docs/agente-juridico.md).
@@ -79,8 +79,9 @@ pip install -e ".[dev]"
 | `AUTENTIQUE_API_TOKEN` | Pipeline de contratos | Token da API do Autentique |
 | `AUTENTIQUE_WEBHOOK_SECRET` | Webhook de contratos (recomendado) | Valida assinatura dos webhooks |
 | `DATAJUD_API_KEY` | Agente jurídico: andamentos | Chave pública da API DataJud/CNJ |
-| `JURIDICO_FORWARDER_EMAILS` | Agente jurídico: encaminhados | E-mails pessoais autorizados a encaminhar intimações |
-| `MONDAY_JURIDICO_BOARD_NAME` | — (padrão `processos`) | Board de processos do agente jurídico |
+| `JURIDICO_FORWARDER_EMAILS` | — (tem padrão) | E-mails pessoais autorizados a encaminhar intimações |
+| `MONDAY_JURIDICO_BOARD_NAME` | — (padrão `prazos`) | Board de prazos do agente jurídico |
+| `MONDAY_AUDIENCIAS_BOARD_NAME` | — (padrão `audiencias`) | Board de audiências do agente jurídico |
 
 Em produção, todos os segredos ficam no Secret Manager (ver `cloudbuild*.yaml`).
 

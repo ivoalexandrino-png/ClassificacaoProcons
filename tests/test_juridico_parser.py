@@ -88,6 +88,23 @@ class TestIsJudicialNotification:
             body=body,
         )
 
+    def test_should_match_default_forwarder_without_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.delenv("JURIDICO_FORWARDER_EMAILS", raising=False)
+        assert is_judicial_notification(
+            subject="Segue para providências",
+            sender="Ivo <adv.ialexandrino@gmail.com>",
+            body="Processo 1001234-56.2026.8.26.0100 — prazo de 15 dias na 1ª Vara Cível.",
+        )
+
+    def test_should_match_dje_official_sender(self) -> None:
+        assert is_judicial_notification(
+            subject="Nova comunicação",
+            sender="domicilio.comunicacoes@cnj.jus.br",
+        )
+
     def test_should_match_forwarder_email_with_judicial_body(
         self,
         monkeypatch: pytest.MonkeyPatch,

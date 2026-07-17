@@ -67,6 +67,7 @@ def _patch_pipeline(
     fetcher: FakeFetcher,
     *,
     registration: MondayRegistrationResult | Exception | None = None,
+    audiencia_registration: MondayRegistrationResult | None = None,
     communications: list | None = None,
 ) -> list[dict]:
     register_calls: list[dict] = []
@@ -85,6 +86,11 @@ def _patch_pipeline(
         SimpleNamespace(from_credentials=lambda **kwargs: fetcher),
     )
     monkeypatch.setattr(juridico_pipeline, "register_providencia", fake_register)
+    monkeypatch.setattr(
+        juridico_pipeline,
+        "register_audiencia",
+        lambda **kwargs: audiencia_registration,
+    )
     monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: None)
     monkeypatch.setattr(
         juridico_pipeline,
@@ -199,7 +205,7 @@ class TestProcessNewIntimacoes:
         results = process_new_intimacoes(options)
 
         assert results[0].status == "success"
-        assert results[0].monday_error == "board não encontrado"
+        assert results[0].monday_error == "prazos: board não encontrado"
         assert results[0].monday_item_url is None
         assert len(list_events(events_path=options.events_path)) == 2
 
@@ -262,15 +268,22 @@ class TestProcessNewIntimacoes:
         communication = CaseCommunication(
             text=(
                 "CITAÇÃO da parte ré para apresentar contestação no prazo de "
-                "15 (quinze) dias úteis, na 4ª Vara Cível de São Paulo."
+                "15 (quinze) dias úteis, na 4ª Vara Cível de São Paulo. "
+                "Audiência de conciliação designada para o dia 05/08/2026 às 14:30."
             ),
             communication_type="Citação",
             tribunal="TJSP",
+        )
+        audiencia_registration = MondayRegistrationResult(
+            item_id="888",
+            board_id="456",
+            item_url="https://empresa.monday.com/boards/456/pulses/888",
         )
         _patch_pipeline(
             monkeypatch,
             FakeFetcher([forwarded]),
             registration=None,
+            audiencia_registration=audiencia_registration,
             communications=[communication],
         )
 
@@ -284,6 +297,9 @@ class TestProcessNewIntimacoes:
         assert result.due_date.isoformat() == "2026-08-07"
         assert result.communications_count == 1
         assert "Vara Civel de Sao Paulo" in (result.court_unit or "")
+        # audiência no teor → item também no board "audiências"
+        assert result.hearing_datetime is not None
+        assert result.monday_audiencia_url == "https://empresa.monday.com/boards/456/pulses/888"
 
     def test_should_tolerate_comunica_failure(
         self,

@@ -16,6 +16,7 @@ from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_co
 from classificacao_procons.juridico.datajud import DataJudError, fetch_case_movements
 from classificacao_procons.juridico.events import AgentEventError, list_events
 from classificacao_procons.juridico.gmail import GmailJuridicoFetcher
+from classificacao_procons.juridico.monday import MondayClientError, describe_boards
 from classificacao_procons.juridico.pipeline import (
     JuridicoPipelineError,
     JuridicoPipelineOptions,
@@ -131,6 +132,17 @@ def _run_andamentos(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_boards(args: argparse.Namespace) -> int:
+    try:
+        boards = describe_boards(name_filter=args.filter)
+    except MondayClientError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    print(json.dumps(boards, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_events(args: argparse.Namespace) -> int:
     try:
         events = list_events(
@@ -217,6 +229,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     andamentos_parser.add_argument("--limit", type=int, default=20)
 
+    boards_parser = subparsers.add_parser(
+        "boards",
+        help="Listar boards do Monday com grupos, colunas e mapeamento detectado",
+    )
+    boards_parser.add_argument(
+        "--filter",
+        help="Filtra boards pelo nome (ex.: prazos, audiencias, processos).",
+    )
+
     events_parser = subparsers.add_parser(
         "events",
         help="Listar eventos de handoff para os agentes futuros",
@@ -242,6 +263,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_comunicacoes(args)
     if args.command == "andamentos":
         return _run_andamentos(args)
+    if args.command == "boards":
+        return _run_boards(args)
     if args.command == "events":
         return _run_events(args)
 

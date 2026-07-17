@@ -106,6 +106,7 @@ class ProcessedIntimacao:
     analysis_source: str = ""
     communications_count: int = 0
     monday_item_url: str | None = None
+    monday_audiencia_url: str | None = None
     monday_error: str | None = None
     events_emitted: list[str] = field(default_factory=list)
     error: str | None = None
