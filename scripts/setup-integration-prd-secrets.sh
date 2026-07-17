@@ -11,9 +11,22 @@ set -euo pipefail
 
 PROJECT_ID="${PROJECT_ID:-b4a-prj-integration-prd}"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CREDENTIALS_DIR="${ROOT_DIR}/credentials"
+mkdir -p "${CREDENTIALS_DIR}"
 
-OAUTH_FILE="${1:-${ROOT_DIR}/credentials/gmail-oauth.json}"
-TOKEN_FILE="${2:-${ROOT_DIR}/credentials/gmail-token.json}"
+OAUTH_FILE="${1:-${CREDENTIALS_DIR}/gmail-oauth.json}"
+TOKEN_FILE="${2:-${CREDENTIALS_DIR}/gmail-token.json}"
+
+if [[ -n "${GMAIL_OAUTH_JSON:-}" && ! -f "${OAUTH_FILE}" ]]; then
+  printf '%s' "${GMAIL_OAUTH_JSON}" > "${OAUTH_FILE}"
+fi
+if [[ -n "${GMAIL_TOKEN_JSON:-}" && ! -f "${TOKEN_FILE}" ]]; then
+  printf '%s' "${GMAIL_TOKEN_JSON}" > "${TOKEN_FILE}"
+fi
+
+MONDAY_TOKEN="${MONDAY_TOKEN:-${MONDAY_API_TOKEN:-}}"
+AUTENTIQUE_TOKEN="${AUTENTIQUE_TOKEN:-${AUTENTIQUE_API_TOKEN:-}}"
+GEMINI_KEY="${GEMINI_KEY:-${GEMINI_API_KEY:-}}"
 
 export PATH="${HOME}/google-cloud-sdk/bin:${HOME}/google-cloud-sdk/google-cloud-sdk/bin:${PATH}"
 
