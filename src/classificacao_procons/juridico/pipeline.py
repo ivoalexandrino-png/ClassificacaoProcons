@@ -72,7 +72,9 @@ class JuridicoPipelineOptions:
     monday_group_name: str | None = None
     register_on_monday: bool = True
     consult_datajud: bool = True
-    datajud_limit: int = 5
+    # 20 andamentos: o suficiente para a detecção de estágio superado enxergar
+    # contestação/acordo/sentença mesmo com vários atos cartorários recentes.
+    datajud_limit: int = 20
     consult_comunica: bool = True
     comunica_limit: int = 5
 
