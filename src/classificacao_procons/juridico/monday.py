@@ -41,7 +41,9 @@ ENV_JURIDICO_BOARD_NAME = "MONDAY_JURIDICO_BOARD_NAME"
 ENV_JURIDICO_BOARD_ID = "MONDAY_JURIDICO_BOARD_ID"
 ENV_JURIDICO_GROUP_NAME = "MONDAY_JURIDICO_GROUP_NAME"
 DEFAULT_JURIDICO_BOARD_NAME = "prazos"
-DEFAULT_JURIDICO_GROUP_NAME = ""
+# Grupo real do quadro "prazos" destinado a processos judiciais
+# (o quadro também tem grupos do domínio Procon).
+DEFAULT_JURIDICO_GROUP_NAME = "prazos processos"
 
 ENV_AUDIENCIAS_BOARD_NAME = "MONDAY_AUDIENCIAS_BOARD_NAME"
 ENV_AUDIENCIAS_BOARD_ID = "MONDAY_AUDIENCIAS_BOARD_ID"
@@ -62,7 +64,7 @@ FIELD_ANALYSIS = "analysis"
 
 _FIELD_TITLE_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (FIELD_INTIMACAO_ID, ("id intimacao", "id da intimacao", "message id")),
-    (FIELD_DUE_DATE, ("prazo fatal", "prazo final", "prazo")),
+    (FIELD_DUE_DATE, ("prazo fatal", "prazo final", "prazo", "fatal", "data limite", "vencimento")),
     (FIELD_HEARING, ("audiencia",)),
     (FIELD_PROVIDENCIA, ("providencia", "acao necessaria")),
     (FIELD_ANALYSIS, ("analise", "o que aconteceu", "parecer", "entendimento")),
@@ -317,6 +319,51 @@ def _find_intimacao_id_column(columns: list[MondayColumn]) -> MondayColumn | Non
     return None
 
 
+def _find_existing_item_id_by_name(
+    *,
+    api_token: str,
+    board_id: str,
+    item_name: str,
+) -> str | None:
+    """Busca item com o mesmo nome no board (processo + providência).
+
+    É a deduplicação padrão quando o board não tem coluna "ID Intimação":
+    dois e-mails sobre a mesma intimação geram o mesmo nome de item, enquanto
+    uma providência nova (ex.: sentença meses depois) gera nome diferente e
+    cria item novo.
+    """
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: ID!, $itemName: CompareValue!) {
+          boards(ids: [$boardId]) {
+            items_page(
+              limit: 10
+              query_params: {
+                rules: [{column_id: "name", compare_value: $itemName, operator: contains_text}]
+              }
+            ) {
+              items {
+                id
+                name
+              }
+            }
+          }
+        }
+        """,
+        variables={"boardId": board_id, "itemName": item_name},
+    )
+
+    boards = data.get("boards", [])
+    if not boards:
+        return None
+    items = boards[0].get("items_page", {}).get("items", [])
+    for item in items:
+        if str(item.get("name", "")).strip() == item_name:
+            return str(item["id"])
+    return None
+
+
 def _create_item_with_dedupe(
     *,
     api_token: str,
@@ -325,7 +372,14 @@ def _create_item_with_dedupe(
     column_values: dict[str, Any],
     dedupe_value: str,
 ) -> MondayRegistrationResult:
-    """Cria item no board, pulando quando a intimação já foi cadastrada."""
+    """Cria item no board, pulando quando a intimação já foi cadastrada.
+
+    Deduplica em duas camadas: pela coluna "ID Intimação" (quando o board
+    tiver uma) e pelo nome do item (processo + providência), que cobre
+    e-mails distintos sobre a mesma intimação.
+    """
+    existing_item_id: str | None = None
+
     intimacao_id_column = _find_intimacao_id_column(context.columns)
     if intimacao_id_column is not None:
         existing_item_id = _find_existing_item_id(
@@ -334,17 +388,25 @@ def _create_item_with_dedupe(
             protocol_column=intimacao_id_column,
             protocol_number=dedupe_value,
         )
-        if existing_item_id is not None:
-            return MondayRegistrationResult(
-                item_id=existing_item_id,
+
+    if existing_item_id is None:
+        existing_item_id = _find_existing_item_id_by_name(
+            api_token=api_token,
+            board_id=context.board_id,
+            item_name=item_name,
+        )
+
+    if existing_item_id is not None:
+        return MondayRegistrationResult(
+            item_id=existing_item_id,
+            board_id=context.board_id,
+            item_url=_build_item_url(
+                account_slug=context.account_slug,
                 board_id=context.board_id,
-                item_url=_build_item_url(
-                    account_slug=context.account_slug,
-                    board_id=context.board_id,
-                    item_id=existing_item_id,
-                ),
-                skipped_duplicate=True,
-            )
+                item_id=existing_item_id,
+            ),
+            skipped_duplicate=True,
+        )
 
     item_id = _create_item(
         api_token=api_token,

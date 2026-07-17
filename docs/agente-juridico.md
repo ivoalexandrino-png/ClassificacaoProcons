@@ -93,7 +93,11 @@ públicas do CNJ:
 - **Comunica/PJe (Domicílio Judicial Eletrônico)** — teor integral das
   comunicações expedidas para o processo, sem chave de API. Quando o e-mail
   encaminhado vem sem detalhes ("segue intimação"), é o teor oficial que define
-  tipo, prazo e vara na triagem.
+  tipo, prazo e vara na triagem. **Atenção:** o CloudFront do CNJ bloqueia
+  requisições de fora do Brasil (HTTP 403) — de VMs no exterior (Cloud Agents,
+  runners do GitHub) o teor não é anexado; o fluxo segue com o e-mail + DataJud
+  e o erro fica anotado no resultado. Para ter o teor, rode de IP brasileiro
+  (ex.: Cloud Run em `southamerica-east1`).
 - **DataJud** — últimos andamentos ([API pública](https://datajud-wiki.cnj.jus.br/api-publica/)).
   Configure a chave (pública, publicada pelo CNJ) em `DATAJUD_API_KEY`. O alias
   do tribunal é inferido do número CNJ (ex.: `tjsp`, `trf3`, `trt2`); use
@@ -121,11 +125,12 @@ Dois quadros recebem itens automaticamente:
   `audiencias`), **sem excluir o prazo**: um mesmo processo pode ter prazo de
   contestação no `prazos` e audiência no `audiências`.
 
-O grupo é configurável (`MONDAY_JURIDICO_GROUP_NAME` / `MONDAY_AUDIENCIAS_GROUP_NAME`);
-sem configuração, o item entra no primeiro grupo do board. O board é localizado
-por nome normalizado (aceita "Prazos", "prazos" etc.). Use `juridico boards
---filter prazos` para inspecionar os quadros visíveis, seus grupos, colunas e o
-mapeamento que o agente detecta em cada coluna.
+O grupo é configurável (`MONDAY_JURIDICO_GROUP_NAME` / `MONDAY_AUDIENCIAS_GROUP_NAME`).
+No board `prazos`, o padrão é o grupo **"Prazos Processos"**; se o grupo
+configurado não existir, o item entra no primeiro grupo do board. O board é
+localizado por nome normalizado (aceita "Prazos", "prazos" etc.). Use
+`juridico boards --filter prazos` para inspecionar os quadros visíveis, seus
+grupos, colunas e o mapeamento que o agente detecta em cada coluna.
 
 Os quadros `processos judiciais`, `processos trabalhistas` e `kpi processos
 consumidores` fazem parte do roadmap (status do processo, contingências/
@@ -148,8 +153,15 @@ Colunas são mapeadas por título:
 
 Itens de prazo só são criados quando a triagem exige providência; "tomar
 ciência" não gera item (audiência marcada gera item no board de audiências
-mesmo assim). A deduplicação usa a coluna `ID Intimação` (se existir) e o
-estado local `data/juridico-processed.json`.
+mesmo assim).
+
+A deduplicação tem três camadas:
+
+1. estado local `data/juridico-processed.json` (mesmo e-mail nunca reprocessa);
+2. coluna `ID Intimação`, quando o board tiver uma;
+3. **nome do item** (`processo — providência`): dois e-mails distintos sobre a
+   mesma intimação geram o mesmo nome e não duplicam; uma providência nova do
+   mesmo processo (ex.: sentença meses depois) gera nome diferente e cria item.
 
 Proteções do mapeamento (calibradas com os quadros reais):
 
