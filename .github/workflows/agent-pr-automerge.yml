@@ -39,12 +39,15 @@ jobs:
             }
 
             if (pr.draft) {
-              await github.rest.pulls.update({
-                owner,
-                repo,
-                pull_number: pullNumber,
-                draft: false,
-              });
+              // A REST API ignora "draft" em pulls.update; usar a mutation GraphQL.
+              await github.graphql(
+                `mutation ($pullRequestId: ID!) {
+                  markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+                    pullRequest { number isDraft }
+                  }
+                }`,
+                { pullRequestId: pr.node_id },
+              );
               ({ data: pr } = await github.rest.pulls.get({
                 owner,
                 repo,

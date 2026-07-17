@@ -1,6 +1,6 @@
 # ClassificacaoProcons
 
-Agente de triagem e cadastro de reclamações do Procon-SP, com automação adicional de contratos assinados (Autentique).
+Agente de triagem e cadastro de reclamações do Procon-SP, com automação adicional de contratos assinados (Autentique) e agente jurídico de intimações judiciais.
 
 ## O que o repositório faz
 
@@ -34,6 +34,18 @@ Servidor de webhooks (`contratos-webhook`) que reage a eventos do Autentique e d
 | `document.finished` (Autentique) | Baixa o PDF assinado, extrai dados com Gemini, salva no Drive e atualiza Monday |
 | Item criado no quadro Contratos (Monday) | Enriquece o item com dados extraídos por Gemini |
 
+### 3. Agente jurídico (e-mail → processo → análise → Monday)
+
+CLI `juridico`. Os prazos chegam por e-mail — encaminhados do e-mail pessoal para a caixa corporativa (`JURIDICO_FORWARDER_EMAILS`) ou vindos do Domicílio Judicial Eletrônico/andamentos do CNJ — e o Monday é o caminho final. Para cada e-mail não lido:
+
+1. Identifica a intimação (direta, DJE — `domicilio.comunicacoes@cnj.jus.br` — ou encaminhada com `Fwd:`/`Enc:` dos e-mails pessoais autorizados) e extrai **número CNJ**, tipo, **prazo** e **audiência**
+2. **Entra no processo**: busca o teor integral das comunicações (API Comunica/PJe do Domicílio Judicial, sem chave) e os andamentos (DataJud, `DATAJUD_API_KEY`)
+3. **Entende o que aconteceu**: análise caso a caso (Gemini se `GEMINI_API_KEY`, senão resumo heurístico) e triagem da providência com prazo fatal em dias úteis
+4. Cadastra no Monday: prazos no board **`prazos`** e, havendo audiência marcada, também no board **`audiências`** (sem excluir o prazo)
+5. Emite eventos em `data/juridico-events.jsonl` para os agentes futuros de **peças processuais** e **relatórios contingenciais**
+
+Detalhes em [`docs/agente-juridico.md`](docs/agente-juridico.md).
+
 ## Pré-requisitos
 
 - Python 3.11+
@@ -66,6 +78,10 @@ pip install -e ".[dev]"
 | `GEMINI_API_KEY` | `elaborate` e extração de contratos | Chave da API do Gemini |
 | `AUTENTIQUE_API_TOKEN` | Pipeline de contratos | Token da API do Autentique |
 | `AUTENTIQUE_WEBHOOK_SECRET` | Webhook de contratos (recomendado) | Valida assinatura dos webhooks |
+| `DATAJUD_API_KEY` | Agente jurídico: andamentos | Chave pública da API DataJud/CNJ |
+| `JURIDICO_FORWARDER_EMAILS` | — (tem padrão) | E-mails pessoais autorizados a encaminhar intimações |
+| `MONDAY_JURIDICO_BOARD_NAME` | — (padrão `prazos`) | Board de prazos do agente jurídico |
+| `MONDAY_AUDIENCIAS_BOARD_NAME` | — (padrão `audiencias`) | Board de audiências do agente jurídico |
 
 Em produção, todos os segredos ficam no Secret Manager (ver `cloudbuild*.yaml`).
 
@@ -85,6 +101,17 @@ Comandos auxiliares:
 ```bash
 procon-portal --code "..."                 # só portal (download do PDF)
 procon-drive --consumer-name "..." --pdf downloads/arquivo.pdf
+```
+
+## Uso — agente jurídico
+
+```bash
+juridico list                              # intimações não lidas (JSON)
+juridico process                           # processo + análise + Monday + eventos
+juridico process --dry-run                 # só mostra a triagem
+juridico comunicacoes --numero "1001234-56.2026.8.26.0100"  # teor (Domicílio Judicial)
+juridico andamentos --numero "1001234-56.2026.8.26.0100"  # andamento (DataJud)
+juridico events --type elaborar_peca       # fila para os agentes futuros
 ```
 
 ### Agendamento (a cada 1 hora)
@@ -125,6 +152,7 @@ src/classificacao_procons/
 ├── monday/      # cliente e mapeamento Monday
 ├── gemini/      # cliente Gemini
 ├── contratos/   # Autentique, webhooks, sync Controle Assinaturas
+├── juridico/    # agente jurídico: intimações, DataJud, providências, eventos
 ├── cli.py       # CLI procon-email
 ├── pipeline.py  # pipeline principal (e-mail → portal → Drive → Monday)
 └── response_pipeline.py  # elaboração de respostas
@@ -150,7 +178,10 @@ print(result.portal_url, result.access_code)
 - [x] PDF da resposta + unificação de anexos SAC (`resposta-unificada.pdf` no Drive)
 - [x] Persistência de estado no GitHub Actions (evita reprocessar o mesmo caso)
 - [x] Contratos: webhooks Autentique + Monday, sync Controle Assinaturas
+- [x] Agente jurídico: intimações → triagem → Monday + eventos de handoff
 - [ ] Envio automático no portal Procon
+- [ ] Agente de elaboração/protocolo de peças processuais (consome `elaborar_peca`)
+- [ ] Agente de relatórios contingenciais (consome `atualizar_contingencia`)
 
 ## Validação
 
