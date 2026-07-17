@@ -84,6 +84,14 @@ def get_authorization_url(
     return auth_url
 
 
+def _normalize_auth_code(code: str) -> str:
+    """Remove prefixos comuns ao colar da barra de endereço (ex.: code= ou =)."""
+    cleaned = code.strip()
+    if cleaned.lower().startswith("code="):
+        cleaned = cleaned[5:]
+    return cleaned.lstrip("=").strip()
+
+
 def save_token_from_code(
     *,
     code: str,
@@ -93,6 +101,7 @@ def save_token_from_code(
 ) -> None:
     """Salva token após usuário colar o código de autorização."""
     pending_path = Path(PENDING_AUTH_PATH)
+    normalized_code = _normalize_auth_code(code)
 
     if remote or not pending_path.exists():
         if not remote:
@@ -100,13 +109,13 @@ def save_token_from_code(
                 "Link expirado. Gere um novo com: procon-email auth",
             )
         flow = _create_oauth_flow(credentials_path=credentials_path, remote=True)
-        flow.fetch_token(code=code.strip())
+        flow.fetch_token(code=normalized_code)
     else:
         pending = _load_pending_auth()
         flow = _create_oauth_flow(credentials_path=credentials_path, remote=False)
         flow.redirect_uri = pending["redirect_uri"]
         flow.code_verifier = pending["code_verifier"]
-        flow.fetch_token(code=code.strip())
+        flow.fetch_token(code=normalized_code)
         pending_path.unlink(missing_ok=True)
 
     os.makedirs(os.path.dirname(token_path) or ".", exist_ok=True)
