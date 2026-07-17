@@ -17,7 +17,7 @@ steps:
       - run
       - deploy
       - contratos-webhook
-      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:${SHORT_SHA}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REPO}/classificacao-procons:$BUILD_ID
       - --region=${_REGION}
       - --platform=managed
       - --allow-unauthenticated
