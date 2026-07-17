@@ -31,7 +31,20 @@ GEMINI_KEY="${GEMINI_KEY:-${GEMINI_API_KEY:-}}"
 export PATH="${HOME}/google-cloud-sdk/bin:${HOME}/google-cloud-sdk/google-cloud-sdk/bin:${PATH}"
 
 gcloud config set project "${PROJECT_ID}" >/dev/null
-gcloud services enable secretmanager.googleapis.com --project="${PROJECT_ID}" >/dev/null
+
+enable_api() {
+  local api="$1"
+  if gcloud services enable "${api}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+    echo "API ativa: ${api}"
+  else
+    echo "Aviso: não foi possível ativar ${api} (habilite manualmente no Console GCP)" >&2
+  fi
+}
+
+enable_api secretmanager.googleapis.com
+enable_api run.googleapis.com
+enable_api cloudbuild.googleapis.com
+enable_api artifactregistry.googleapis.com
 
 upsert_secret() {
   local name="$1"

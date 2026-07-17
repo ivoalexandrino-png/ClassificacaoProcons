@@ -27,13 +27,14 @@ echo "==> Região:  ${REGION}"
 
 gcloud config set project "${PROJECT_ID}"
 
-echo "==> Habilitando APIs..."
-gcloud services enable \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com \
-  secretmanager.googleapis.com \
-  --project="${PROJECT_ID}"
+echo "==> Habilitando APIs (se tiver permissão)..."
+for api in run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com; do
+  if gcloud services enable "${api}" --project="${PROJECT_ID}" >/dev/null 2>&1; then
+    echo "API ativa: ${api}"
+  else
+    echo "Aviso: ative manualmente no Console: ${api}" >&2
+  fi
+done
 
 echo "==> Verificando secrets obrigatórios..."
 REQUIRED_SECRETS=(
