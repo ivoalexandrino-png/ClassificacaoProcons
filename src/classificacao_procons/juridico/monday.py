@@ -5,8 +5,9 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from classificacao_procons.juridico.models import (
     ACTION_ACOMPANHAR_ANDAMENTO,
@@ -284,11 +285,20 @@ def monday_due_date(due_date: date | None) -> date | None:
     return subtract_business_days(due_date, MONDAY_SAFETY_BUSINESS_DAYS)
 
 
+# Horários das intimações chegam em hora local de Brasília (sem fuso); o
+# Monday interpreta o campo "time" como UTC e exibe no fuso da conta.
+_BRAZIL_TZ = ZoneInfo("America/Sao_Paulo")
+
+
 def _hearing_column_value(hearing: datetime) -> dict[str, str]:
-    value: dict[str, str] = {"date": hearing.date().isoformat()}
-    if (hearing.hour, hearing.minute) != (0, 0):
-        value["time"] = hearing.strftime("%H:%M:%S")
-    return value
+    if (hearing.hour, hearing.minute) == (0, 0):
+        return {"date": hearing.date().isoformat()}
+    localized = hearing.replace(tzinfo=_BRAZIL_TZ) if hearing.tzinfo is None else hearing
+    utc_moment = localized.astimezone(UTC)
+    return {
+        "date": utc_moment.date().isoformat(),
+        "time": utc_moment.strftime("%H:%M:%S"),
+    }
 
 
 def build_providencia_column_values(
@@ -325,11 +335,39 @@ def build_providencia_column_values(
                 column_values[column.id] = _hearing_column_value(providencia.hearing_datetime)
             continue
 
+        if field == FIELD_PROCESS_NUMBER and column.column_type not in {"text", "long_text"}:
+            # "Processos Judiciais" (board_relation) e afins exigem id de item,
+            # não texto — enviar o número CNJ falharia silenciosamente.
+            continue
+
         raw_value = values.get(field)
         if raw_value in (None, ""):
             continue
         column_values[column.id] = format_column_value(column.column_type, raw_value)
 
+    return column_values
+
+
+def _apply_audiencias_date_default(
+    columns: list[MondayColumn],
+    column_values: dict[str, Any],
+    providencia: Providencia,
+) -> dict[str, Any]:
+    """No quadro de audiências, a coluna de data chama-se só "Data".
+
+    Sem "audiência" no título ela não entra no mapeamento por palavra-chave;
+    aqui a data/hora da audiência é aplicada a colunas de data chamadas
+    "Data" que ainda não receberam valor.
+    """
+    if providencia.hearing_datetime is None:
+        return column_values
+    for column in columns:
+        if (
+            column.column_type == "date"
+            and _normalize_title(column.title) == "data"
+            and column.id not in column_values
+        ):
+            column_values[column.id] = _hearing_column_value(providencia.hearing_datetime)
     return column_values
 
 
@@ -722,22 +760,39 @@ def register_audiencia(
     )
     column_values = sanitize_column_values(
         context.column_details,
-        build_providencia_column_values(
+        _apply_audiencias_date_default(
             context.columns,
-            intimacao=intimacao,
-            providencia=providencia,
-            message_id=message_id,
-            analysis=analysis,
+            build_providencia_column_values(
+                context.columns,
+                intimacao=intimacao,
+                providencia=providencia,
+                message_id=message_id,
+                analysis=analysis,
+            ),
+            providencia,
         ),
     )
     item_name = f"{intimacao.process_number} — Audiência {hearing.strftime('%d/%m/%Y %H:%M')}"
-    return _create_item_with_dedupe(
+    duplicate_note = (
+        f"Nova intimação recebida (e-mail {message_id}): audiência de "
+        f"{hearing.strftime('%d/%m/%Y %H:%M')} já cadastrada neste item — "
+        "nenhum item novo foi criado. Revisar se algo mudou."
+    )
+    result = _create_item_with_dedupe(
         api_token=token,
         context=context,
         item_name=item_name,
         column_values=column_values,
         dedupe_value=message_id,
+        duplicate_note=duplicate_note,
     )
+
+    # Como no quadro de prazos: sem coluna de análise, o teor e o parecer
+    # vão como update na timeline do item.
+    if analysis and not result.skipped_duplicate and not _has_analysis_column(context.columns):
+        _create_update(api_token=token, item_id=result.item_id, body=analysis)
+
+    return result
 
 
 def describe_boards(

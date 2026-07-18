@@ -134,7 +134,7 @@ class TestBuildProvidenciaColumnValues:
             providencia=providencia,
             message_id="msg-002",
         )
-        assert values["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+        assert values["col_aud"] == {"date": "2026-08-05", "time": "17:30:00"}
 
     def test_should_not_write_hearing_into_non_date_columns(self) -> None:
         """"Link Audiência"/"Orientações de Audiência" (quadro real) ficam manuais."""
@@ -158,7 +158,7 @@ class TestBuildProvidenciaColumnValues:
             providencia=providencia,
             message_id="msg-005",
         )
-        assert values["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+        assert values["col_aud"] == {"date": "2026-08-05", "time": "17:30:00"}
         assert "col_link_aud" not in values
         assert "col_orient" not in values
 
@@ -208,6 +208,17 @@ REAL_PRAZOS_COLUMNS = [
     MondayColumn(id="col_proc", title="Número Processo", column_type="text"),
     MondayColumn(id="col_data", title="Data", column_type="date"),
     MondayColumn(id="col_fatal", title="Fatal", column_type="date"),
+]
+
+# Colunas do quadro "Audiências" real: a data chama-se só "Data" e o número do
+# processo aparece em long_text e em board_relation (que não aceita texto).
+REAL_AUDIENCIAS_COLUMNS = [
+    MondayColumn(id="col_data", title="Data", column_type="date"),
+    MondayColumn(id="col_local", title="Local", column_type="location"),
+    MondayColumn(id="col_link", title="Link Audiência (se virtual)", column_type="link"),
+    MondayColumn(id="col_rel", title="Processos Judiciais", column_type="board_relation"),
+    MondayColumn(id="col_num", title="Número do Processo", column_type="long_text"),
+    MondayColumn(id="col_orient", title="Orientações de Audiência", column_type="text"),
 ]
 
 
@@ -695,4 +706,84 @@ class TestRegisterAudiencia:
             "1001234-56.2026.8.26.0100 — Audiência 05/08/2026 14:30"
         )
         applied = apply_values.call_args.kwargs["column_values"]
-        assert applied["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+        assert applied["col_aud"] == {"date": "2026-08-05", "time": "17:30:00"}
+
+    def test_should_fill_real_audiencias_board_columns(self) -> None:
+        """Quadro real: data em "Data", processo só nas colunas de texto,
+        board_relation intocada e análise como update (sem coluna própria)."""
+        providencia = Providencia(
+            action_type=ACTION_COMPARECER_AUDIENCIA,
+            description="Preparar e comparecer à audiência",
+            requires_action=True,
+            hearing_datetime=datetime(2026, 8, 5, 14, 30),
+        )
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(REAL_AUDIENCIAS_COLUMNS),
+            ),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
+            patch.object(juridico_monday, "_create_item", return_value="890"),
+            patch.object(juridico_monday, "_apply_complaint_column_values") as apply_values,
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_audiencia(
+                intimacao=INTIMACAO,
+                providencia=providencia,
+                message_id="msg-005",
+                analysis="Audiência de conciliação designada; ver teor no e-mail.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        applied = apply_values.call_args.kwargs["column_values"]
+        assert applied["col_data"] == {"date": "2026-08-05", "time": "17:30:00"}
+        assert applied["col_num"] == {"text": "1001234-56.2026.8.26.0100"}
+        assert "col_rel" not in applied  # board_relation não aceita texto
+        assert "col_link" not in applied  # link fica para preenchimento manual
+        assert "col_orient" not in applied
+        create_update.assert_called_once()
+        assert create_update.call_args.kwargs["item_id"] == "890"
+        assert "conciliação" in create_update.call_args.kwargs["body"]
+
+    def test_should_annotate_existing_item_when_audiencia_is_duplicated(self) -> None:
+        providencia = Providencia(
+            action_type=ACTION_COMPARECER_AUDIENCIA,
+            description="Preparar e comparecer à audiência",
+            requires_action=True,
+            hearing_datetime=datetime(2026, 8, 5, 14, 30),
+        )
+        existing = [
+            {
+                "id": "891",
+                "name": "1001234-56.2026.8.26.0100 — Audiência 05/08/2026 14:30",
+                "group_title": "Audiências (Procons e Processos)",
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(REAL_AUDIENCIAS_COLUMNS),
+            ),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_item") as create_item,
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_audiencia(
+                intimacao=INTIMACAO,
+                providencia=providencia,
+                message_id="msg-repetido",
+                analysis="Parecer.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is True
+        assert result.item_id == "891"
+        create_item.assert_not_called()
+        create_update.assert_called_once()
+        note = create_update.call_args.kwargs["body"]
+        assert "msg-repetido" in note
+        assert "05/08/2026 14:30" in note

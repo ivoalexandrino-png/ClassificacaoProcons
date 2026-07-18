@@ -218,9 +218,18 @@ Proteções do mapeamento (calibradas com os quadros reais):
 
 - A data da audiência só é escrita em colunas do tipo **data** — "Link
   Audiência" e "Orientações de Audiência" ficam para preenchimento manual.
+  No quadro de audiências, a coluna chamada só "Data" recebe a data/hora da
+  audiência; o horário é convertido de Brasília para UTC (o Monday exibe no
+  fuso da conta).
 - Colunas com "Responsável" no título nunca são preenchidas automaticamente.
 - "Processo Administrativo", "Processos Consumidores" e afins não recebem o
   número CNJ (pertencem ao domínio Procon/consumidores).
+- O número CNJ só é escrito em colunas de **texto** ("Número do Processo") —
+  "Processos Judiciais" (conexão entre quadros) exige id de item e fica para
+  vínculo manual.
+- Itens de audiência duplicados (mesmo processo + mesma data/hora) não são
+  recriados: o item existente recebe anotação, como no quadro de prazos. Sem
+  coluna de análise no quadro, o parecer vai como update no item.
 
 ## E-mails sem número CNJ (`needs_review`)
 
