@@ -89,20 +89,31 @@ tribunal e ficam fora do MVP — confira o termo final no sistema do tribunal).
 
 Pushes chegam atrasados ou repetidos: um aviso de citação pode se referir a um
 processo que já teve contestação, acordo e sentença. Antes de fechar a
-providência, o agente cruza a triagem do e-mail com os andamentos do DataJud —
-se eles mostram estágio já superado, a providência é **rebaixada para ciência**
-(sem prazo, sem item no quadro, sem evento de peça) e o motivo fica registrado
-em `stage_note` (também aparece na análise do caso):
+providência, o agente cruza a triagem do e-mail com os andamentos do DataJud e
+detecta o **marco de estágio mais avançado** (contestação → sentença → acordo →
+encerramento). Se a providência do e-mail já foi superada, ela é **substituída
+pela providência específica do estágio atual**, com prazo — o andamento
+específico vai para o Monday em vez de virar "tomar ciência":
 
-| Providência do e-mail | Rebaixada quando o DataJud mostra |
-|-----------------------|------------------------------------|
-| Apresentar contestação | contestação, acordo homologado, sentença, extinção, trânsito em julgado, arquivamento |
-| Apresentar manifestação | trânsito em julgado, arquivamento, baixa definitiva |
-| Analisar sentença/recurso | acordo homologado, trânsito em julgado, arquivamento, baixa definitiva |
+| Marco no DataJud | Providência cadastrada | Prazo (dias úteis do push) |
+|------------------|------------------------|----------------------------|
+| Trânsito em julgado / arquivamento / baixa / extinção | Verificar encerramento e obrigações finais | 5 |
+| Acordo homologado (Homologação de Transação) | Acompanhar cumprimento do acordo homologado | 10 |
+| Sentença (procedência/improcedência) | Analisar sentença e avaliar recurso | 15 (prazo legal estimado) |
+| Contestação já apresentada | Acompanhar andamento do processo | 10 |
+
+O motivo e o andamento específico ficam em `stage_note` (entra na análise e,
+nos quadros sem coluna de análise, vira update no item). Os prazos de
+acompanhamento contam do recebimento do push — o de recurso é estimativa do
+prazo legal; confirme a data de intimação no tribunal.
+
+Pushes de **mera ciência** também são cruzados: se o processo tem sentença,
+acordo ou encerramento nos últimos 30 dias, o agente cadastra a providência
+específica em vez de deixar passar (marcos mais antigos não reabrem casos).
 
 O `--dry-run` também consulta o DataJud/Comunica (somente leitura), então a
 triagem exibida já é a ciente do estágio. Sem `DATAJUD_API_KEY` (ou com
-`--no-datajud`), o rebaixamento não acontece — revise a providência sugerida.
+`--no-datajud`), a reclassificação não acontece — revise a providência sugerida.
 
 ## Entrar no processo: teor + andamentos
 
@@ -187,9 +198,10 @@ A deduplicação tem três camadas:
    item existente cria item novo normalmente. No board `audiências` a
    deduplicação continua pelo nome do item (`processo — Audiência data`).
 
-A ordem de fases usada na camada 3 é: contestação → manifestação/audiência →
-recurso. Itens com nome fora do padrão `processo — providência` são ignorados
-pela deduplicação (nunca bloqueiam a criação).
+A ordem de fases usada na camada 3 é: contestação → manifestação/audiência/
+acompanhamento → recurso → acordo → encerramento. Itens com nome fora do
+padrão `processo — providência` são ignorados pela deduplicação (nunca
+bloqueiam a criação).
 
 Proteções do mapeamento (calibradas com os quadros reais):
 

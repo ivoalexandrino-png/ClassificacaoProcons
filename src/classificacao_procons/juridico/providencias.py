@@ -8,11 +8,14 @@ from datetime import date
 from typing import Final
 
 from classificacao_procons.juridico.models import (
+    ACTION_ACOMPANHAR_ANDAMENTO,
     ACTION_ANALISAR_RECURSO,
     ACTION_COMPARECER_AUDIENCIA,
     ACTION_CONTESTAR,
+    ACTION_CUMPRIR_ACORDO,
     ACTION_MANIFESTAR,
     ACTION_TOMAR_CIENCIA,
+    ACTION_VERIFICAR_ENCERRAMENTO,
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
     NOTIFICATION_TYPE_SENTENCA,
@@ -31,6 +34,9 @@ ACTION_LABELS: Final[dict[str, str]] = {
     ACTION_MANIFESTAR: "Apresentar manifestação",
     ACTION_COMPARECER_AUDIENCIA: "Preparar e comparecer à audiência",
     ACTION_ANALISAR_RECURSO: "Analisar sentença e avaliar recurso",
+    ACTION_ACOMPANHAR_ANDAMENTO: "Acompanhar andamento do processo",
+    ACTION_CUMPRIR_ACORDO: "Acompanhar cumprimento do acordo homologado",
+    ACTION_VERIFICAR_ENCERRAMENTO: "Verificar encerramento e obrigações finais",
     ACTION_TOMAR_CIENCIA: "Tomar ciência do andamento",
 }
 
@@ -60,38 +66,53 @@ _NO_ACTION_KEYWORDS: Final[tuple[str, ...]] = (
     "sem necessidade de manifestacao",
 )
 
-# Andamentos (nome TPU/DataJud, normalizado) que indicam estágio processual
-# já superado para cada providência. Ex.: se o DataJud mostra contestação
-# apresentada, acordo homologado ou sentença, "Apresentar contestação" já
-# não faz sentido — o push de citação chegou atrasado ou repetido.
-_SUPERSEDING_MOVEMENT_KEYWORDS: Final[dict[str, tuple[str, ...]]] = {
-    ACTION_CONTESTAR: (
-        "contestacao",
-        "homologacao de transacao",
-        "homologacao do acordo",
-        "acordo homologado",
-        "sentenca",
-        "procedencia",
-        "improcedencia",
-        "extincao",
-        "transito em julgado",
-        "arquivamento",
-        "baixa definitiva",
+# Marcos de estágio processual (nome TPU/DataJud, normalizado), do mais
+# avançado para o mais inicial. O agente detecta o marco mais avançado nos
+# andamentos e o usa tanto para saber se a providência do e-mail já foi
+# superada quanto para definir a providência específica daquele estágio.
+STAGE_ENCERRAMENTO = "encerramento"
+STAGE_ACORDO = "acordo"
+STAGE_SENTENCA = "sentenca"
+STAGE_CONTESTACAO = "contestacao"
+
+_STAGE_MARKER_KEYWORDS: Final[tuple[tuple[str, tuple[str, ...]], ...]] = (
+    (
+        STAGE_ENCERRAMENTO,
+        ("transito em julgado", "arquivamento", "baixa definitiva", "extincao"),
     ),
-    ACTION_MANIFESTAR: (
-        "transito em julgado",
-        "arquivamento",
-        "baixa definitiva",
+    (
+        STAGE_ACORDO,
+        ("homologacao de transacao", "homologacao do acordo", "acordo homologado"),
     ),
-    ACTION_ANALISAR_RECURSO: (
-        "homologacao de transacao",
-        "homologacao do acordo",
-        "acordo homologado",
-        "transito em julgado",
-        "arquivamento",
-        "baixa definitiva",
+    (STAGE_SENTENCA, ("sentenca", "procedencia", "improcedencia")),
+    (STAGE_CONTESTACAO, ("contestacao",)),
+)
+
+# Estágios que tornam cada providência de e-mail obsoleta (push atrasado).
+_SUPERSEDED_BY_STAGES: Final[dict[str, frozenset[str]]] = {
+    ACTION_CONTESTAR: frozenset(
+        {STAGE_CONTESTACAO, STAGE_SENTENCA, STAGE_ACORDO, STAGE_ENCERRAMENTO},
     ),
+    ACTION_MANIFESTAR: frozenset({STAGE_ENCERRAMENTO}),
+    ACTION_ANALISAR_RECURSO: frozenset({STAGE_ACORDO, STAGE_ENCERRAMENTO}),
 }
+
+# Providência específica de cada estágio + prazo de acompanhamento padrão
+# (dias úteis a partir do recebimento do push). O prazo de recurso é o legal
+# (15 dias úteis); os demais são datas operacionais de acompanhamento.
+_STAGE_RECLASSIFICATION: Final[dict[str, tuple[str, int]]] = {
+    STAGE_ENCERRAMENTO: (ACTION_VERIFICAR_ENCERRAMENTO, 5),
+    STAGE_ACORDO: (ACTION_CUMPRIR_ACORDO, 10),
+    STAGE_SENTENCA: (ACTION_ANALISAR_RECURSO, 15),
+    STAGE_CONTESTACAO: (ACTION_ACOMPANHAR_ANDAMENTO, 10),
+}
+
+# Push de mera ciência só vira providência específica se o marco for recente
+# (evita reabrir sentenças/acordos antigos a cada push genérico).
+_CIENCIA_UPGRADE_STAGES: Final[frozenset[str]] = frozenset(
+    {STAGE_ENCERRAMENTO, STAGE_ACORDO, STAGE_SENTENCA},
+)
+_CIENCIA_UPGRADE_MAX_AGE_DAYS: Final = 30
 
 CONTINGENCY_KEYWORDS: Final[tuple[str, ...]] = (
     "deposito",
@@ -108,6 +129,8 @@ CONTINGENCY_KEYWORDS: Final[tuple[str, ...]] = (
     "execucao",
     "cumprimento de sentenca",
     "acordo homologado",
+    "homologacao de transacao",
+    "homologacao do acordo",
 )
 
 
@@ -147,57 +170,118 @@ def affects_contingency(text: str) -> bool:
     return any(keyword in normalized for keyword in CONTINGENCY_KEYWORDS)
 
 
-def find_superseding_movement(
-    action_type: str,
+def detect_process_stage(
     movements: list[CaseMovement],
-) -> CaseMovement | None:
-    """Andamento mais recente que indica que a providência já foi superada."""
-    keywords = _SUPERSEDING_MOVEMENT_KEYWORDS.get(action_type)
-    if not keywords:
-        return None
-    for movement in movements:
-        normalized = _normalize(movement.movement_name)
-        if any(keyword in normalized for keyword in keywords):
-            return movement
+) -> tuple[str, CaseMovement] | None:
+    """Marco de estágio mais avançado presente nos andamentos do DataJud."""
+    for stage, keywords in _STAGE_MARKER_KEYWORDS:
+        for movement in movements:
+            normalized = _normalize(movement.movement_name)
+            if any(keyword in normalized for keyword in keywords):
+                return stage, movement
     return None
 
 
-def downgrade_providencia_for_stage(
-    providencia: Providencia,
-    movements: list[CaseMovement],
+def _movement_moment(movement: CaseMovement) -> str:
+    if movement.movement_datetime:
+        return movement.movement_datetime.strftime("%d/%m/%Y")
+    return "data não informada"
+
+
+def _providencia_for_stage(
+    *,
+    stage: str,
+    marker: CaseMovement,
+    original: Providencia,
+    base_date: date,
+    reason: str,
 ) -> Providencia:
-    """Rebaixa a providência para ciência quando o processo já passou do estágio.
-
-    Cruza a triagem do e-mail com os andamentos do DataJud: se eles mostram
-    contestação apresentada, acordo homologado, sentença, trânsito em julgado
-    ou arquivamento, o prazo sugerido pelo e-mail já não existe — a providência
-    vira "tomar ciência" com uma nota explicando o motivo, e nenhum item de
-    prazo é criado no Monday.
-    """
-    superseding = find_superseding_movement(providencia.action_type, movements)
-    if superseding is None:
-        return providencia
-
-    moment = (
-        superseding.movement_datetime.strftime("%d/%m/%Y")
-        if superseding.movement_datetime
-        else "data não informada"
+    action_type, deadline_days = _STAGE_RECLASSIFICATION[stage]
+    description = ACTION_LABELS[action_type]
+    due_date = compute_due_date(
+        base_date=base_date,
+        deadline_days=deadline_days,
+        in_business_days=True,
+        explicit_date=None,
     )
+    prazo_kind = "prazo legal estimado" if stage == STAGE_SENTENCA else "acompanhamento até"
     stage_note = (
-        f'Providência "{providencia.description}" rebaixada para ciência: '
-        f'o DataJud mostra "{superseding.movement_name}" em {moment} — '
-        "o processo já passou desse estágio. Revisar antes de agir."
+        f'{reason} O DataJud mostra "{marker.movement_name}" em {_movement_moment(marker)}. '
+        f"Providência: {description} ({prazo_kind} "
+        f"{due_date.strftime('%d/%m/%Y') if due_date else 'sem data'}, contado do "
+        "recebimento do push — confirme a data de intimação no tribunal)."
     )
     return Providencia(
-        action_type=ACTION_TOMAR_CIENCIA,
-        description=ACTION_LABELS[ACTION_TOMAR_CIENCIA],
-        requires_action=False,
-        due_date=None,
-        hearing_datetime=providencia.hearing_datetime,
-        requires_legal_document=False,
-        affects_contingency=providencia.affects_contingency,
+        action_type=action_type,
+        description=description,
+        requires_action=True,
+        due_date=due_date,
+        hearing_datetime=original.hearing_datetime,
+        requires_legal_document=action_type in _LEGAL_DOCUMENT_ACTIONS,
+        affects_contingency=(
+            original.affects_contingency or affects_contingency(marker.movement_name)
+        ),
         stage_note=stage_note,
     )
+
+
+def _is_recent_marker(marker: CaseMovement, *, base_date: date) -> bool:
+    if marker.movement_datetime is None:
+        return False
+    age_days = (base_date - marker.movement_datetime.date()).days
+    return age_days <= _CIENCIA_UPGRADE_MAX_AGE_DAYS
+
+
+def reclassify_providencia_from_movements(
+    providencia: Providencia,
+    movements: list[CaseMovement],
+    *,
+    base_date: date,
+) -> Providencia:
+    """Ajusta a providência ao estágio real do processo (andamentos do DataJud).
+
+    Dois caminhos:
+
+    - **Providência do e-mail superada** (ex.: push de citação de processo que
+      já tem contestação, acordo ou sentença): em vez de só "tomar ciência", o
+      agente cadastra a providência específica do estágio atual — acompanhar o
+      acordo, analisar a sentença, verificar o encerramento — com prazo.
+    - **Push de mera ciência** com marco recente (sentença/acordo/encerramento
+      nos últimos 30 dias): vira a providência específica do marco, para o
+      andamento não passar despercebido.
+    """
+    detected = detect_process_stage(movements)
+    if detected is None:
+        return providencia
+    stage, marker = detected
+
+    superseded_by = _SUPERSEDED_BY_STAGES.get(providencia.action_type, frozenset())
+    if stage in superseded_by:
+        return _providencia_for_stage(
+            stage=stage,
+            marker=marker,
+            original=providencia,
+            base_date=base_date,
+            reason=(
+                f'Providência "{providencia.description}" substituída: '
+                "o processo já passou desse estágio."
+            ),
+        )
+
+    if (
+        providencia.action_type == ACTION_TOMAR_CIENCIA
+        and stage in _CIENCIA_UPGRADE_STAGES
+        and _is_recent_marker(marker, base_date=base_date)
+    ):
+        return _providencia_for_stage(
+            stage=stage,
+            marker=marker,
+            original=providencia,
+            base_date=base_date,
+            reason="Andamento relevante detectado no processo.",
+        )
+
+    return providencia
 
 
 def classify_providencia(intimacao: ParsedIntimacao, *, base_date: date) -> Providencia:

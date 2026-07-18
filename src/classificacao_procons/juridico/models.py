@@ -15,6 +15,9 @@ ACTION_CONTESTAR = "contestar"
 ACTION_MANIFESTAR = "manifestar"
 ACTION_COMPARECER_AUDIENCIA = "comparecer_audiencia"
 ACTION_ANALISAR_RECURSO = "analisar_recurso"
+ACTION_ACOMPANHAR_ANDAMENTO = "acompanhar_andamento"
+ACTION_CUMPRIR_ACORDO = "cumprir_acordo"
+ACTION_VERIFICAR_ENCERRAMENTO = "verificar_encerramento"
 ACTION_TOMAR_CIENCIA = "tomar_ciencia"
 
 

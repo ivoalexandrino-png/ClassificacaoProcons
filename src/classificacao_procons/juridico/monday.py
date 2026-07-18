@@ -9,10 +9,13 @@ from datetime import datetime
 from typing import Any
 
 from classificacao_procons.juridico.models import (
+    ACTION_ACOMPANHAR_ANDAMENTO,
     ACTION_ANALISAR_RECURSO,
     ACTION_COMPARECER_AUDIENCIA,
     ACTION_CONTESTAR,
+    ACTION_CUMPRIR_ACORDO,
     ACTION_MANIFESTAR,
+    ACTION_VERIFICAR_ENCERRAMENTO,
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
     NOTIFICATION_TYPE_DECISAO,
@@ -324,6 +327,12 @@ def _find_intimacao_id_column(columns: list[MondayColumn]) -> MondayColumn | Non
     return None
 
 
+def _has_analysis_column(columns: list[MondayColumn]) -> bool:
+    return any(
+        resolve_juridico_field_for_column(column.title) == FIELD_ANALYSIS for column in columns
+    )
+
+
 def _search_items_by_name(
     *,
     api_token: str,
@@ -394,7 +403,10 @@ _ACTION_STAGE_RANK: dict[str, int] = {
     ACTION_CONTESTAR: 1,
     ACTION_MANIFESTAR: 2,
     ACTION_COMPARECER_AUDIENCIA: 2,
+    ACTION_ACOMPANHAR_ANDAMENTO: 2,
     ACTION_ANALISAR_RECURSO: 3,
+    ACTION_CUMPRIR_ACORDO: 4,
+    ACTION_VERIFICAR_ENCERRAMENTO: 5,
 }
 
 _DESCRIPTION_TO_ACTION: dict[str, str] = {
@@ -608,7 +620,7 @@ def register_providencia(
         f'"{providencia.description}" (prazo {due}) já coberta por este item — '
         "nenhum item novo foi criado. Revisar se algo mudou."
     )
-    return _create_item_with_dedupe(
+    result = _create_item_with_dedupe(
         api_token=token,
         context=context,
         item_name=f"{intimacao.process_number} — {providencia.description}",
@@ -618,6 +630,14 @@ def register_providencia(
         action_type=providencia.action_type,
         duplicate_note=duplicate_note,
     )
+
+    # O quadro real de prazos não tem coluna de análise/teor: sem isso, o
+    # andamento específico e o parecer iriam para lugar nenhum — vão como
+    # update na timeline do item recém-criado.
+    if analysis and not result.skipped_duplicate and not _has_analysis_column(context.columns):
+        _create_update(api_token=token, item_id=result.item_id, body=analysis)
+
+    return result
 
 
 def register_audiencia(

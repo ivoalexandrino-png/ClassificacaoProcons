@@ -194,14 +194,23 @@ class TestProcessNewIntimacoes:
         assert not options.state_path.exists()
         assert not options.events_path.exists()
 
-    def test_should_downgrade_providencia_when_datajud_shows_superseding_stage(
+    def test_should_register_stage_specific_providencia_when_email_is_superseded(
         self,
         monkeypatch: pytest.MonkeyPatch,
         options: JuridicoPipelineOptions,
     ) -> None:
-        """Caso real: push de citação de processo que já tem acordo homologado."""
+        """Caso real: push de citação de processo que já tem acordo homologado.
+
+        Em vez de rebaixar para ciência, o agente cadastra a providência do
+        estágio atual (acompanhar o acordo) com prazo no Monday.
+        """
         fetcher = FakeFetcher([_notification()])
-        register_calls = _patch_pipeline(monkeypatch, fetcher, registration=None)
+        registration = MondayRegistrationResult(
+            item_id="801",
+            board_id="123",
+            item_url="https://empresa.monday.com/boards/123/pulses/801",
+        )
+        register_calls = _patch_pipeline(monkeypatch, fetcher, registration=registration)
         monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
         monkeypatch.setattr(
             juridico_pipeline,
@@ -219,18 +228,21 @@ class TestProcessNewIntimacoes:
         result = results[0]
 
         assert result.status == "success"
-        assert result.action_type == "tomar_ciencia"
-        assert result.requires_action is False
-        assert result.due_date is None
+        assert result.action_type == "cumprir_acordo"
+        assert result.requires_action is True
+        assert result.due_date is not None  # data de acompanhamento
         assert result.stage_note is not None
         assert "Homologação de Transação" in result.stage_note
         assert result.stage_note in result.analysis
-        # providência rebaixada não cria item de prazo nem evento de peça
-        assert register_calls == []
+        assert result.monday_item_url == "https://empresa.monday.com/boards/123/pulses/801"
+
+        # cria item de prazo com a providência específica; peça não é exigida
+        assert len(register_calls) == 1
+        assert register_calls[0]["providencia"].action_type == "cumprir_acordo"
         events = list_events(events_path=options.events_path)
         assert [event.event_type for event in events] == [EVENT_ATUALIZAR_CONTINGENCIA]
 
-    def test_should_consult_datajud_and_downgrade_on_dry_run(
+    def test_should_consult_datajud_and_reclassify_on_dry_run(
         self,
         monkeypatch: pytest.MonkeyPatch,
         options: JuridicoPipelineOptions,
@@ -243,7 +255,10 @@ class TestProcessNewIntimacoes:
             juridico_pipeline,
             "fetch_case_movements",
             lambda process_number, *, limit=5: [
-                CaseMovement(movement_name="Homologação de Transação"),
+                CaseMovement(
+                    movement_name="Homologação de Transação",
+                    movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
+                ),
             ],
         )
 
@@ -256,7 +271,7 @@ class TestProcessNewIntimacoes:
         result = results[0]
 
         assert result.status == "dry_run"
-        assert result.action_type == "tomar_ciencia"
+        assert result.action_type == "cumprir_acordo"
         assert result.stage_note is not None
         assert register_calls == []
         assert fetcher.marked_read == []

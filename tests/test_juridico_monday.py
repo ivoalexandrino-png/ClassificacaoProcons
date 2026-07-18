@@ -191,14 +191,23 @@ class TestBuildProvidenciaColumnValues:
         assert "col_vara" not in values
 
 
-def _board_context() -> MondayBoardContext:
+def _board_context(columns: list[MondayColumn] | None = None) -> MondayBoardContext:
+    board_columns = columns if columns is not None else BOARD_COLUMNS
     return MondayBoardContext(
         board_id="123",
         group_id="grp",
-        columns=BOARD_COLUMNS,
-        column_details=[MondayColumnDetails(column=column) for column in BOARD_COLUMNS],
+        columns=board_columns,
+        column_details=[MondayColumnDetails(column=column) for column in board_columns],
         account_slug="empresa",
     )
+
+
+# Colunas do quadro "Prazos" real: sem "ID Intimação" e sem coluna de análise.
+REAL_PRAZOS_COLUMNS = [
+    MondayColumn(id="col_proc", title="Número Processo", column_type="text"),
+    MondayColumn(id="col_data", title="Data", column_type="date"),
+    MondayColumn(id="col_fatal", title="Fatal", column_type="date"),
+]
 
 
 class TestPickJuridicoBoard:
@@ -476,6 +485,58 @@ class TestRegisterProvidencia:
         assert result.skipped_duplicate is False
         assert result.item_id == "556"
         create_item.assert_called_once()
+        create_update.assert_not_called()
+
+    def test_should_post_analysis_as_update_when_board_lacks_analysis_column(self) -> None:
+        """O quadro real de prazos não tem coluna de análise: o andamento
+        específico vai como update na timeline do item criado."""
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(REAL_PRAZOS_COLUMNS),
+            ),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
+            patch.object(juridico_monday, "_create_item", return_value="777"),
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-001",
+                analysis="O DataJud mostra acordo homologado em 20/06/2026.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        create_update.assert_called_once()
+        assert create_update.call_args.kwargs["item_id"] == "777"
+        assert "acordo homologado" in create_update.call_args.kwargs["body"]
+
+    def test_should_not_post_analysis_update_when_board_has_analysis_column(self) -> None:
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
+            patch.object(juridico_monday, "_create_item", return_value="777"),
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-001",
+                analysis="Parecer do caso.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
         create_update.assert_not_called()
 
     def test_should_ignore_items_of_other_processes_or_unknown_names(self) -> None:

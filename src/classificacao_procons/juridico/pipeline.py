@@ -48,7 +48,7 @@ from classificacao_procons.juridico.parser import (
 from classificacao_procons.juridico.providencias import (
     affects_contingency,
     classify_providencia,
-    downgrade_providencia_for_stage,
+    reclassify_providencia_from_movements,
 )
 
 DEFAULT_STATE_PATH = Path("data/juridico-processed.json")
@@ -337,10 +337,15 @@ def _process_notification(
     )
     movements, datajud_error = _fetch_movements_if_configured(intimacao, options=options)
 
-    # 3. Triagem ciente do estágio: se o DataJud mostra contestação/acordo/
-    # sentença posteriores, a providência do e-mail já foi superada.
+    # 3. Triagem ciente do estágio: se o DataJud mostra que a providência do
+    # e-mail já foi superada (ou que há marco recente num push de ciência),
+    # cadastra a providência específica do estágio atual, com prazo.
     providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
-    providencia = downgrade_providencia_for_stage(providencia, movements)
+    providencia = reclassify_providencia_from_movements(
+        providencia,
+        movements,
+        base_date=notification.received_at.date(),
+    )
 
     if options.dry_run:
         return ProcessedIntimacao(
