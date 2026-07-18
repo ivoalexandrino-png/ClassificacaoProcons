@@ -108,7 +108,8 @@ class TestBuildProvidenciaColumnValues:
         assert values["col_vara"] == "1a Vara Civel de Sao Paulo"
         assert values["col_tipo"] == {"label": "Citação"}
         assert values["col_prov"] == "Apresentar contestação"
-        assert values["col_prazo"] == {"date": "2026-08-07"}
+        # prazo fatal real 07/08 lançado com 2 dias úteis de segurança
+        assert values["col_prazo"] == {"date": "2026-08-05"}
         assert values["col_teor"] == {"text": "Citação para contestar em 15 dias úteis."}
         assert values["col_analise"] == {
             "text": "O que aconteceu: citação recebida; contestar até 07/08.",
@@ -358,7 +359,8 @@ class TestRegisterProvidencia:
             "1001234-56.2026.8.26.0100 — Apresentar contestação"
         )
         applied = apply_values.call_args.kwargs["column_values"]
-        assert applied["col_prazo"] == {"date": "2026-08-07"}
+        # prazo fatal real 07/08 lançado com 2 dias úteis de segurança
+        assert applied["col_prazo"] == {"date": "2026-08-05"}
 
     def test_should_skip_duplicate_when_intimacao_already_registered(self) -> None:
         with (
@@ -513,7 +515,11 @@ class TestRegisterProvidencia:
         assert result.skipped_duplicate is False
         create_update.assert_called_once()
         assert create_update.call_args.kwargs["item_id"] == "777"
-        assert "acordo homologado" in create_update.call_args.kwargs["body"]
+        body = create_update.call_args.kwargs["body"]
+        assert "acordo homologado" in body
+        # o update registra o prazo fatal real e a data lançada com segurança
+        assert "Prazo fatal real: 07/08/2026" in body
+        assert "Lançado no quadro em 05/08/2026" in body
 
     def test_should_not_post_analysis_update_when_board_has_analysis_column(self) -> None:
         with (

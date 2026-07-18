@@ -107,6 +107,12 @@ nos quadros sem coluna de análise, vira update no item). Os prazos de
 acompanhamento contam do recebimento do push — o de recurso é estimativa do
 prazo legal; confirme a data de intimação no tribunal.
 
+**Margem de segurança:** a data lançada nas colunas de prazo do Monday é
+sempre **2 dias úteis antes do prazo fatal real** (`MONDAY_SAFETY_BUSINESS_DAYS`
+em `juridico/monday.py`). O prazo fatal real fica registrado na análise e na
+anotação do item ("Prazo fatal real: … Lançado no quadro em …"). Datas de
+audiência não são antecipadas — audiência é evento, não prazo.
+
 Pushes de **mera ciência** também são cruzados: se o processo tem sentença,
 acordo ou encerramento nos últimos 30 dias, o agente cadastra a providência
 específica em vez de deixar passar (marcos mais antigos não reabrem casos).

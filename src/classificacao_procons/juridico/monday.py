@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from classificacao_procons.juridico.models import (
@@ -24,6 +24,7 @@ from classificacao_procons.juridico.models import (
     ParsedIntimacao,
     Providencia,
 )
+from classificacao_procons.juridico.prazos import subtract_business_days
 from classificacao_procons.juridico.providencias import ACTION_LABELS
 from classificacao_procons.monday.client import (
     MondayBoardContext,
@@ -58,6 +59,11 @@ ENV_AUDIENCIAS_BOARD_ID = "MONDAY_AUDIENCIAS_BOARD_ID"
 ENV_AUDIENCIAS_GROUP_NAME = "MONDAY_AUDIENCIAS_GROUP_NAME"
 DEFAULT_AUDIENCIAS_BOARD_NAME = "audiencias"
 DEFAULT_AUDIENCIAS_GROUP_NAME = ""
+
+# Margem de segurança: a data lançada nas colunas de prazo antecede o prazo
+# fatal real em 2 dias úteis; o prazo real fica registrado na análise e nas
+# anotações do item.
+MONDAY_SAFETY_BUSINESS_DAYS = 2
 
 FIELD_INTIMACAO_ID = "intimacao_id"
 FIELD_PROCESS_NUMBER = "process_number"
@@ -271,6 +277,13 @@ def resolve_juridico_field_for_column(title: str) -> str | None:
     return None
 
 
+def monday_due_date(due_date: date | None) -> date | None:
+    """Data lançada no quadro: 2 dias úteis antes do prazo fatal real."""
+    if due_date is None:
+        return None
+    return subtract_business_days(due_date, MONDAY_SAFETY_BUSINESS_DAYS)
+
+
 def _hearing_column_value(hearing: datetime) -> dict[str, str]:
     value: dict[str, str] = {"date": hearing.date().isoformat()}
     if (hearing.hour, hearing.minute) != (0, 0):
@@ -294,7 +307,7 @@ def build_providencia_column_values(
         FIELD_COURT_UNIT: intimacao.court_unit,
         FIELD_NOTIFICATION_TYPE: NOTIFICATION_TYPE_LABELS.get(intimacao.notification_type),
         FIELD_PROVIDENCIA: providencia.description,
-        FIELD_DUE_DATE: providencia.due_date,
+        FIELD_DUE_DATE: monday_due_date(providencia.due_date),
         FIELD_SUMMARY: intimacao.summary,
         FIELD_ANALYSIS: analysis,
     }
@@ -617,8 +630,8 @@ def register_providencia(
     due = providencia.due_date.strftime("%d/%m/%Y") if providencia.due_date else "sem prazo"
     duplicate_note = (
         f"Nova intimação recebida (e-mail {message_id}): providência sugerida "
-        f'"{providencia.description}" (prazo {due}) já coberta por este item — '
-        "nenhum item novo foi criado. Revisar se algo mudou."
+        f'"{providencia.description}" (prazo fatal real {due}) já coberta por este '
+        "item — nenhum item novo foi criado. Revisar se algo mudou."
     )
     result = _create_item_with_dedupe(
         api_token=token,
@@ -635,7 +648,15 @@ def register_providencia(
     # andamento específico e o parecer iriam para lugar nenhum — vão como
     # update na timeline do item recém-criado.
     if analysis and not result.skipped_duplicate and not _has_analysis_column(context.columns):
-        _create_update(api_token=token, item_id=result.item_id, body=analysis)
+        body = analysis
+        launched = monday_due_date(providencia.due_date)
+        if providencia.due_date and launched:
+            body += (
+                f"\n\nPrazo fatal real: {providencia.due_date.strftime('%d/%m/%Y')}. "
+                f"Lançado no quadro em {launched.strftime('%d/%m/%Y')} "
+                f"({MONDAY_SAFETY_BUSINESS_DAYS} dias úteis de antecedência, por segurança)."
+            )
+        _create_update(api_token=token, item_id=result.item_id, body=body)
 
     return result
 
