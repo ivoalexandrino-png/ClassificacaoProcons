@@ -168,9 +168,37 @@ localizado por nome normalizado (aceita "Prazos", "prazos" etc.). Use
 `juridico boards --filter prazos` para inspecionar os quadros visíveis, seus
 grupos, colunas e o mapeamento que o agente detecta em cada coluna.
 
-Os quadros `processos judiciais`, `processos trabalhistas` e `kpi processos
-consumidores` fazem parte do roadmap (status do processo, contingências/
-depósitos e KPIs) e ainda não recebem escrita automática.
+### Engrenagem entre quadros (casos, KPIs)
+
+O quadro **Processos Judiciais** é o registro-mestre dos casos — citações
+inauguram casos lá, e automações do Monday alimentam o quadro de audiências a
+partir dele. A cada intimação processada, o agente gira as engrenagens
+(`juridico/casos.py`):
+
+1. **Localiza o caso** pelo número CNJ na coluna "Número" (Processos
+   Judiciais) ou "Nº.: de Processo" (Processos Trabalhista — segmento J=5 da
+   numeração CNJ decide o quadro).
+2. **Conecta os itens criados** em `prazos`/`audiências` ao caso pelas colunas
+   de conexão de quadros ("Processos Consumidores"/"Processos Judiciais").
+3. **Anota a movimentação** na timeline do caso (providência + análise).
+4. **Marcos inequívocos atualizam o caso**: acordo homologado → Decisão
+   Judicial "Acordo"; trânsito em julgado/arquivamento → Status "Encerrado".
+   Sentenças não definem sozinhas o resultado (procedente para quem?) e ficam
+   para revisão humana; o rótulo só é escrito se existir na coluna.
+5. **KPI - Processos Consumidores**: a linha do processo (localizada pelo CNJ)
+   recebe Resultado "Acordo" + Data da Decisão, ou Situação "Arquivado" no
+   encerramento. Linha inexistente **não** é criada e valores financeiros
+   (condenação, pago, provisão, saving) seguem manuais — não vêm no DataJud.
+6. **Citação de processo sem caso** cria o item no grupo "Processos
+   Consumidores Ativos" com o CNJ preenchido (trabalhistas não são criados
+   automaticamente — estrutura mais manual).
+
+O resultado de cada intimação traz `case_sync_note` com as ações executadas.
+Boards podem ser fixados por id com `MONDAY_PROCESSOS_BOARD_ID`,
+`MONDAY_TRABALHISTA_BOARD_ID` e `MONDAY_KPI_BOARD_ID` (senão, localizados por
+nome). Roadmap: preencher valores de condenação/pagamento a partir do teor
+das decisões (exige Comunica/PJe, bloqueado fora do Brasil) e criar linhas de
+KPI para anos novos.
 
 Colunas são mapeadas por título:
 
@@ -280,6 +308,9 @@ e o CloudFront do CNJ responde 403.
 | `MONDAY_AUDIENCIAS_BOARD_NAME` | — (padrão `audiencias`) | Board de audiências |
 | `MONDAY_AUDIENCIAS_BOARD_ID` | — | Id do board de audiências (vence o nome) |
 | `MONDAY_AUDIENCIAS_GROUP_NAME` | — (padrão: primeiro grupo) | Grupo do board de audiências |
+| `MONDAY_PROCESSOS_BOARD_ID` | — (padrão: por nome) | Id do quadro-mestre Processos Judiciais |
+| `MONDAY_TRABALHISTA_BOARD_ID` | — (padrão: por nome) | Id do quadro Processos Trabalhista |
+| `MONDAY_KPI_BOARD_ID` | — (padrão: por nome) | Id do quadro KPI - Processos Consumidores |
 | `JURIDICO_GMAIL_QUERY` | — | Sobrescreve o filtro Gmail padrão |
 
 ## Limitações do MVP

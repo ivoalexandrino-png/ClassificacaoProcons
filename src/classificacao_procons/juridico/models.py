@@ -114,5 +114,6 @@ class ProcessedIntimacao:
     monday_audiencia_url: str | None = None
     monday_prazo_skipped_duplicate: bool = False
     monday_error: str | None = None
+    case_sync_note: str | None = None
     events_emitted: list[str] = field(default_factory=list)
     error: str | None = None

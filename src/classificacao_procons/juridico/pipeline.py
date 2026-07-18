@@ -13,6 +13,7 @@ from classificacao_procons.google_auth import (
     has_valid_token,
 )
 from classificacao_procons.juridico.analise import analyze_case
+from classificacao_procons.juridico.casos import sync_case_boards
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 from classificacao_procons.juridico.datajud import (
     DataJudError,
@@ -38,6 +39,7 @@ from classificacao_procons.juridico.models import (
 )
 from classificacao_procons.juridico.monday import (
     MondayClientError,
+    MondayRegistrationResult,
     register_audiencia,
     register_providencia,
 )
@@ -46,8 +48,11 @@ from classificacao_procons.juridico.parser import (
     parse_judicial_notification_body,
 )
 from classificacao_procons.juridico.providencias import (
+    STAGE_ACORDO,
+    STAGE_ENCERRAMENTO,
     affects_contingency,
     classify_providencia,
+    detect_process_stage,
     reclassify_providencia_from_movements,
 )
 
@@ -161,22 +166,21 @@ def _register_on_monday_if_configured(
     analysis: CaseAnalysis,
     message_id: str,
     options: JuridicoPipelineOptions,
-) -> tuple[str | None, str | None, bool, str | None]:
+) -> tuple[MondayRegistrationResult | None, MondayRegistrationResult | None, str | None]:
     """Registra o prazo no board "prazos" e, havendo audiência, no board "audiências".
 
-    Retorna (url do prazo, url da audiência, prazo deduplicado, erros combinados).
+    Retorna (registro do prazo, registro da audiência, erros combinados).
     """
     if not options.register_on_monday:
-        return None, None, False, None
+        return None, None, None
 
-    prazo_url: str | None = None
-    audiencia_url: str | None = None
-    prazo_skipped_duplicate = False
+    prazo_registration: MondayRegistrationResult | None = None
+    audiencia_registration: MondayRegistrationResult | None = None
     errors: list[str] = []
 
     if providencia.requires_action:
         try:
-            registration = register_providencia(
+            prazo_registration = register_providencia(
                 intimacao=intimacao,
                 providencia=providencia,
                 message_id=message_id,
@@ -185,25 +189,63 @@ def _register_on_monday_if_configured(
                 board_name=options.monday_board_name,
                 group_name=options.monday_group_name,
             )
-            prazo_url = registration.item_url if registration else None
-            prazo_skipped_duplicate = bool(registration and registration.skipped_duplicate)
         except MondayClientError as exc:
             errors.append(f"prazos: {exc}")
 
     if providencia.hearing_datetime is not None:
         try:
-            registration = register_audiencia(
+            audiencia_registration = register_audiencia(
                 intimacao=intimacao,
                 providencia=providencia,
                 message_id=message_id,
                 analysis=analysis.text,
                 api_token=options.monday_api_token,
             )
-            audiencia_url = registration.item_url if registration else None
         except MondayClientError as exc:
             errors.append(f"audiencias: {exc}")
 
-    return prazo_url, audiencia_url, prazo_skipped_duplicate, "; ".join(errors) or None
+    return prazo_registration, audiencia_registration, "; ".join(errors) or None
+
+
+def _sync_case_boards_if_configured(
+    *,
+    intimacao: ParsedIntimacao,
+    providencia: Providencia,
+    analysis: CaseAnalysis,
+    movements: list[CaseMovement],
+    prazo_registration: MondayRegistrationResult | None,
+    audiencia_registration: MondayRegistrationResult | None,
+    options: JuridicoPipelineOptions,
+) -> str | None:
+    """Engrenagem dos quadros-mestre: caso, conexões, Status/Decisão e KPI."""
+    if not options.register_on_monday:
+        return None
+
+    detected = detect_process_stage(movements)
+    stage: str | None = None
+    stage_marker_date = None
+    if detected is not None and detected[0] in {STAGE_ACORDO, STAGE_ENCERRAMENTO}:
+        stage = detected[0]
+        marker = detected[1]
+        stage_marker_date = (
+            marker.movement_datetime.date() if marker.movement_datetime else None
+        )
+
+    result = sync_case_boards(
+        intimacao=intimacao,
+        providencia=providencia,
+        analysis=analysis.text,
+        stage=stage,
+        stage_marker_date=stage_marker_date,
+        prazo_board_id=prazo_registration.board_id if prazo_registration else None,
+        prazo_item_id=prazo_registration.item_id if prazo_registration else None,
+        audiencia_board_id=(
+            audiencia_registration.board_id if audiencia_registration else None
+        ),
+        audiencia_item_id=audiencia_registration.item_id if audiencia_registration else None,
+        api_token=options.monday_api_token,
+    )
+    return result.note()
 
 
 def _emit_handoff_events(
@@ -372,16 +414,27 @@ def _process_notification(
     )
 
     # 4. Monday (caminho final) + eventos para os agentes futuros
-    (
-        monday_item_url,
-        monday_audiencia_url,
-        monday_prazo_skipped_duplicate,
-        monday_error,
-    ) = _register_on_monday_if_configured(
+    prazo_registration, audiencia_registration, monday_error = _register_on_monday_if_configured(
         intimacao=intimacao,
         providencia=providencia,
         analysis=analysis,
         message_id=notification.message_id,
+        options=options,
+    )
+    monday_item_url = prazo_registration.item_url if prazo_registration else None
+    monday_audiencia_url = audiencia_registration.item_url if audiencia_registration else None
+    monday_prazo_skipped_duplicate = bool(
+        prazo_registration and prazo_registration.skipped_duplicate,
+    )
+
+    # 5. Engrenagem dos quadros-mestre: caso, conexões, Status/Decisão e KPI
+    case_sync_note = _sync_case_boards_if_configured(
+        intimacao=intimacao,
+        providencia=providencia,
+        analysis=analysis,
+        movements=movements,
+        prazo_registration=prazo_registration,
+        audiencia_registration=audiencia_registration,
         options=options,
     )
 
@@ -421,6 +474,7 @@ def _process_notification(
         monday_audiencia_url=monday_audiencia_url,
         monday_prazo_skipped_duplicate=monday_prazo_skipped_duplicate,
         monday_error=monday_error,
+        case_sync_note=case_sync_note,
         events_emitted=events_emitted,
         error=lookup_errors or None,
     )

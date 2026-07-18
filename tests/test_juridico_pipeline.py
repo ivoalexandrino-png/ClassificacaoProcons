@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from classificacao_procons.juridico import pipeline as juridico_pipeline
+from classificacao_procons.juridico.casos import CaseSyncResult
 from classificacao_procons.juridico.events import (
     EVENT_ATUALIZAR_CONTINGENCIA,
     EVENT_ELABORAR_PECA,
@@ -73,6 +74,8 @@ def _patch_pipeline(
     registration: MondayRegistrationResult | Exception | None = None,
     audiencia_registration: MondayRegistrationResult | None = None,
     communications: list | None = None,
+    case_sync_result: CaseSyncResult | None = None,
+    sync_calls: list | None = None,
 ) -> list[dict]:
     register_calls: list[dict] = []
 
@@ -81,6 +84,11 @@ def _patch_pipeline(
         if isinstance(registration, Exception):
             raise registration
         return registration
+
+    def fake_sync(**kwargs):
+        if sync_calls is not None:
+            sync_calls.append(kwargs)
+        return case_sync_result or CaseSyncResult()
 
     monkeypatch.setattr(juridico_pipeline, "has_valid_token", lambda token_path: True)
     monkeypatch.setattr(juridico_pipeline, "has_gmail_modify_access", lambda token_path: True)
@@ -95,6 +103,7 @@ def _patch_pipeline(
         "register_audiencia",
         lambda **kwargs: audiencia_registration,
     )
+    monkeypatch.setattr(juridico_pipeline, "sync_case_boards", fake_sync)
     monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: None)
     monkeypatch.setattr(
         juridico_pipeline,
@@ -297,6 +306,69 @@ class TestProcessNewIntimacoes:
         assert results[0].status == "success"
         assert results[0].monday_prazo_skipped_duplicate is True
         assert results[0].monday_item_url == "https://empresa.monday.com/boards/123/pulses/777"
+
+    def test_should_sync_case_boards_with_stage_and_registrations(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        """A engrenagem dos quadros-mestre recebe o marco e os itens criados."""
+        fetcher = FakeFetcher([_notification()])
+        registration = MondayRegistrationResult(
+            item_id="777",
+            board_id="123",
+            item_url="https://empresa.monday.com/boards/123/pulses/777",
+        )
+        sync_calls: list[dict] = []
+        sync_result = CaseSyncResult()
+        sync_result.actions.append("item de prazo conectado ao caso")
+        _patch_pipeline(
+            monkeypatch,
+            fetcher,
+            registration=registration,
+            case_sync_result=sync_result,
+            sync_calls=sync_calls,
+        )
+        monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
+        monkeypatch.setattr(
+            juridico_pipeline,
+            "fetch_case_movements",
+            lambda process_number, *, limit=5: [
+                CaseMovement(
+                    movement_name="Homologação de Transação",
+                    movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
+                ),
+            ],
+        )
+
+        results = process_new_intimacoes(options)
+
+        assert results[0].case_sync_note == "item de prazo conectado ao caso"
+        assert len(sync_calls) == 1
+        call = sync_calls[0]
+        assert call["stage"] == "acordo"
+        assert call["stage_marker_date"] is not None
+        assert call["prazo_item_id"] == "777"
+        assert call["prazo_board_id"] == "123"
+        assert call["audiencia_item_id"] is None
+
+    def test_should_not_sync_case_boards_on_dry_run(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        fetcher = FakeFetcher([_notification()])
+        sync_calls: list[dict] = []
+        _patch_pipeline(monkeypatch, fetcher, registration=None, sync_calls=sync_calls)
+
+        dry_options = JuridicoPipelineOptions(
+            state_path=options.state_path,
+            events_path=options.events_path,
+            dry_run=True,
+        )
+        process_new_intimacoes(dry_options)
+
+        assert sync_calls == []
 
     def test_should_report_monday_error_without_losing_events(
         self,
