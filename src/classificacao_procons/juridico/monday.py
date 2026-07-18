@@ -367,6 +367,9 @@ def _search_items_by_name(
               items {
                 id
                 name
+                group {
+                  title
+                }
               }
             }
           }
@@ -380,7 +383,11 @@ def _search_items_by_name(
         return []
     items = boards[0].get("items_page", {}).get("items", [])
     return [
-        {"id": str(item["id"]), "name": str(item.get("name", "")).strip()}
+        {
+            "id": str(item["id"]),
+            "name": str(item.get("name", "")).strip(),
+            "group_title": str((item.get("group") or {}).get("title", "")),
+        }
         for item in items
         if item.get("id")
     ]
@@ -408,6 +415,23 @@ def _find_existing_item_id_by_name(
         if item["name"] == item_name:
             return item["id"]
     return None
+
+
+# Grupos de itens já resolvidos: um prazo cumprido/concluído não "cobre" uma
+# intimação nova — só itens em grupos ativos contam para a deduplicação.
+_DONE_GROUP_KEYWORDS: tuple[str, ...] = (
+    "cumprido",
+    "concluido",
+    "finalizado",
+    "resolvido",
+    "feito",
+    "done",
+)
+
+
+def _is_done_group(group_title: str) -> bool:
+    normalized = _normalize_title(group_title)
+    return any(keyword in normalized for keyword in _DONE_GROUP_KEYWORDS)
 
 
 # Ordem das fases processuais das providências: um item existente de fase
@@ -446,7 +470,9 @@ def _find_covering_item_for_process(
 
     Cobre quando a providência existente é a mesma, ou de fase posterior
     (ex.: item "Analisar sentença" torna redundante um novo "Apresentar
-    contestação" vindo de push atrasado do mesmo processo).
+    contestação" vindo de push atrasado do mesmo processo). Itens em grupos
+    de prazos já cumpridos/concluídos não contam: prazo cumprido não cobre
+    intimação nova.
     """
     new_rank = _ACTION_STAGE_RANK.get(action_type)
     items = _search_items_by_name(
@@ -456,6 +482,8 @@ def _find_covering_item_for_process(
     )
     for item in items:
         if process_number not in item["name"]:
+            continue
+        if _is_done_group(item.get("group_title", "")):
             continue
         existing_action = _action_for_item_name(item["name"])
         if existing_action is None:

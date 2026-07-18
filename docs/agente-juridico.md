@@ -209,6 +209,11 @@ acompanhamento → recurso → acordo → encerramento. Itens com nome fora do
 padrão `processo — providência` são ignorados pela deduplicação (nunca
 bloqueiam a criação).
 
+**Prazos já cumpridos não contam:** itens em grupos de concluídos (título com
+"cumprido", "concluído", "finalizado", "resolvido", "feito" ou "done") não
+cobrem intimações novas — um prazo cumprido no passado não pode fazer o agente
+descartar um prazo novo do mesmo processo como duplicado.
+
 Proteções do mapeamento (calibradas com os quadros reais):
 
 - A data da audiência só é escrita em colunas do tipo **data** — "Link

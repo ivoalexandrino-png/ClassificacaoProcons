@@ -387,7 +387,11 @@ class TestRegisterProvidencia:
     def test_should_skip_duplicate_when_item_with_same_name_exists(self) -> None:
         """Dois e-mails distintos da mesma intimação não podem duplicar o item."""
         existing = [
-            {"id": "999", "name": "1001234-56.2026.8.26.0100 — Apresentar contestação"},
+            {
+                "id": "999",
+                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "group_title": "Prazos Processos",
+            },
         ]
         with (
             patch.object(
@@ -488,6 +492,82 @@ class TestRegisterProvidencia:
         assert result.item_id == "556"
         create_item.assert_called_once()
         create_update.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "done_group",
+        ["Prazos cumpridos", "Concluídos", "Finalizados", "Done", "Resolvidos ✅"],
+    )
+    def test_should_create_item_when_existing_is_in_done_group(self, done_group: str) -> None:
+        """Prazo já cumprido (grupo de concluídos) não cobre intimação nova."""
+        existing = [
+            {
+                "id": "999",
+                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "group_title": done_group,
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item", return_value="1001") as create_item,
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-novo-prazo",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        assert result.item_id == "1001"
+        create_item.assert_called_once()
+        create_update.assert_not_called()
+
+    def test_should_dedupe_against_active_group_even_with_done_sibling(self) -> None:
+        """Item cumprido não interfere, mas item ativo do processo ainda deduplica."""
+        existing = [
+            {
+                "id": "999",
+                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "group_title": "Prazos cumpridos",
+            },
+            {
+                "id": "1000",
+                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "group_title": "Prazos Processos",
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item") as create_item,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-repetido",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is True
+        assert result.item_id == "1000"  # o item ativo, não o cumprido
+        create_item.assert_not_called()
+        create_update.assert_called_once()
 
     def test_should_post_analysis_as_update_when_board_lacks_analysis_column(self) -> None:
         """O quadro real de prazos não tem coluna de análise: o andamento
