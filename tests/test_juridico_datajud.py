@@ -99,6 +99,14 @@ class TestFetchCaseMovements:
         request = urlopen.call_args.args[0]
         assert "api_publica_stf" in request.full_url
 
+    def test_should_wrap_read_timeout_as_datajud_error(self) -> None:
+        """Timeout no meio da leitura (TimeoutError) não pode derrubar o batch."""
+        with (
+            patch("urllib.request.urlopen", MagicMock(side_effect=TimeoutError("read timed out"))),
+            pytest.raises(DataJudError, match="DataJud indisponível"),
+        ):
+            fetch_case_movements(PROCESS_NUMBER, api_key="chave")
+
     def test_should_raise_on_http_error(self) -> None:
         error = urllib.error.HTTPError(
             url="https://api-publica.datajud.cnj.jus.br",

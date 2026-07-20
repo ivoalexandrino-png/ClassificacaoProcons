@@ -105,6 +105,10 @@ def fetch_case_movements(
         raise DataJudError(f"DataJud indisponível: {exc.reason}") from exc
     except json.JSONDecodeError as exc:
         raise DataJudError("DataJud retornou resposta inválida.") from exc
+    except OSError as exc:
+        # Timeout de leitura no meio da resposta chega como TimeoutError,
+        # que o urllib não converte em URLError — não pode derrubar o batch.
+        raise DataJudError(f"DataJud indisponível: {exc}") from exc
 
     hits = body.get("hits", {}).get("hits", [])
     if not hits:

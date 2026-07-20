@@ -67,6 +67,8 @@ def list_generate_content_models(*, api_key: str) -> list[str]:
         raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
         raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+    except OSError as exc:
+        raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise GeminiClientError("Gemini retornou lista de modelos inválida.") from exc
 
@@ -181,6 +183,13 @@ def _gemini_request(
             raise last_error from exc
         except urllib.error.URLError as exc:
             raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+        except OSError as exc:
+            # Timeout no meio da leitura chega como TimeoutError (OSError),
+            # sem virar URLError — tratar como indisponibilidade retentável.
+            if attempt < MAX_GEMINI_RETRIES - 1:
+                time.sleep(_gemini_retry_delay_seconds(code=503, attempt=attempt))
+                continue
+            raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
         except json.JSONDecodeError as exc:
             raise GeminiClientError("Gemini retornou resposta inválida.") from exc
         else:

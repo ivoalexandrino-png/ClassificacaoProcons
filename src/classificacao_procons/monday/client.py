@@ -138,6 +138,14 @@ def _graphql_request(
             raise last_error from exc
         except urllib.error.URLError as exc:
             raise MondayClientError(f"Monday API indisponível: {exc.reason}") from exc
+        except OSError as exc:
+            # Timeout no meio da leitura chega como TimeoutError (OSError),
+            # sem virar URLError — retentável como as falhas 5xx.
+            last_error = MondayClientError(f"Monday API indisponível: {exc}")
+            if attempt < max_retries - 1:
+                time.sleep(GRAPHQL_RETRY_BASE_DELAY_SECONDS * (2**attempt))
+                continue
+            raise last_error from exc
         except json.JSONDecodeError as exc:
             raise MondayClientError("Monday API retornou resposta inválida.") from exc
 
