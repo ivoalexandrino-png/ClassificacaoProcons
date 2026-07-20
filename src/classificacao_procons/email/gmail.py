@@ -10,6 +10,13 @@ from typing import Any
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from classificacao_procons.campinas.email_parser import (
+    CAMPINAS_PORTAL_URL,
+    CAMPINAS_STATE_LABEL,
+    CampinasEmailParseError,
+    is_campinas_notification,
+    parse_campinas_notification_body,
+)
 from classificacao_procons.email.parser import (
     ProconEmailParseError,
     is_procon_cip_notification,
@@ -31,6 +38,8 @@ DEFAULT_GMAIL_QUERY = (
     ') OR ('
     'from:admin@proconsumidor.mj.gov.br '
     'subject:"Proconsumidor - Notificação"'
+    ') OR ('
+    'from:procon.adm@campinas.sp.gov.br'
     ')'
 )
 
@@ -168,6 +177,26 @@ class GmailProconFetcher:
                 protocol_number=parsed.complaint_number,
                 regional_org=parsed.regional_org,
                 state=parsed.state,
+                raw_snippet=snippet,
+            )
+
+        if is_campinas_notification(subject=subject, sender=sender):
+            try:
+                parsed = parse_campinas_notification_body(html=text_html, text=text_plain)
+            except CampinasEmailParseError:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url=CAMPINAS_PORTAL_URL,
+                source_id="campinas",
+                protocol_number=parsed.protocol_number,
+                state=CAMPINAS_STATE_LABEL,
+                consumer_name=parsed.consumer_name,
+                consumer_cpf=parsed.consumer_cpf,
+                complaint_date=parsed.complaint_date,
                 raw_snippet=snippet,
             )
 

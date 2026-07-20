@@ -9,12 +9,12 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from classificacao_procons.email import GmailClientError, GmailProconFetcher
 from classificacao_procons.email.auth import (
     get_authorization_url,
     has_valid_token,
     save_token_from_code,
 )
+from classificacao_procons.email.gmail import GmailClientError, GmailProconFetcher
 from classificacao_procons.pipeline import (
     PipelineError,
     PipelineOptions,

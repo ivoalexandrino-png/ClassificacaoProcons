@@ -18,6 +18,9 @@ class ProconNotificationEmail:
     protocol_number: str | None = None
     regional_org: str | None = None
     state: str | None = None
+    consumer_name: str | None = None
+    consumer_cpf: str | None = None
+    complaint_date: date | None = None
     email_response_deadline: str | None = None
     raw_snippet: str | None = None
 

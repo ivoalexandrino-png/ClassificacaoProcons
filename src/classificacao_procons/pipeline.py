@@ -9,9 +9,15 @@ from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from classificacao_procons.campinas.deadlines import calculate_campinas_deadlines
+from classificacao_procons.campinas.portal import (
+    CampinasPortalError,
+    CampinasPortalOptions,
+    fetch_campinas_complaint,
+)
 from classificacao_procons.credentials import CredentialsError, resolve_portal_credentials
 from classificacao_procons.drive import DriveClientError, save_complaint_pdf
-from classificacao_procons.email import GmailClientError, GmailProconFetcher
+from classificacao_procons.email.gmail import GmailClientError, GmailProconFetcher
 from classificacao_procons.google_auth import (
     DEFAULT_DRIVE_PARENT_FOLDER_ID,
     has_gmail_modify_access,
@@ -135,6 +141,98 @@ def _register_on_monday_if_configured(
         return result
 
     return replace(result, monday_item_url=monday_result.item_url)
+
+
+def _process_campinas_notification(
+    notification: ProconNotificationEmail,
+    *,
+    options: PipelineOptions,
+    processed_protocols: set[str],
+    fetcher: GmailProconFetcher,
+) -> ProcessedComplaint:
+    protocol = notification.protocol_number or ""
+    state_key = _source_state_key(notification.source_id, protocol)
+    if state_key in processed_protocols:
+        return ProcessedComplaint(
+            status="skipped_duplicate",
+            message_id=notification.message_id,
+            access_code=protocol,
+            protocol_number=protocol,
+            consumer_name="",
+            consumer_cpf="",
+            complaint_date=None,
+            procon_response_deadline=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            state=notification.state or "",
+            pdf_url=None,
+            drive_folder_url=None,
+            error="Reclamação Campinas já processada anteriormente.",
+        )
+
+    api_token = _resolve_monday_api_token(options)
+    try:
+        portal_credentials = resolve_portal_credentials(
+            "campinas",
+            api_token=api_token,
+        )
+    except CredentialsError as exc:
+        raise PipelineError(str(exc)) from exc
+
+    complaint = fetch_campinas_complaint(
+        CampinasPortalOptions(
+            credentials=portal_credentials,
+            protocol_number=protocol,
+            download_dir=options.download_dir,
+            consumer_name_hint=notification.consumer_name,
+            consumer_cpf_hint=notification.consumer_cpf,
+            complaint_date_hint=notification.complaint_date,
+        ),
+    )
+
+    resolved_protocol = _resolve_protocol(notification, complaint.cip_fa_number)
+    resolved_state = _resolve_state(notification, complaint.state)
+
+    if not complaint.pdf_path:
+        raise CampinasPortalError("PDF da reclamação não foi baixado do Procon Campinas.")
+
+    drive_result = save_complaint_pdf(
+        consumer_name=complaint.consumer_name,
+        pdf_path=complaint.pdf_path,
+        cip_number=resolved_protocol,
+        complaint_date=complaint.complaint_date,
+        parent_folder_id=options.parent_folder_id,
+        token_path=options.token_path,
+    )
+
+    sac_deadline, legal_deadline = calculate_campinas_deadlines(
+        base_date=complaint.complaint_date,
+    )
+
+    processed_protocols.add(state_key)
+    _save_processed_protocols(options.state_path, processed_protocols)
+
+    if options.mark_read and has_gmail_modify_access(options.token_path):
+        fetcher.mark_as_read(notification.message_id)
+
+    result = ProcessedComplaint(
+        status="success",
+        message_id=notification.message_id,
+        access_code=protocol,
+        protocol_number=resolved_protocol,
+        consumer_name=complaint.consumer_name,
+        consumer_cpf=complaint.consumer_cpf,
+        complaint_date=complaint.complaint_date,
+        procon_response_deadline=complaint.response_deadline,
+        sac_deadline=sac_deadline,
+        legal_deadline=legal_deadline,
+        cause=complaint.cause,
+        state=resolved_state,
+        pdf_url=drive_result.pdf_url,
+        drive_folder_url=drive_result.consumer_folder_url,
+    )
+    return _register_on_monday_if_configured(result, options=options)
 
 
 def _process_proconsumidor_notification(
@@ -331,6 +429,14 @@ def _process_notification(
             fetcher=fetcher,
         )
 
+    if notification.source_id == "campinas":
+        return _process_campinas_notification(
+            notification,
+            options=options,
+            processed_protocols=processed_protocols,
+            fetcher=fetcher,
+        )
+
     return _process_sp_notification(
         notification,
         options=options,
@@ -370,6 +476,7 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
         except (
             ProconPortalError,
             ProconsumidorPortalError,
+            CampinasPortalError,
             DriveClientError,
             PlaywrightTimeoutError,
             PipelineError,
