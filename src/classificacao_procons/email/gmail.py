@@ -37,6 +37,13 @@ from classificacao_procons.sc.email_parser import (
     is_sc_ssp_notification,
     parse_sc_ssp_notification,
 )
+from classificacao_procons.uberlandia.email_parser import (
+    UBERLANDIA_PORTAL_URL,
+    UBERLANDIA_STATE_LABEL,
+    UberlandiaEmailParseError,
+    is_uberlandia_notification,
+    parse_uberlandia_notification_body,
+)
 
 DEFAULT_GMAIL_QUERY = (
     '('
@@ -49,6 +56,8 @@ DEFAULT_GMAIL_QUERY = (
     'from:procon.adm@campinas.sp.gov.br'
     ') OR ('
     'subject:"Processo SSP"'
+    ') OR ('
+    'from:faleprocon@uberlandia.mg.gov.br'
     ')'
 )
 
@@ -230,6 +239,27 @@ class GmailProconFetcher:
                 consumer_name=parsed.consumer_name,
                 consumer_cpf=parsed.consumer_cpf,
                 complaint_date=parsed.complaint_date,
+                raw_snippet=snippet,
+            )
+
+        if is_uberlandia_notification(subject=subject, sender=sender, body=body_text):
+            try:
+                parsed = parse_uberlandia_notification_body(html=text_html, text=text_plain)
+            except UberlandiaEmailParseError:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url=UBERLANDIA_PORTAL_URL,
+                source_id="uberlandia",
+                protocol_number=parsed.protocol_number,
+                state=UBERLANDIA_STATE_LABEL,
+                consumer_name=parsed.consumer_name,
+                consumer_cpf=parsed.consumer_cpf,
+                complaint_date=parsed.complaint_date,
+                cause=parsed.cause,
                 raw_snippet=snippet,
             )
 

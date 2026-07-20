@@ -21,6 +21,7 @@ class ProconNotificationEmail:
     consumer_name: str | None = None
     consumer_cpf: str | None = None
     complaint_date: date | None = None
+    cause: str | None = None
     email_response_deadline: str | None = None
     raw_snippet: str | None = None
 

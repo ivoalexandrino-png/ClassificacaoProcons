@@ -39,6 +39,12 @@ from classificacao_procons.proconsumidor.portal import (
 from classificacao_procons.sc.attachments import ScAttachmentError, download_ssp_pdf_attachment
 from classificacao_procons.sc.deadlines import calculate_sc_deadlines
 from classificacao_procons.sc.pdf_parser import ScPdfParseError, parse_sc_ssp_pdf
+from classificacao_procons.uberlandia.deadlines import calculate_uberlandia_deadlines
+from classificacao_procons.uberlandia.portal import (
+    UberlandiaPortalError,
+    UberlandiaPortalOptions,
+    fetch_uberlandia_complaint,
+)
 
 DEFAULT_DOWNLOAD_DIR = Path("downloads")
 DEFAULT_STATE_PATH = Path("data/processed-protocols.json")
@@ -103,6 +109,8 @@ def _resolve_state(notification: ProconNotificationEmail, complaint_state: str) 
         return "SP"
     if notification.source_id == "sc":
         return "SC"
+    if notification.source_id == "uberlandia":
+        return "MG"
     return ""
 
 
@@ -320,6 +328,101 @@ def _process_campinas_notification(
     return _register_on_monday_if_configured(result, options=options)
 
 
+def _process_uberlandia_notification(
+    notification: ProconNotificationEmail,
+    *,
+    options: PipelineOptions,
+    processed_protocols: set[str],
+    fetcher: GmailProconFetcher,
+) -> ProcessedComplaint:
+    protocol = notification.protocol_number or ""
+    state_key = _source_state_key(notification.source_id, protocol)
+    if state_key in processed_protocols:
+        return ProcessedComplaint(
+            status="skipped_duplicate",
+            message_id=notification.message_id,
+            access_code=protocol,
+            protocol_number=protocol,
+            consumer_name="",
+            consumer_cpf="",
+            complaint_date=None,
+            procon_response_deadline=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            state=notification.state or "",
+            pdf_url=None,
+            drive_folder_url=None,
+            error="Reclamação Uberlândia já processada anteriormente.",
+        )
+
+    api_token = _resolve_monday_api_token(options)
+    try:
+        portal_credentials = resolve_portal_credentials(
+            "uberlandia",
+            api_token=api_token,
+        )
+    except CredentialsError as exc:
+        raise PipelineError(str(exc)) from exc
+
+    complaint = fetch_uberlandia_complaint(
+        UberlandiaPortalOptions(
+            credentials=portal_credentials,
+            protocol_number=protocol,
+            download_dir=options.download_dir,
+            consumer_name_hint=notification.consumer_name,
+            consumer_cpf_hint=notification.consumer_cpf,
+            complaint_date_hint=notification.complaint_date,
+            cause_hint=notification.cause,
+        ),
+    )
+
+    resolved_protocol = _resolve_protocol(notification, complaint.cip_fa_number)
+    resolved_state = _resolve_state(notification, complaint.state)
+    resolved_cause = complaint.cause or notification.cause or ""
+
+    if not complaint.pdf_path:
+        raise UberlandiaPortalError(
+            "PDF da reclamação não foi baixado do Fale Procon Uberlândia.",
+        )
+
+    drive_result = save_complaint_pdf(
+        consumer_name=complaint.consumer_name or notification.consumer_name or "",
+        pdf_path=complaint.pdf_path,
+        cip_number=resolved_protocol,
+        complaint_date=complaint.complaint_date or notification.complaint_date,
+        parent_folder_id=options.parent_folder_id,
+        token_path=options.token_path,
+    )
+
+    receipt_date = notification.received_at.date()
+    sac_deadline, legal_deadline = calculate_uberlandia_deadlines(base_date=receipt_date)
+
+    processed_protocols.add(state_key)
+    _save_processed_protocols(options.state_path, processed_protocols)
+
+    if options.mark_read and has_gmail_modify_access(options.token_path):
+        fetcher.mark_as_read(notification.message_id)
+
+    result = ProcessedComplaint(
+        status="success",
+        message_id=notification.message_id,
+        access_code=protocol,
+        protocol_number=resolved_protocol,
+        consumer_name=complaint.consumer_name or notification.consumer_name or "",
+        consumer_cpf=complaint.consumer_cpf or notification.consumer_cpf or "",
+        complaint_date=complaint.complaint_date or notification.complaint_date,
+        procon_response_deadline=complaint.response_deadline,
+        sac_deadline=sac_deadline,
+        legal_deadline=legal_deadline,
+        cause=resolved_cause,
+        state=resolved_state,
+        pdf_url=drive_result.pdf_url,
+        drive_folder_url=drive_result.consumer_folder_url,
+    )
+    return _register_on_monday_if_configured(result, options=options)
+
+
 def _process_proconsumidor_notification(
     notification: ProconNotificationEmail,
     *,
@@ -530,6 +633,14 @@ def _process_notification(
             fetcher=fetcher,
         )
 
+    if notification.source_id == "uberlandia":
+        return _process_uberlandia_notification(
+            notification,
+            options=options,
+            processed_protocols=processed_protocols,
+            fetcher=fetcher,
+        )
+
     return _process_sp_notification(
         notification,
         options=options,
@@ -570,6 +681,7 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
             ProconPortalError,
             ProconsumidorPortalError,
             CampinasPortalError,
+            UberlandiaPortalError,
             ScAttachmentError,
             ScPdfParseError,
             DriveClientError,
