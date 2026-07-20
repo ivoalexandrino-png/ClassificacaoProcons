@@ -9,6 +9,7 @@ import pytest
 from classificacao_procons.drive.client import (
     DriveClientError,
     _sanitize_folder_name,
+    build_drive_pa_pdf_filename,
     build_drive_pdf_filename,
     ensure_consumer_folder,
     save_complaint_pdf,
@@ -35,6 +36,15 @@ class TestBuildDrivePdfFilename:
             complaint_date=None,
         )
         assert name.endswith(" - sem-data.pdf")
+
+    def test_should_build_pa_filename(self) -> None:
+        name = build_drive_pa_pdf_filename(
+            consumer_name="MARIA SILVA",
+            administrative_process_number="35.001.003.26.1620383",
+            complaint_date=date(2026, 7, 12),
+        )
+        assert "Processo Administrativo Procon" in name
+        assert "35.001.003.26.1620383" in name
 
 
 class TestSanitizeFolderName:

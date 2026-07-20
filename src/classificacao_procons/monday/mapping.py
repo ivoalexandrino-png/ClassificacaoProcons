@@ -25,6 +25,10 @@ FIELD_RESPONSE_DATE = "response_date"
 FIELD_RESPONSE_FULL = "response_full_url"
 FIELD_RESPONSE_SUMMARY = "response_summary_url"
 FIELD_RESPONSE_UNIFIED_PDF = "response_unified_pdf_url"
+FIELD_PA_GENERATED = "pa_generated"
+FIELD_PA_RESPONDED = "pa_responded"
+FIELD_PA_DEADLINE = "pa_deadline"
+FIELD_PA_NUMBER = "pa_number"
 
 FIELD_TITLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     FIELD_CONSUMER_NAME: ("nome", "consumidor", "cliente", "reclamante"),
@@ -48,6 +52,10 @@ FIELD_TITLE_KEYWORDS: dict[str, tuple[str, ...]] = {
     FIELD_DOCS_SAC: ("docs sac",),
     FIELD_STATUS: ("status",),
     FIELD_RESPONSE_DATE: ("data da resposta legal", "resposta legal/baixa"),
+    FIELD_PA_GENERATED: ("gerou processo administrativo",),
+    FIELD_PA_RESPONDED: ("processo administrativo respondido",),
+    FIELD_PA_DEADLINE: ("prazo resposta processo administrativo",),
+    FIELD_PA_NUMBER: ("numero processo administrativo", "n processo administrativo"),
 }
 
 
@@ -196,6 +204,14 @@ def resolve_field_for_column(title: str) -> str | None:
     normalized = _normalize_title(title)
     if "causa 2" in normalized:
         return None
+    if "processo administrativo" in normalized and "prazo" not in normalized:
+        if "gerou" in normalized:
+            return FIELD_PA_GENERATED
+        if "respondido" in normalized:
+            return FIELD_PA_RESPONDED
+        if "numero" in normalized or "n " in normalized:
+            return FIELD_PA_NUMBER
+        return None
     for field, keywords in FIELD_TITLE_KEYWORDS.items():
         if any(keyword in normalized for keyword in keywords):
             return field
@@ -280,6 +296,34 @@ def _pdf_link_text(column_title: str) -> str:
     if "notificacao" in _normalize_title(column_title):
         return "Notificação Procon"
     return "PDF Procon"
+
+
+def build_administrative_process_column_values(
+    columns: list[MondayColumn],
+    *,
+    administrative_process_number: str,
+    pa_response_deadline: date,
+    pa_generated_label: str,
+    pa_responded_label: str,
+) -> dict[str, Any]:
+    """Monta valores de colunas para atualização de Processo Administrativo."""
+    values: dict[str, str | date] = {
+        FIELD_PA_GENERATED: pa_generated_label,
+        FIELD_PA_RESPONDED: pa_responded_label,
+        FIELD_PA_DEADLINE: pa_response_deadline,
+        FIELD_PA_NUMBER: administrative_process_number,
+    }
+
+    column_values: dict[str, Any] = {}
+    for column in columns:
+        field = resolve_field_for_column(column.title)
+        if field is None:
+            continue
+        raw_value = values.get(field)
+        if raw_value in (None, ""):
+            continue
+        column_values[column.id] = format_column_value(column.column_type, raw_value)
+    return column_values
 
 
 def build_column_values(
