@@ -22,6 +22,9 @@ from classificacao_procons.drive.client import (
 DRIVE_TEXT_MIME = "text/plain"
 PROCON_PDF_PREFIX = "atendimento procon"
 RESPONSE_OUTPUT_FOLDER = "Resposta Automatica"
+RESPONSE_COMPLETE_FILE = "resposta-completa.txt"
+RESPONSE_SUMMARY_FILE = "resposta-resumo-1024.txt"
+RESPONSE_UNIFIED_FILE = "resposta-unificada.pdf"
 SAC_FOLDER_KEYWORDS = ("informacoes", "sac", "anexos", "documentos")
 
 
@@ -41,6 +44,13 @@ class SacFolderContext:
     complaint_pdf: DriveFileInfo
     summary_txt: DriveFileInfo | None
     supporting_files: list[DriveFileInfo]
+
+
+@dataclass(frozen=True)
+class ExistingResponseOutputs:
+    full_response_url: str | None
+    summary_response_url: str | None
+    unified_pdf_url: str | None
 
 
 def extract_drive_resource_id(url: str) -> str:
@@ -304,6 +314,47 @@ def ensure_output_folder(
     except HttpError as exc:
         raise DriveClientError(f"Falha ao criar pasta de resposta no Drive: {exc}") from exc
     return created["id"]
+
+
+def _find_newest_file_by_name(
+    files: list[DriveFileInfo],
+    file_name: str,
+) -> DriveFileInfo | None:
+    target = file_name.casefold()
+    matches = [item for item in files if item.name.casefold() == target]
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item.created_time or datetime.min)
+
+
+def find_existing_response_outputs(
+    *,
+    parent_folder_id: str,
+    token_path: str | None = None,
+) -> ExistingResponseOutputs | None:
+    """Retorna links da resposta automática já gerada na pasta do consumidor."""
+    service = _build_drive_service(token_path)
+    children = _list_children(service, folder_id=parent_folder_id)
+    output_folder_id = None
+    for child in children:
+        if child.mime_type == DRIVE_FOLDER_MIME and child.name == RESPONSE_OUTPUT_FOLDER:
+            output_folder_id = child.file_id
+            break
+    if output_folder_id is None:
+        return None
+
+    output_children = _list_children(service, folder_id=output_folder_id)
+    complete = _find_newest_file_by_name(output_children, RESPONSE_COMPLETE_FILE)
+    summary = _find_newest_file_by_name(output_children, RESPONSE_SUMMARY_FILE)
+    unified = _find_newest_file_by_name(output_children, RESPONSE_UNIFIED_FILE)
+    if complete is None and unified is None:
+        return None
+
+    return ExistingResponseOutputs(
+        full_response_url=complete.web_view_link if complete else None,
+        summary_response_url=summary.web_view_link if summary else None,
+        unified_pdf_url=unified.web_view_link if unified else None,
+    )
 
 
 def upload_text_file(
