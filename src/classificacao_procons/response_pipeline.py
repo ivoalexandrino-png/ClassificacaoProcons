@@ -10,6 +10,7 @@ from classificacao_procons.drive.client import DriveClientError
 from classificacao_procons.drive.pdf_builder import (
     build_unified_response_pdf,
     is_mergeable_supporting_file,
+    local_supporting_file_name,
 )
 from classificacao_procons.drive.reader import (
     download_drive_file,
@@ -87,7 +88,7 @@ def _download_supporting_files(
     for file_info in sac_context.supporting_files:
         if not is_mergeable_supporting_file(file_info):
             continue
-        destination = attachments_dir / file_info.name
+        destination = attachments_dir / local_supporting_file_name(file_info)
         download_drive_file(
             file_id=file_info.file_id,
             destination=destination,
