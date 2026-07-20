@@ -520,28 +520,32 @@ def _apply_complaint_column_values(
     for column_id, value in column_values.items():
         if details_by_id.get(column_id) is None:
             continue
-        try:
-            _graphql_request(
-                api_token=api_token,
-                query="""
-                mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
-                  change_multiple_column_values(
-                    board_id: $boardId
-                    item_id: $itemId
-                    column_values: $columnValues
-                  ) {
-                    id
-                  }
-                }
-                """,
-                variables={
-                    "boardId": board_id,
-                    "itemId": item_id,
-                    "columnValues": json.dumps({column_id: value}),
-                },
-            )
-        except MondayClientError:
-            continue
+        for attempt in range(2):
+            try:
+                _graphql_request(
+                    api_token=api_token,
+                    query="""
+                    mutation ($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+                      change_multiple_column_values(
+                        board_id: $boardId
+                        item_id: $itemId
+                        column_values: $columnValues
+                      ) {
+                        id
+                      }
+                    }
+                    """,
+                    variables={
+                        "boardId": board_id,
+                        "itemId": item_id,
+                        "columnValues": json.dumps({column_id: value}),
+                    },
+                )
+                break
+            except MondayClientError:
+                if attempt == 0:
+                    time.sleep(1)
+                    continue
 
 
 def _upload_notification_pdf_column(

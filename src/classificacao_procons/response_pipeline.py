@@ -13,8 +13,10 @@ from classificacao_procons.drive.pdf_builder import (
     local_supporting_file_name,
 )
 from classificacao_procons.drive.reader import (
+    ExistingResponseOutputs,
     download_drive_file,
     ensure_output_folder,
+    find_existing_response_outputs,
     resolve_sac_folder_context,
     upload_pdf_file,
     upload_text_file,
@@ -30,6 +32,7 @@ from classificacao_procons.monday.cases import list_cases_ready_for_elaboration
 from classificacao_procons.monday.client import (
     MondayClientError,
     get_api_token_from_env,
+    update_elaborated_response_links,
 )
 
 DEFAULT_WORK_DIR = Path("downloads/elaboration")
@@ -75,6 +78,51 @@ def _resolve_monday_token(options: ResponsePipelineOptions) -> str | None:
 
 def _resolve_gemini_key(options: ResponsePipelineOptions) -> str | None:
     return options.gemini_api_key or get_api_key_from_env()
+
+
+def _sync_elaborated_links_to_monday(
+    case: MondayCaseReady,
+    *,
+    outputs: ExistingResponseOutputs,
+    options: ResponsePipelineOptions,
+) -> None:
+    if not outputs.full_response_url or not outputs.summary_response_url:
+        return
+    monday_token = _resolve_monday_token(options)
+    if not monday_token:
+        return
+    try:
+        update_elaborated_response_links(
+            item_id=case.item_id,
+            full_response_url=outputs.full_response_url,
+            summary_response_url=outputs.summary_response_url,
+            unified_pdf_url=outputs.unified_pdf_url,
+            api_token=monday_token,
+        )
+    except MondayClientError:
+        return
+
+
+def _mark_case_as_elaborated(
+    case: MondayCaseReady,
+    *,
+    options: ResponsePipelineOptions,
+    elaborated_item_ids: set[str],
+    outputs: ExistingResponseOutputs,
+) -> ElaboratedResponseResult:
+    elaborated_item_ids.add(case.item_id)
+    _save_elaborated_item_ids(options.state_path, elaborated_item_ids)
+    _sync_elaborated_links_to_monday(case, outputs=outputs, options=options)
+    return ElaboratedResponseResult(
+        status="skipped_duplicate",
+        monday_item_id=case.item_id,
+        consumer_name=case.item_name,
+        protocol_number=case.protocol_number,
+        full_response_file_url=outputs.full_response_url,
+        summary_response_file_url=outputs.summary_response_url,
+        unified_pdf_file_url=outputs.unified_pdf_url,
+        error="Resposta já elaborada anteriormente.",
+    )
 
 
 def _download_supporting_files(
@@ -133,6 +181,18 @@ def _elaborate_case(
             consumer_name=case.item_name,
             protocol_number=case.protocol_number,
             error=str(exc),
+        )
+
+    existing_outputs = find_existing_response_outputs(
+        parent_folder_id=sac_context.consumer_folder_id,
+        token_path=options.token_path,
+    )
+    if existing_outputs is not None:
+        return _mark_case_as_elaborated(
+            case,
+            options=options,
+            elaborated_item_ids=elaborated_item_ids,
+            outputs=existing_outputs,
         )
 
     case_dir = options.work_dir / case.item_id
@@ -256,6 +316,13 @@ def _elaborate_case(
 
     elaborated_item_ids.add(case.item_id)
     _save_elaborated_item_ids(options.state_path, elaborated_item_ids)
+
+    outputs = ExistingResponseOutputs(
+        full_response_url=full_url,
+        summary_response_url=summary_url,
+        unified_pdf_url=unified_pdf_url,
+    )
+    _sync_elaborated_links_to_monday(case, outputs=outputs, options=options)
 
     return ElaboratedResponseResult(
         status="success",

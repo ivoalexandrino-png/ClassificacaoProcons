@@ -6,15 +6,22 @@ from datetime import date, datetime
 
 @dataclass(frozen=True)
 class ProconNotificationEmail:
-    """Dados extraídos de um e-mail de notificação de CIP do Procon-SP."""
+    """Dados extraídos de um e-mail de notificação Procon/Proconsumidor."""
 
     message_id: str
     subject: str
     sender: str
     received_at: datetime
     portal_url: str
-    access_code: str
+    source_id: str = "sp"
+    access_code: str = ""
     protocol_number: str | None = None
+    regional_org: str | None = None
+    state: str | None = None
+    consumer_name: str | None = None
+    consumer_cpf: str | None = None
+    complaint_date: date | None = None
+    cause: str | None = None
     email_response_deadline: str | None = None
     raw_snippet: str | None = None
 
