@@ -11,6 +11,23 @@ MAX_UNIFIED_PDF_BYTES = 9 * 1024 * 1024
 DEJAVU_FONT_PATH = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 PDF_EXTENSION = ".pdf"
+PDF_MAGIC = b"%PDF"
+
+
+def local_supporting_file_name(file_info: DriveFileInfo) -> str:
+    """Garante extensão local para anexos do Drive (ex.: PDF sem sufixo .pdf)."""
+    name = file_info.name.strip()
+    if Path(name).suffix:
+        return name
+    if file_info.mime_type in {"application/pdf"}:
+        return f"{name}.pdf"
+    if file_info.mime_type == "image/jpeg":
+        return f"{name}.jpg"
+    if file_info.mime_type == "image/png":
+        return f"{name}.png"
+    if file_info.mime_type.startswith("image/"):
+        return f"{name}.img"
+    return name
 
 
 def is_mergeable_supporting_file(file_info: DriveFileInfo) -> bool:
@@ -25,6 +42,21 @@ def is_mergeable_supporting_file(file_info: DriveFileInfo) -> bool:
     if file_info.mime_type.startswith("image/"):
         return True
     return any(name.endswith(ext) for ext in IMAGE_EXTENSIONS)
+
+
+def _resolve_supporting_file_kind(path: Path) -> str | None:
+    suffix = path.suffix.casefold()
+    if suffix == PDF_EXTENSION:
+        return "pdf"
+    if suffix in IMAGE_EXTENSIONS:
+        return "image"
+    try:
+        header = path.read_bytes()[:4]
+    except OSError:
+        return None
+    if header.startswith(PDF_MAGIC):
+        return "pdf"
+    return None
 
 
 def text_to_pdf(*, text: str, destination: Path, title: str) -> Path:
@@ -131,18 +163,15 @@ def build_unified_response_pdf(
         parts.append(complaint_pdf)
 
     for index, supporting_path in enumerate(supporting_files, start=1):
-        suffix = supporting_path.suffix.casefold()
-        if suffix == PDF_EXTENSION:
+        kind = _resolve_supporting_file_kind(supporting_path)
+        if kind == "pdf":
             parts.append(supporting_path)
             continue
-        if suffix in IMAGE_EXTENSIONS:
+        if kind == "image":
             converted = work_dir / f"anexo-sac-{index}.pdf"
             image_to_pdf(image_path=supporting_path, destination=converted)
             parts.append(converted)
             continue
-        raise DriveClientError(
-            f"Formato de anexo não suportado no PDF unificado: {supporting_path.name}",
-        )
 
     return merge_pdf_files(sources=parts, destination=destination)
 
