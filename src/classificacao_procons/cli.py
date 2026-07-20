@@ -180,8 +180,17 @@ def _run_elaborate(args: argparse.Namespace) -> int:
     output = [_serialize_elaborated(item) for item in results]
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
-    if any(item.status == "error" for item in results):
+    errors = [item for item in results if item.status == "error"]
+    if not results:
+        return 0
+    if len(errors) == len(results):
         return 1
+    if errors:
+        print(
+            f"Aviso: {len(errors)} caso(s) falharam na elaboração; "
+            f"{len(results) - len(errors)} concluído(s) com sucesso.",
+            file=sys.stderr,
+        )
     return 0
 
 

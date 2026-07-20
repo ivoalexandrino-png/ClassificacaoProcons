@@ -8,6 +8,7 @@ import pytest
 from classificacao_procons.drive.pdf_builder import (
     build_unified_response_pdf,
     is_mergeable_supporting_file,
+    local_supporting_file_name,
     merge_pdf_files,
     text_to_pdf,
 )
@@ -27,6 +28,11 @@ class TestMergeableSupportingFile:
         assert not is_mergeable_supporting_file(
             DriveFileInfo("3", "informacoes.txt", "text/plain", None),
         )
+
+    def test_should_add_pdf_extension_for_extensionless_drive_pdf(self) -> None:
+        file_info = DriveFileInfo("4", "Conta conectada", "application/pdf", None)
+        assert local_supporting_file_name(file_info) == "Conta conectada.pdf"
+        assert is_mergeable_supporting_file(file_info)
 
 
 class TestPdfBuilder:
@@ -67,6 +73,23 @@ class TestPdfBuilder:
             response_text="Resposta completa ao Procon.",
             complaint_pdf=complaint,
             supporting_files=[attachment],
+            destination=output,
+        )
+        assert output.exists()
+
+    def test_should_skip_unrecognized_supporting_file_in_unified_pdf(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        complaint = tmp_path / "reclamacao.pdf"
+        text_to_pdf(text="Reclamação", destination=complaint, title="Reclamação")
+        unknown = tmp_path / "planilha.bin"
+        unknown.write_bytes(b"not-a-pdf")
+        output = tmp_path / "unificado.pdf"
+        build_unified_response_pdf(
+            response_text="Resposta completa ao Procon.",
+            complaint_pdf=complaint,
+            supporting_files=[unknown],
             destination=output,
         )
         assert output.exists()
