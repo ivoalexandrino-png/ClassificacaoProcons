@@ -84,6 +84,19 @@ def _complaint_details(lines: list[str]) -> str:
     return " ".join(collected).strip()
 
 
+def _dismiss_cookie_banner(page: Page) -> None:
+    """Fecha banner de cookies se estiver visível."""
+    if not page.locator("text=Usamos cookies").count():
+        return
+    cookie_button = page.locator("button", has_text="Continuar")
+    if cookie_button.count():
+        try:
+            cookie_button.last.click(timeout=5000)
+            page.wait_for_timeout(500)
+        except PlaywrightTimeoutError:
+            return
+
+
 def _goto_portal_login(page: Page) -> None:
     """Abre o login do portal com retentativas (networkidle falha em SPAs)."""
     last_error: Exception | None = None
@@ -94,7 +107,8 @@ def _goto_portal_login(page: Page) -> None:
                 wait_until=PAGE_LOAD_WAIT_UNTIL,
                 timeout=DEFAULT_TIMEOUT_MS,
             )
-            page.locator("mat-radio-button").first.wait_for(
+            _dismiss_cookie_banner(page)
+            page.locator("mat-radio-button", has_text="Reclamação").wait_for(
                 state="visible",
                 timeout=DEFAULT_TIMEOUT_MS,
             )
@@ -108,9 +122,8 @@ def _goto_portal_login(page: Page) -> None:
 
 
 def _select_portal_access_type(page: Page, complaint_kind: ComplaintKind) -> None:
-    if complaint_kind == "processo_administrativo":
-        page.locator("mat-radio-button", has_text="Processo Administrativo").click()
-        return
+    """No portal atual, CIP e PA usam o mesmo fluxo 'Reclamação' + código de acesso."""
+    del complaint_kind
     page.locator("mat-radio-button", has_text="Reclamação").click()
 
 
@@ -136,7 +149,9 @@ def _open_complaint_with_code(
 ) -> None:
     _goto_portal_login(page)
     _select_portal_access_type(page, complaint_kind)
-    page.locator("button", has_text="Continuar").click()
+    continuar = page.locator("button", has_text="Continuar")
+    if continuar.count():
+        continuar.first.click()
     _fill_access_code_input(page, access_code, complaint_kind)
     page.locator("button", has_text="Validar código de acesso").click()
     page.wait_for_timeout(3000)
@@ -195,9 +210,10 @@ def _download_pdf_from_documents_tab(
     page.wait_for_timeout(2000)
 
     document_labels = (
-        ("PROCESSO ADMINISTRATIVO", "ATENDIMENTO PA", "ATENDIMENTO PROCESSO")
-        if complaint_kind == "processo_administrativo"
-        else ("ATENDIMENTO CIP",)
+        "ATENDIMENTO CIP",
+        "PROCESSO ADMINISTRATIVO",
+        "ATENDIMENTO PA",
+        "ATENDIMENTO PROCESSO",
     )
     document_row = None
     for label in document_labels:
