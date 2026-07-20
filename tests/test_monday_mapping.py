@@ -3,6 +3,10 @@
 from datetime import date
 
 from classificacao_procons.monday.mapping import (
+    FIELD_PA_DEADLINE,
+    FIELD_PA_GENERATED,
+    FIELD_PA_NUMBER,
+    FIELD_PA_RESPONDED,
     ORIGIN_LABEL_GLAM_CLUBE,
     ORIGIN_LABEL_GLAM_LOJA,
     ORIGIN_LABEL_MENS_CLUBE,
@@ -10,6 +14,7 @@ from classificacao_procons.monday.mapping import (
     MondayColumn,
     MondayColumnDetails,
     allowed_labels,
+    build_administrative_process_column_values,
     build_column_values,
     map_complaint_to_origin_label,
     map_procon_cause_to_monday_status_label,
@@ -34,6 +39,48 @@ class TestMondayColumnMapping:
     def test_should_ignore_causa_2_column(self) -> None:
         assert resolve_field_for_column("Causa 2") is None
         assert resolve_field_for_column("Causa 1") == "cause"
+
+    def test_should_map_administrative_process_columns(self) -> None:
+        assert resolve_field_for_column("Gerou Processo Administrativo") == FIELD_PA_GENERATED
+        assert (
+            resolve_field_for_column("Processo Administrativo Respondido") == FIELD_PA_RESPONDED
+        )
+        assert (
+            resolve_field_for_column("Prazo Resposta Processo Administrativo")
+            == FIELD_PA_DEADLINE
+        )
+        assert resolve_field_for_column("Número Processo Administrativo") == FIELD_PA_NUMBER
+
+    def test_should_build_administrative_process_column_values(self) -> None:
+        columns = [
+            MondayColumn(
+                id="status_pa",
+                title="Gerou Processo Administrativo",
+                column_type="status",
+            ),
+            MondayColumn(
+                id="status_pa_resp",
+                title="Processo Administrativo Respondido",
+                column_type="status",
+            ),
+            MondayColumn(
+                id="date_pa",
+                title="Prazo Resposta Processo Administrativo",
+                column_type="date",
+            ),
+            MondayColumn(id="text_pa", title="Número Processo Administrativo", column_type="text"),
+        ]
+        values = build_administrative_process_column_values(
+            columns,
+            administrative_process_number="35.001.003.26.1620383",
+            pa_response_deadline=date(2026, 7, 25),
+            pa_generated_label="Sim",
+            pa_responded_label="Não",
+        )
+        assert values["status_pa"] == {"label": "Sim"}
+        assert values["status_pa_resp"] == {"label": "Não"}
+        assert values["date_pa"] == {"date": "2026-07-25"}
+        assert values["text_pa"] == "35.001.003.26.1620383"
 
     def test_should_map_laura_cause_to_cancelamento_label(self) -> None:
         cause = (

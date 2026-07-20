@@ -11,7 +11,7 @@ from typing import Final
 from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-from classificacao_procons.models import ProconComplaint
+from classificacao_procons.models import ComplaintKind, ProconComplaint
 
 PORTAL_LOGIN_URL: Final = "https://fornecedor2.procon.sp.gov.br/login"
 DEFAULT_TIMEOUT_MS: Final = 90_000
@@ -27,6 +27,7 @@ class PortalFetchOptions:
     access_code: str
     download_dir: Path
     headless: bool = True
+    complaint_kind: ComplaintKind = "reclamacao"
 
 
 def _parse_brazilian_date(value: str) -> date | None:
@@ -93,7 +94,7 @@ def _goto_portal_login(page: Page) -> None:
                 wait_until=PAGE_LOAD_WAIT_UNTIL,
                 timeout=DEFAULT_TIMEOUT_MS,
             )
-            page.locator("mat-radio-button", has_text="Reclamação").wait_for(
+            page.locator("mat-radio-button").first.wait_for(
                 state="visible",
                 timeout=DEFAULT_TIMEOUT_MS,
             )
@@ -106,11 +107,37 @@ def _goto_portal_login(page: Page) -> None:
     ) from last_error
 
 
-def _open_complaint_with_code(page: Page, access_code: str) -> None:
-    _goto_portal_login(page)
+def _select_portal_access_type(page: Page, complaint_kind: ComplaintKind) -> None:
+    if complaint_kind == "processo_administrativo":
+        page.locator("mat-radio-button", has_text="Processo Administrativo").click()
+        return
     page.locator("mat-radio-button", has_text="Reclamação").click()
+
+
+def _fill_access_code_input(page: Page, access_code: str, complaint_kind: ComplaintKind) -> None:
+    placeholders = (
+        ("Código do processo administrativo", "Código de acesso", "Código da reclamação")
+        if complaint_kind == "processo_administrativo"
+        else ("Código da reclamação", "Código de acesso")
+    )
+    for placeholder in placeholders:
+        locator = page.get_by_placeholder(placeholder)
+        if locator.count():
+            locator.fill(access_code)
+            return
+    raise ProconPortalError("Campo de código de acesso não encontrado no portal.")
+
+
+def _open_complaint_with_code(
+    page: Page,
+    access_code: str,
+    *,
+    complaint_kind: ComplaintKind = "reclamacao",
+) -> None:
+    _goto_portal_login(page)
+    _select_portal_access_type(page, complaint_kind)
     page.locator("button", has_text="Continuar").click()
-    page.get_by_placeholder("Código da reclamação").fill(access_code)
+    _fill_access_code_input(page, access_code, complaint_kind)
     page.locator("button", has_text="Validar código de acesso").click()
     page.wait_for_timeout(3000)
 
@@ -122,7 +149,12 @@ def _open_complaint_with_code(page: Page, access_code: str) -> None:
         raise ProconPortalError("Não foi possível abrir a página da reclamação.")
 
 
-def _extract_complaint_from_page(page: Page, access_code: str) -> ProconComplaint:
+def _extract_complaint_from_page(
+    page: Page,
+    access_code: str,
+    *,
+    complaint_kind: ComplaintKind = "reclamacao",
+) -> ProconComplaint:
     page.wait_for_timeout(2000)
     lines = [line.strip() for line in page.inner_text("body").splitlines() if line.strip()]
 
@@ -132,6 +164,11 @@ def _extract_complaint_from_page(page: Page, access_code: str) -> ProconComplain
     classification = _labeled_value(lines, "Classificação")
     complaint_details = _complaint_details(lines)
     cause = _build_cause_text(classification, complaint_details)
+    admin_process_number = (
+        _labeled_value(lines, "Processo Administrativo")
+        or _labeled_value(lines, "Número do processo")
+        or _labeled_value(lines, "Número do Processo Administrativo")
+    )
 
     return ProconComplaint(
         access_code=access_code,
@@ -142,6 +179,8 @@ def _extract_complaint_from_page(page: Page, access_code: str) -> ProconComplain
         response_deadline=_parse_brazilian_date(_labeled_value(lines, "Prazo")),
         cause=cause,
         portal_url=page.url,
+        complaint_kind=complaint_kind,
+        administrative_process_number=admin_process_number or None,
     )
 
 
@@ -149,20 +188,34 @@ def _download_pdf_from_documents_tab(
     page: Page,
     download_dir: Path,
     access_code: str,
+    *,
+    complaint_kind: ComplaintKind = "reclamacao",
 ) -> str | None:
     page.get_by_role("tab", name="Documentos Procon").click()
     page.wait_for_timeout(2000)
 
-    document_row = page.locator("text=ATENDIMENTO CIP")
-    if not document_row.count():
+    document_labels = (
+        ("PROCESSO ADMINISTRATIVO", "ATENDIMENTO PA", "ATENDIMENTO PROCESSO")
+        if complaint_kind == "processo_administrativo"
+        else ("ATENDIMENTO CIP",)
+    )
+    document_row = None
+    for label in document_labels:
+        candidate = page.locator(f"text={label}")
+        if candidate.count():
+            document_row = candidate
+            break
+    if document_row is None:
         return None
 
     download_dir.mkdir(parents=True, exist_ok=True)
+    safe_code = access_code.replace("/", "-")
+    prefix = "pa" if complaint_kind == "processo_administrativo" else "procon"
     try:
         with page.expect_download(timeout=DEFAULT_TIMEOUT_MS) as download_info:
             document_row.first.click()
         download = download_info.value
-        target = download_dir / f"procon-{access_code.replace('/', '-')}.pdf"
+        target = download_dir / f"{prefix}-{safe_code}.pdf"
         download.save_as(target)
         return str(target)
     except PlaywrightTimeoutError:
@@ -178,12 +231,21 @@ def fetch_complaint(options: PortalFetchOptions) -> ProconComplaint:
         page = browser.new_page()
         try:
             try:
-                _open_complaint_with_code(page, options.access_code)
-                complaint = _extract_complaint_from_page(page, options.access_code)
+                _open_complaint_with_code(
+                    page,
+                    options.access_code,
+                    complaint_kind=options.complaint_kind,
+                )
+                complaint = _extract_complaint_from_page(
+                    page,
+                    options.access_code,
+                    complaint_kind=options.complaint_kind,
+                )
                 pdf_path = _download_pdf_from_documents_tab(
                     page,
                     options.download_dir,
                     options.access_code,
+                    complaint_kind=options.complaint_kind,
                 )
             except PlaywrightTimeoutError as exc:
                 raise ProconPortalError(
@@ -201,6 +263,8 @@ def fetch_complaint(options: PortalFetchOptions) -> ProconComplaint:
                     state=complaint.state,
                     portal_url=complaint.portal_url,
                     pdf_path=pdf_path,
+                    complaint_kind=complaint.complaint_kind,
+                    administrative_process_number=complaint.administrative_process_number,
                 )
             return complaint
         finally:

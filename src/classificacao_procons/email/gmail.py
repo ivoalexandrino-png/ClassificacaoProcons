@@ -26,7 +26,9 @@ from classificacao_procons.campinas.email_parser import (
 from classificacao_procons.email.parser import (
     ProconEmailParseError,
     _html_to_text,
-    is_procon_cip_notification,
+    extract_administrative_process_number,
+    is_procon_notification,
+    is_procon_pa_notification,
     parse_procon_notification_body,
 )
 from classificacao_procons.google_auth import load_credentials
@@ -54,7 +56,8 @@ from classificacao_procons.uberlandia.email_parser import (
 DEFAULT_GMAIL_QUERY = (
     "("
     "from:procon.naoresponder@procon.sp.gov.br "
-    'subject:"Fundação Procon-SP - Notificação de emissão de CIP"'
+    '(subject:"Fundação Procon-SP - Notificação de emissão de CIP" '
+    'OR subject:"Processo Administrativo Aberto:")'
     ") OR ("
     "from:admin@proconsumidor.mj.gov.br "
     'subject:"Proconsumidor - Notificação"'
@@ -295,13 +298,24 @@ class GmailProconFetcher:
                 raw_snippet=snippet,
             )
 
-        if not is_procon_cip_notification(subject=subject, sender=sender):
+        if not is_procon_notification(subject=subject, sender=sender):
             return None
 
         try:
             parsed = parse_procon_notification_body(html=text_html, text=text_plain)
         except ProconEmailParseError:
             return None
+
+        notification_type = (
+            "processo_administrativo"
+            if is_procon_pa_notification(subject=subject, sender=sender)
+            else "cip"
+        )
+        administrative_process_number = (
+            extract_administrative_process_number(subject)
+            if notification_type == "processo_administrativo"
+            else None
+        )
 
         return ProconNotificationEmail(
             message_id=message_id,
@@ -311,7 +325,9 @@ class GmailProconFetcher:
             portal_url=parsed.portal_url,
             source_id="sp",
             access_code=parsed.access_code,
+            notification_type=notification_type,
             protocol_number=parsed.protocol_number,
+            administrative_process_number=administrative_process_number,
             email_response_deadline=parsed.response_deadline,
             raw_snippet=snippet,
         )

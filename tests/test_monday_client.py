@@ -6,7 +6,12 @@ from unittest.mock import patch
 import pytest
 
 from classificacao_procons.models import ProcessedComplaint
-from classificacao_procons.monday.client import MondayClientError, register_complaint
+from classificacao_procons.monday.client import (
+    MondayClientError,
+    calculate_pa_response_deadline,
+    register_complaint,
+    update_administrative_process,
+)
 
 
 def _processed_complaint() -> ProcessedComplaint:
@@ -28,6 +33,28 @@ def _processed_complaint() -> ProcessedComplaint:
     )
 
 
+def _processed_pa_complaint() -> ProcessedComplaint:
+    return ProcessedComplaint(
+        status="success",
+        message_id="msg-pa",
+        access_code="PA-CODE",
+        protocol_number="1653213/2026",
+        consumer_name="MARIA SILVA",
+        consumer_cpf="12345678901",
+        complaint_date=date(2026, 7, 12),
+        procon_response_deadline=date(2026, 7, 22),
+        sac_deadline=None,
+        legal_deadline=None,
+        cause="Atraso na entrega",
+        state="SP",
+        pdf_url="https://drive.google.com/file/pa/view",
+        drive_folder_url="https://drive.google.com/folder/abc",
+        notification_type="processo_administrativo",
+        administrative_process_number="35.001.003.26.1620383",
+        pa_response_deadline=date(2026, 7, 17),
+    )
+
+
 ACCOUNT_RESPONSE = {"me": {"account": {"slug": "b4a"}}}
 
 BOARD_LIST_RESPONSE = {
@@ -40,6 +67,18 @@ BOARD_LIST_RESPONSE = {
                 {"id": "text_protocol", "title": "CIP/FA", "type": "text"},
                 {"id": "text_cpf", "title": "CPF", "type": "text"},
                 {"id": "link_pdf", "title": "PDF Drive", "type": "link"},
+                {"id": "status_pa", "title": "Gerou Processo Administrativo", "type": "status"},
+                {
+                    "id": "status_pa_resp",
+                    "title": "Processo Administrativo Respondido",
+                    "type": "status",
+                },
+                {
+                    "id": "date_pa",
+                    "title": "Prazo Resposta Processo Administrativo",
+                    "type": "date",
+                },
+                {"id": "text_pa", "title": "Número Processo Administrativo", "type": "text"},
             ],
         },
     ],
@@ -117,3 +156,40 @@ class TestMondayClient:
 
         with pytest.raises(MondayClientError, match="processadas com sucesso"):
             register_complaint(complaint, api_token="token-test")
+
+    def test_should_calculate_pa_deadline_plus_five_days(self) -> None:
+        assert calculate_pa_response_deadline(base_date=date(2026, 7, 12)) == date(2026, 7, 17)
+
+    @patch("classificacao_procons.monday.client._graphql_request")
+    def test_should_update_existing_item_for_administrative_process(self, graphql_mock) -> None:
+        graphql_mock.side_effect = [
+            ACCOUNT_RESPONSE,
+            BOARD_LIST_RESPONSE,
+            {"items_page_by_column_values": {"items": [{"id": "777"}]}},
+            UPDATE_ITEM_RESPONSE,
+            UPDATE_ITEM_RESPONSE,
+            UPDATE_ITEM_RESPONSE,
+            UPDATE_ITEM_RESPONSE,
+        ]
+
+        result = update_administrative_process(
+            _processed_pa_complaint(),
+            api_token="token-test",
+        )
+
+        assert result is not None
+        assert result.item_id == "777"
+        assert result.item_url == "https://b4a.monday.com/boards/111/pulses/777"
+        assert graphql_mock.call_count == 7
+
+    @patch("classificacao_procons.monday.client._graphql_request")
+    def test_should_raise_when_pa_item_not_found(self, graphql_mock) -> None:
+        graphql_mock.side_effect = [
+            ACCOUNT_RESPONSE,
+            BOARD_LIST_RESPONSE,
+            {"items_page_by_column_values": {"items": []}},
+            {"items_page_by_column_values": {"items": []}},
+        ]
+
+        with pytest.raises(MondayClientError, match="não encontrado no Monday"):
+            update_administrative_process(_processed_pa_complaint(), api_token="token-test")

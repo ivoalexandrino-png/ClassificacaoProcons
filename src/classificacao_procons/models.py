@@ -46,6 +46,8 @@ class ProconComplaint:
     state: str = "SP"
     portal_url: str = ""
     pdf_path: str | None = None
+    complaint_kind: ComplaintKind = "reclamacao"
+    administrative_process_number: str | None = None
 
 
 @dataclass(frozen=True)
