@@ -10,6 +10,12 @@ from typing import Any
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from classificacao_procons.alerj.email_parser import (
+    ALERJ_STATE_LABEL,
+    AlerjEmailParseError,
+    is_alerj_notification,
+    parse_alerj_notification,
+)
 from classificacao_procons.campinas.email_parser import (
     CAMPINAS_PORTAL_URL,
     CAMPINAS_STATE_LABEL,
@@ -46,19 +52,23 @@ from classificacao_procons.uberlandia.email_parser import (
 )
 
 DEFAULT_GMAIL_QUERY = (
-    '('
-    'from:procon.naoresponder@procon.sp.gov.br '
+    "("
+    "from:procon.naoresponder@procon.sp.gov.br "
     'subject:"Fundação Procon-SP - Notificação de emissão de CIP"'
-    ') OR ('
-    'from:admin@proconsumidor.mj.gov.br '
+    ") OR ("
+    "from:admin@proconsumidor.mj.gov.br "
     'subject:"Proconsumidor - Notificação"'
-    ') OR ('
-    'from:procon.adm@campinas.sp.gov.br'
-    ') OR ('
+    ") OR ("
+    "from:procon.adm@campinas.sp.gov.br"
+    ") OR ("
     'subject:"Processo SSP"'
-    ') OR ('
-    'from:faleprocon@uberlandia.mg.gov.br'
-    ')'
+    ") OR ("
+    "from:faleprocon@uberlandia.mg.gov.br"
+    ") OR ("
+    'subject:"NOTIFICAÇÃO N"'
+    ") OR ("
+    "from:alerj.rj.gov.br"
+    ")"
 )
 
 
@@ -182,6 +192,27 @@ class GmailProconFetcher:
             body_text = f"{body_text}\n{_html_to_text(text_html)}".strip()
         received_at = _parse_received_at(headers)
         snippet = message.get("snippet")
+
+        if is_alerj_notification(subject=subject, sender=sender, body=body_text):
+            try:
+                parsed = parse_alerj_notification(
+                    subject=subject,
+                    html=text_html,
+                    text=text_plain,
+                )
+            except AlerjEmailParseError:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url="",
+                source_id="alerj",
+                protocol_number=parsed.protocol_number,
+                state=ALERJ_STATE_LABEL,
+                raw_snippet=snippet,
+            )
 
         if is_sc_ssp_notification(subject=subject, sender=sender, body=body_text):
             try:
@@ -310,4 +341,3 @@ class GmailProconFetcher:
             raise GmailClientError(
                 f"Falha ao marcar mensagem {message_id} como lida: {exc}",
             ) from exc
-
