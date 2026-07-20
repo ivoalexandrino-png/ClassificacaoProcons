@@ -1,4 +1,4 @@
-"""Cliente Gmail para buscar notificações do Procon-SP."""
+"""Cliente Gmail para buscar notificações Procon/Proconsumidor."""
 
 from __future__ import annotations
 
@@ -17,10 +17,21 @@ from classificacao_procons.email.parser import (
 )
 from classificacao_procons.google_auth import load_credentials
 from classificacao_procons.models import ProconNotificationEmail
+from classificacao_procons.proconsumidor.email_parser import (
+    PROCONSUMIDOR_PORTAL_URL,
+    ProconsumidorEmailParseError,
+    is_proconsumidor_notification,
+    parse_proconsumidor_notification_body,
+)
 
 DEFAULT_GMAIL_QUERY = (
+    '('
     'from:procon.naoresponder@procon.sp.gov.br '
     'subject:"Fundação Procon-SP - Notificação de emissão de CIP"'
+    ') OR ('
+    'from:admin@proconsumidor.mj.gov.br '
+    'subject:"Proconsumidor - Notificação"'
+    ')'
 )
 
 
@@ -77,7 +88,7 @@ def _parse_received_at(headers: list[dict[str, str]]) -> datetime:
 
 
 class GmailProconFetcher:
-    """Busca e-mails de notificação CIP do Procon-SP via Gmail API."""
+    """Busca e-mails de notificação Procon/Proconsumidor via Gmail API."""
 
     def __init__(self, service: Any) -> None:
         self._service = service
@@ -101,7 +112,7 @@ class GmailProconFetcher:
         max_results: int = 20,
         query: str | None = None,
     ) -> list[ProconNotificationEmail]:
-        """Lista notificações não lidas que correspondem ao filtro Procon-SP."""
+        """Lista notificações não lidas que correspondem ao filtro Procon/Proconsumidor."""
         gmail_query = query or f"{DEFAULT_GMAIL_QUERY} is:unread"
         try:
             list_response = (
@@ -122,7 +133,7 @@ class GmailProconFetcher:
         return notifications
 
     def fetch_notification(self, message_id: str) -> ProconNotificationEmail | None:
-        """Busca e parseia um e-mail pelo ID. Retorna None se não for notificação Procon."""
+        """Busca e parseia um e-mail pelo ID. Retorna None se não for notificação suportada."""
         try:
             message = (
                 self._service.users()
@@ -138,10 +149,31 @@ class GmailProconFetcher:
         subject = _header_value(headers, "Subject")
         sender = _header_value(headers, "From")
 
+        text_plain, text_html = _extract_bodies(payload)
+        received_at = _parse_received_at(headers)
+        snippet = message.get("snippet")
+
+        if is_proconsumidor_notification(subject=subject, sender=sender):
+            try:
+                parsed = parse_proconsumidor_notification_body(html=text_html, text=text_plain)
+            except ProconsumidorEmailParseError:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url=PROCONSUMIDOR_PORTAL_URL,
+                source_id="proconsumidor",
+                protocol_number=parsed.complaint_number,
+                regional_org=parsed.regional_org,
+                state=parsed.state,
+                raw_snippet=snippet,
+            )
+
         if not is_procon_cip_notification(subject=subject, sender=sender):
             return None
 
-        text_plain, text_html = _extract_bodies(payload)
         try:
             parsed = parse_procon_notification_body(html=text_html, text=text_plain)
         except ProconEmailParseError:
@@ -151,12 +183,13 @@ class GmailProconFetcher:
             message_id=message_id,
             subject=subject,
             sender=sender,
-            received_at=_parse_received_at(headers),
+            received_at=received_at,
             portal_url=parsed.portal_url,
+            source_id="sp",
             access_code=parsed.access_code,
             protocol_number=parsed.protocol_number,
             email_response_deadline=parsed.response_deadline,
-            raw_snippet=message.get("snippet"),
+            raw_snippet=snippet,
         )
 
     def mark_as_read(self, message_id: str) -> None:
