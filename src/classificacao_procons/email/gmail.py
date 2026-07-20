@@ -19,6 +19,7 @@ from classificacao_procons.campinas.email_parser import (
 )
 from classificacao_procons.email.parser import (
     ProconEmailParseError,
+    _html_to_text,
     is_procon_cip_notification,
     parse_procon_notification_body,
 )
@@ -30,6 +31,12 @@ from classificacao_procons.proconsumidor.email_parser import (
     is_proconsumidor_notification,
     parse_proconsumidor_notification_body,
 )
+from classificacao_procons.sc.email_parser import (
+    SC_STATE_LABEL,
+    ScEmailParseError,
+    is_sc_ssp_notification,
+    parse_sc_ssp_notification,
+)
 
 DEFAULT_GMAIL_QUERY = (
     '('
@@ -40,6 +47,8 @@ DEFAULT_GMAIL_QUERY = (
     'subject:"Proconsumidor - Notificação"'
     ') OR ('
     'from:procon.adm@campinas.sp.gov.br'
+    ') OR ('
+    'subject:"Processo SSP"'
     ')'
 )
 
@@ -159,8 +168,32 @@ class GmailProconFetcher:
         sender = _header_value(headers, "From")
 
         text_plain, text_html = _extract_bodies(payload)
+        body_text = text_plain or ""
+        if text_html:
+            body_text = f"{body_text}\n{_html_to_text(text_html)}".strip()
         received_at = _parse_received_at(headers)
         snippet = message.get("snippet")
+
+        if is_sc_ssp_notification(subject=subject, sender=sender, body=body_text):
+            try:
+                parsed = parse_sc_ssp_notification(
+                    subject=subject,
+                    html=text_html,
+                    text=text_plain,
+                )
+            except ScEmailParseError:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url="",
+                source_id="sc",
+                protocol_number=parsed.protocol_number,
+                state=SC_STATE_LABEL,
+                raw_snippet=snippet,
+            )
 
         if is_proconsumidor_notification(subject=subject, sender=sender):
             try:
@@ -220,6 +253,19 @@ class GmailProconFetcher:
             email_response_deadline=parsed.response_deadline,
             raw_snippet=snippet,
         )
+
+    def fetch_message_payload(self, message_id: str) -> dict[str, Any]:
+        """Retorna o payload MIME completo de uma mensagem."""
+        try:
+            message = (
+                self._service.users()
+                .messages()
+                .get(userId="me", id=message_id, format="full")
+                .execute()
+            )
+        except HttpError as exc:
+            raise GmailClientError(f"Falha ao buscar mensagem {message_id}: {exc}") from exc
+        return message.get("payload", {})
 
     def mark_as_read(self, message_id: str) -> None:
         """Remove o label UNREAD da mensagem após processamento."""

@@ -36,6 +36,9 @@ from classificacao_procons.proconsumidor.portal import (
     ProconsumidorPortalOptions,
     fetch_proconsumidor_complaint,
 )
+from classificacao_procons.sc.attachments import ScAttachmentError, download_ssp_pdf_attachment
+from classificacao_procons.sc.deadlines import calculate_sc_deadlines
+from classificacao_procons.sc.pdf_parser import ScPdfParseError, parse_sc_ssp_pdf
 
 DEFAULT_DOWNLOAD_DIR = Path("downloads")
 DEFAULT_STATE_PATH = Path("data/processed-protocols.json")
@@ -141,6 +144,86 @@ def _register_on_monday_if_configured(
         return result
 
     return replace(result, monday_item_url=monday_result.item_url)
+
+
+def _process_sc_notification(
+    notification: ProconNotificationEmail,
+    *,
+    options: PipelineOptions,
+    processed_protocols: set[str],
+    fetcher: GmailProconFetcher,
+) -> ProcessedComplaint:
+    protocol = notification.protocol_number or ""
+    state_key = _source_state_key(notification.source_id, protocol)
+    if state_key in processed_protocols:
+        return ProcessedComplaint(
+            status="skipped_duplicate",
+            message_id=notification.message_id,
+            access_code=protocol,
+            protocol_number=protocol,
+            consumer_name="",
+            consumer_cpf="",
+            complaint_date=None,
+            procon_response_deadline=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            state=notification.state or "",
+            pdf_url=None,
+            drive_folder_url=None,
+            error="Reclamação SC/SSP já processada anteriormente.",
+        )
+
+    payload = fetcher.fetch_message_payload(notification.message_id)
+    pdf_path = download_ssp_pdf_attachment(
+        fetcher._service,
+        message_id=notification.message_id,
+        payload=payload,
+        download_dir=options.download_dir,
+        protocol_number=protocol,
+    )
+    complaint = parse_sc_ssp_pdf(pdf_path)
+
+    resolved_protocol = _resolve_protocol(notification, complaint.cip_fa_number)
+    resolved_state = _resolve_state(notification, complaint.state)
+
+    drive_result = save_complaint_pdf(
+        consumer_name=complaint.consumer_name,
+        pdf_path=pdf_path,
+        cip_number=resolved_protocol,
+        complaint_date=complaint.complaint_date,
+        parent_folder_id=options.parent_folder_id,
+        token_path=options.token_path,
+    )
+
+    sac_deadline, legal_deadline, procon_deadline = calculate_sc_deadlines(
+        base_date=complaint.complaint_date,
+        received_date=notification.received_at.date(),
+    )
+
+    processed_protocols.add(state_key)
+    _save_processed_protocols(options.state_path, processed_protocols)
+
+    if options.mark_read and has_gmail_modify_access(options.token_path):
+        fetcher.mark_as_read(notification.message_id)
+
+    result = ProcessedComplaint(
+        status="success",
+        message_id=notification.message_id,
+        access_code=protocol,
+        protocol_number=resolved_protocol,
+        consumer_name=complaint.consumer_name,
+        consumer_cpf=complaint.consumer_cpf,
+        complaint_date=complaint.complaint_date,
+        procon_response_deadline=procon_deadline,
+        sac_deadline=sac_deadline,
+        legal_deadline=legal_deadline,
+        cause=complaint.cause,
+        state=resolved_state,
+        pdf_url=drive_result.pdf_url,
+        drive_folder_url=drive_result.consumer_folder_url,
+    )
+    return _register_on_monday_if_configured(result, options=options)
 
 
 def _process_campinas_notification(
@@ -437,6 +520,14 @@ def _process_notification(
             fetcher=fetcher,
         )
 
+    if notification.source_id == "sc":
+        return _process_sc_notification(
+            notification,
+            options=options,
+            processed_protocols=processed_protocols,
+            fetcher=fetcher,
+        )
+
     return _process_sp_notification(
         notification,
         options=options,
@@ -477,6 +568,8 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
             ProconPortalError,
             ProconsumidorPortalError,
             CampinasPortalError,
+            ScAttachmentError,
+            ScPdfParseError,
             DriveClientError,
             PlaywrightTimeoutError,
             PipelineError,
