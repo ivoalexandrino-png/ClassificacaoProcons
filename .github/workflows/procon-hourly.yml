@@ -20,11 +20,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # O cache do Actions é imutável por chave: salvamos com uma chave nova a
+      # cada execução e restauramos a mais recente pelo prefixo (rolling state).
+      # Com a chave fixa antiga, o save falhava ("Unable to reserve cache") e o
+      # estado nunca era atualizado entre execuções.
       - name: Restore pipeline state
         uses: actions/cache/restore@v4
         with:
           path: data
-          key: procon-pipeline-state-v1
+          key: procon-pipeline-state-${{ github.run_id }}
+          restore-keys: |
+            procon-pipeline-state-
 
       - name: Prepare state directory
         run: |
@@ -170,4 +176,4 @@ jobs:
         if: always()
         with:
           path: data
-          key: procon-pipeline-state-v1
+          key: procon-pipeline-state-${{ github.run_id }}
