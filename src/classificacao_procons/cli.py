@@ -99,7 +99,13 @@ def _run_auth(args: argparse.Namespace) -> int:
 
 def _serialize_processed(item: object) -> dict[str, object]:
     data = asdict(item)
-    for key in ("complaint_date", "procon_response_deadline", "sac_deadline", "legal_deadline"):
+    for key in (
+        "complaint_date",
+        "procon_response_deadline",
+        "sac_deadline",
+        "legal_deadline",
+        "pa_response_deadline",
+    ):
         if data.get(key) is not None:
             data[key] = data[key].isoformat()
     return data
