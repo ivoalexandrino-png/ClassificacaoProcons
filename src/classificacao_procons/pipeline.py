@@ -101,6 +101,8 @@ def _resolve_state(notification: ProconNotificationEmail, complaint_state: str) 
         return complaint_state
     if notification.source_id == "sp":
         return "SP"
+    if notification.source_id == "sc":
+        return "SC"
     return ""
 
 
@@ -196,9 +198,9 @@ def _process_sc_notification(
         token_path=options.token_path,
     )
 
+    receipt_date = notification.received_at.date()
     sac_deadline, legal_deadline, procon_deadline = calculate_sc_deadlines(
-        base_date=complaint.complaint_date,
-        received_date=notification.received_at.date(),
+        received_date=receipt_date,
     )
 
     processed_protocols.add(state_key)

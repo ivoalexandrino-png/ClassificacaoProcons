@@ -89,8 +89,8 @@ def test_should_process_sc_ssp_notification(
     assert results[0].state == "SC"
     assert results[0].protocol_number == "00027157/2026"
     assert results[0].consumer_name == "MARIA EDUARDA DE SOUZA OSORIO"
-    assert results[0].sac_deadline == date(2026, 7, 5)
-    assert results[0].legal_deadline == date(2026, 7, 6)
+    assert results[0].sac_deadline == date(2026, 7, 25)
+    assert results[0].legal_deadline == date(2026, 7, 26)
     assert results[0].procon_response_deadline == date(2026, 8, 17)
     download_pdf_mock.assert_called_once()
     parse_pdf_mock.assert_called_once_with(pdf_path)
