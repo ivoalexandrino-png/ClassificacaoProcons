@@ -9,7 +9,11 @@ from datetime import date, datetime
 from typing import Final
 
 from classificacao_procons.email.parser import _html_to_text, normalize_email_address
-from classificacao_procons.juridico.cnj import extract_process_number, tribunal_acronym
+from classificacao_procons.juridico.cnj import (
+    PROCESS_NUMBER_PATTERN,
+    extract_process_number,
+    tribunal_acronym,
+)
 from classificacao_procons.juridico.models import (
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
@@ -67,6 +71,21 @@ _SUMMARY_MAX_LENGTH: Final = 600
 
 _DEADLINE_DAYS_PATTERN = re.compile(
     r"prazo\s*(?:de|:)?\s*(\d{1,3})\s*(?:\([^)]*\)\s*)?dias?(?:\s*(uteis|corridos))?",
+)
+
+# Prazos por extenso ("prazo: dez dias"), comuns em despachos publicados.
+_DAY_WORDS: Final[dict[str, int]] = {
+    "cinco": 5,
+    "dez": 10,
+    "quinze": 15,
+    "vinte": 20,
+    "trinta": 30,
+    "quarenta e cinco": 45,
+    "sessenta": 60,
+}
+
+_DEADLINE_DAY_WORDS_PATTERN = re.compile(
+    r"prazo\s*(?:de|:)?\s*(" + "|".join(_DAY_WORDS) + r")\s*dias?(?:\s*(uteis|corridos))?",
 )
 
 _DEADLINE_DATE_PATTERN = re.compile(
@@ -204,11 +223,18 @@ def _detect_notification_type(normalized_text: str) -> str:
 
 def _extract_deadline_days(normalized_text: str) -> tuple[int | None, bool]:
     match = _DEADLINE_DAYS_PATTERN.search(normalized_text)
-    if not match:
-        return None, True
-    days = int(match.group(1))
-    qualifier = match.group(2) or "uteis"
-    return days, qualifier != "corridos"
+    if match:
+        days = int(match.group(1))
+        qualifier = match.group(2) or "uteis"
+        return days, qualifier != "corridos"
+
+    word_match = _DEADLINE_DAY_WORDS_PATTERN.search(normalized_text)
+    if word_match:
+        days = _DAY_WORDS[word_match.group(1)]
+        qualifier = word_match.group(2) or "uteis"
+        return days, qualifier != "corridos"
+
+    return None, True
 
 
 def _parse_date(day: str, month: str, year: str) -> date | None:
@@ -306,3 +332,81 @@ def parse_judicial_notification_body(
         summary=_build_summary(full_text),
         has_deadline_trigger=_has_deadline_trigger(normalized_text),
     )
+
+
+# Rótulo que costuma anteceder o número CNJ ("Processo: N", "Num. Processo: N"):
+# usado para não cortar o cabeçalho da publicação ao segmentar e-mails-resumo.
+_SEGMENT_LABEL_LOOKBEHIND = 80
+_PROCESS_LABEL_PATTERN = re.compile(r"(?i)(?:num\.?\s*)?processo\b[^\n]{0,40}$")
+
+
+def _segment_start(full_text: str, number_start: int) -> int:
+    window_start = max(0, number_start - _SEGMENT_LABEL_LOOKBEHIND)
+    window = full_text[window_start:number_start]
+    match = _PROCESS_LABEL_PATTERN.search(window)
+    if match:
+        return window_start + match.start()
+    return number_start
+
+
+def _split_process_segments(full_text: str) -> dict[str, str]:
+    """Divide e-mails-resumo (Recorte OAB, Jusbrasil) em um trecho por processo.
+
+    Cada trecho vai do rótulo "Processo(s): N" até o começo do trecho do
+    processo seguinte; trechos do mesmo processo são concatenados.
+    """
+    matches = [
+        (extract_process_number(match.group(0)), match.start())
+        for match in PROCESS_NUMBER_PATTERN.finditer(full_text)
+    ]
+    numbered = [(number, start) for number, start in matches if number]
+    distinct = list(dict.fromkeys(number for number, _ in numbered))
+    if len(distinct) <= 1:
+        return {distinct[0]: full_text} if distinct else {}
+
+    boundaries: list[tuple[str, int]] = []
+    for index, (number, start) in enumerate(numbered):
+        if index == 0:
+            boundaries.append((number, 0))
+            continue
+        previous_number = numbered[index - 1][0]
+        if number == previous_number:
+            continue
+        boundaries.append((number, _segment_start(full_text, start)))
+
+    segments: dict[str, list[str]] = {}
+    for index, (number, begin) in enumerate(boundaries):
+        end = boundaries[index + 1][1] if index + 1 < len(boundaries) else len(full_text)
+        segments.setdefault(number, []).append(full_text[begin:end])
+
+    return {number: "\n".join(parts) for number, parts in segments.items()}
+
+
+def parse_judicial_notifications(
+    *,
+    html: str | None = None,
+    text: str | None = None,
+    subject: str = "",
+) -> list[ParsedIntimacao]:
+    """Extrai TODAS as intimações de um e-mail (resumos têm vários processos).
+
+    Recortes (OAB) e alertas (Jusbrasil) agrupam publicações de processos
+    diferentes num só e-mail — cada processo tem seu tipo e seu prazo. Cada
+    trecho é interpretado isoladamente; e-mails de um único processo seguem
+    o caminho tradicional (assunto incluído na busca do número).
+    """
+    if not html and not text:
+        raise IntimacaoParseError("Corpo do e-mail vazio.")
+
+    full_text = text or ""
+    if html:
+        full_text = f"{full_text}\n{_html_to_text(html)}".strip()
+
+    segments = _split_process_segments(full_text)
+    if len(segments) <= 1:
+        return [parse_judicial_notification_body(text=full_text, subject=subject)]
+
+    return [
+        parse_judicial_notification_body(text=segment_text)
+        for segment_text in segments.values()
+    ]

@@ -46,6 +46,7 @@ from classificacao_procons.juridico.monday import (
 from classificacao_procons.juridico.parser import (
     IntimacaoParseError,
     parse_judicial_notification_body,
+    parse_judicial_notifications,
 )
 from classificacao_procons.juridico.providencias import (
     STAGE_ACORDO,
@@ -151,12 +152,16 @@ def _enrich_with_communications(
         for communication in communications
     )
     try:
-        return parse_judicial_notification_body(
-            text=f"{email_text}\n\n{teor_blocks}",
+        enriched = parse_judicial_notification_body(
+            # o número vem primeiro para e-mails-resumo não trocarem o processo
+            text=f"Processo {intimacao.process_number}\n{email_text}\n\n{teor_blocks}",
             subject=subject,
         )
     except IntimacaoParseError:
         return intimacao
+    if enriched.process_number != intimacao.process_number:
+        return intimacao
+    return enriched
 
 
 def _register_on_monday_if_configured(
@@ -359,13 +364,35 @@ def _process_notification(
     options: JuridicoPipelineOptions,
     processed_messages: set[str],
     fetcher: GmailJuridicoFetcher,
-) -> ProcessedIntimacao:
-    # 1. E-mail (direto do tribunal, DJE ou encaminhado do e-mail pessoal)
-    intimacao = parse_judicial_notification_body(
+) -> list[ProcessedIntimacao]:
+    # 1. E-mail (direto do tribunal, DJE ou encaminhado do e-mail pessoal).
+    # Recortes/alertas de publicação agrupam vários processos num só e-mail —
+    # cada processo é triado isoladamente, com seu tipo e seu prazo.
+    intimacoes = parse_judicial_notifications(
         text=notification.body_text,
         subject=notification.subject,
     )
 
+    results = [
+        _process_intimacao(intimacao, notification=notification, options=options)
+        for intimacao in intimacoes
+    ]
+
+    if not options.dry_run:
+        processed_messages.add(notification.message_id)
+        _save_processed_messages(options.state_path, processed_messages)
+        if options.mark_read and has_gmail_modify_access(options.token_path):
+            fetcher.mark_as_read(notification.message_id)
+
+    return results
+
+
+def _process_intimacao(
+    intimacao: ParsedIntimacao,
+    *,
+    notification: JudicialNotificationEmail,
+    options: JuridicoPipelineOptions,
+) -> ProcessedIntimacao:
     # 2. Entrar no processo: teor oficial (Domicílio Judicial) + andamentos (DataJud)
     communications, comunica_error = _fetch_communications_if_configured(
         intimacao,
@@ -447,12 +474,6 @@ def _process_notification(
         options=options,
     )
 
-    processed_messages.add(notification.message_id)
-    _save_processed_messages(options.state_path, processed_messages)
-
-    if options.mark_read and has_gmail_modify_access(options.token_path):
-        fetcher.mark_as_read(notification.message_id)
-
     lookup_errors = "; ".join(error for error in (comunica_error, datajud_error) if error)
     return ProcessedIntimacao(
         status="success",
@@ -517,17 +538,17 @@ def process_new_intimacoes(
             continue
 
         try:
-            result = _process_notification(
-                notification,
-                options=options,
-                processed_messages=processed_messages,
-                fetcher=fetcher,
+            results.extend(
+                _process_notification(
+                    notification,
+                    options=options,
+                    processed_messages=processed_messages,
+                    fetcher=fetcher,
+                ),
             )
         except IntimacaoParseError as exc:
-            result = _needs_review_result(notification, reason=str(exc))
+            results.append(_needs_review_result(notification, reason=str(exc)))
         except GmailClientError as exc:
-            result = _error_result(notification, error=str(exc))
-
-        results.append(result)
+            results.append(_error_result(notification, error=str(exc)))
 
     return results

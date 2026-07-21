@@ -370,6 +370,42 @@ class TestProcessNewIntimacoes:
 
         assert sync_calls == []
 
+    def test_should_process_each_process_of_a_recorte_email(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        """Recorte com 2 processos gera 2 triagens, cada uma com seu prazo."""
+        body = (
+            "Recorte Digital OAB/SP.\n\n"
+            "Processo 1013709-36.2020.8.26.0309 - Apelação Cível - Despacho: "
+            "apresente contrarrazões. Prazo: dez dias.\n\n"
+            "Processo 1000817-79.2026.5.02.0511 - Ação Trabalhista - Despacho: "
+            "intimem-se as partes quanto ao laudo pericial. Prazo: 15 dias para "
+            "manifestação.\n"
+        )
+        fetcher = FakeFetcher([_notification(body=body, subject="Fwd: Recorte Digital OAB/SP")])
+        registration = MondayRegistrationResult(
+            item_id="777",
+            board_id="123",
+            item_url="https://empresa.monday.com/boards/123/pulses/777",
+        )
+        register_calls = _patch_pipeline(monkeypatch, fetcher, registration=registration)
+
+        results = process_new_intimacoes(options)
+
+        assert len(results) == 2
+        by_process = {item.process_number: item for item in results}
+        assert by_process["1013709-36.2020.8.26.0309"].due_date is not None
+        assert by_process["1013709-36.2020.8.26.0309"].due_date.isoformat() == "2026-07-31"
+        assert by_process["1000817-79.2026.5.02.0511"].due_date is not None
+        assert by_process["1000817-79.2026.5.02.0511"].due_date.isoformat() == "2026-08-07"
+        assert len(register_calls) == 2
+        # e-mail marcado como lido uma única vez, estado com um id só
+        assert fetcher.marked_read == ["msg-001"]
+        state = json.loads(options.state_path.read_text(encoding="utf-8"))
+        assert state["message_ids"] == ["msg-001"]
+
     def test_should_report_monday_error_without_losing_events(
         self,
         monkeypatch: pytest.MonkeyPatch,

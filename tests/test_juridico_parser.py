@@ -15,7 +15,25 @@ from classificacao_procons.juridico.parser import (
     IntimacaoParseError,
     is_judicial_notification,
     parse_judicial_notification_body,
+    parse_judicial_notifications,
 )
+
+# Estrutura real de recorte de publicações (OAB/Jusbrasil): um e-mail com
+# publicações de processos diferentes, cada um com seu tipo e seu prazo.
+RECORTE_MULTIPROCESSO_TEXT = """
+Recorte Digital OAB/SP. Public. 2. DJSP 21/07/26
+
+Processo 1013709-36.2020.8.26.0309 - Apelação Cível - Marca - || Despacho:
+apresente a apelante contrarrazões ao recurso adesivo, bem como para juntar
+documentos que ilidam as afirmações da demandada. Prazo: dez dias.
+- Magistrado(a) Ricardo Negrão - 2ª Câmara Reservada de Direito Empresarial.
+
+Processo 1000817-79.2026.5.02.0511 - Ação Trabalhista - Rito Sumaríssimo -
+Despacho Vistos... ID 8f6a596: intimem-se as partes quanto ao laudo pericial.
+Prazo: 15 dias para manifestação. Itapevi/SP, 20 de julho de 2026.
+Tabajara Medeiros de Rezende Filho Juiz do Trabalho Titular
+Intimado(s)/Citado(s) - B4A COMERCIO DE COSMETICOS E SERVICOS S.A.
+"""
 
 PJE_INTIMACAO_TEXT = """
 Poder Judiciário do Estado de São Paulo
@@ -266,6 +284,22 @@ class TestParseJudicialNotificationBody:
         result = parse_judicial_notification_body(text=text)
         assert result.has_deadline_trigger is True
 
+    def test_should_extract_deadline_written_in_words(self) -> None:
+        """Publicação real: "prazo: dez dias" (por extenso)."""
+        text = (
+            "Processo 1013709-36.2020.8.26.0309. Apresente contrarrazões, bem como "
+            "junte documentos. Prazo: dez dias."
+        )
+        result = parse_judicial_notification_body(text=text)
+        assert result.deadline_days == 10
+        assert result.deadline_in_business_days is True
+
+    def test_should_extract_deadline_in_words_with_corridos(self) -> None:
+        text = "Processo 1001234-56.2026.8.26.0100. Prazo de quinze dias corridos."
+        result = parse_judicial_notification_body(text=text)
+        assert result.deadline_days == 15
+        assert result.deadline_in_business_days is False
+
     def test_should_not_flag_trigger_on_decorrido_prazo_or_sigiloso(self) -> None:
         for text in (
             "Num. Processo: 4033019-49.2025.8.26.0002. Movimentação: Decorrido prazo -",
@@ -288,6 +322,43 @@ class TestParseJudicialNotificationBody:
     def test_should_raise_when_process_number_is_missing(self) -> None:
         with pytest.raises(IntimacaoParseError, match="Número de processo"):
             parse_judicial_notification_body(text="Intimação sem número nenhum.")
+
+    def test_should_split_recorte_into_one_intimacao_per_process(self) -> None:
+        """Recorte com 2 processos: cada um com seu prazo e sua triagem."""
+        results = parse_judicial_notifications(
+            text=RECORTE_MULTIPROCESSO_TEXT,
+            subject="Fwd: Recorte Digital OAB/SP. Public. 2. DJSP 21/07/26",
+        )
+
+        assert len(results) == 2
+        by_process = {item.process_number: item for item in results}
+
+        tjsp = by_process["1013709-36.2020.8.26.0309"]
+        assert tjsp.deadline_days == 10  # "prazo: dez dias" por extenso
+        assert tjsp.tribunal == "TJSP"
+
+        trt = by_process["1000817-79.2026.5.02.0511"]
+        assert trt.deadline_days == 15  # prazo do laudo pericial, não o do TJSP
+        assert trt.tribunal == "TRT2"
+        assert "laudo pericial" in trt.summary
+
+    def test_should_keep_single_process_email_as_one_intimacao(self) -> None:
+        results = parse_judicial_notifications(text=CITACAO_TEXT)
+        assert len(results) == 1
+        assert results[0].process_number == "0001234-56.2026.5.02.0011"
+
+    def test_should_merge_repeated_segments_of_same_process(self) -> None:
+        """eproc lista o mesmo processo várias vezes (um bloco por evento)."""
+        text = (
+            "Num. Processo: 5007602-83.2026.8.24.0039\n"
+            "Movimentação: Juntada de carta pelo correio - comprovante de entrega -\n\n"
+            "Num. Processo: 5007602-83.2026.8.24.0039\n"
+            "Movimentação: Decorrido prazo -\n"
+        )
+        results = parse_judicial_notifications(text=text)
+        assert len(results) == 1
+        assert results[0].process_number == "5007602-83.2026.8.24.0039"
+        assert results[0].has_deadline_trigger is True
 
     def test_should_truncate_long_summary(self) -> None:
         text = "Processo 1001234-56.2026.8.26.0100. " + "conteúdo " * 200
