@@ -39,7 +39,7 @@ BOARD_COLUMNS = [
 ]
 
 INTIMACAO = ParsedIntimacao(
-    process_number="1001234-56.2026.8.26.0100",
+    process_number="1001234-83.2026.8.26.0100",
     notification_type=NOTIFICATION_TYPE_CITACAO,
     tribunal="TJSP",
     court_unit="1a Vara Civel de Sao Paulo",
@@ -103,7 +103,7 @@ class TestBuildProvidenciaColumnValues:
         )
 
         assert values["col_id"] == "msg-001"
-        assert values["col_proc"] == "1001234-56.2026.8.26.0100"
+        assert values["col_proc"] == "1001234-83.2026.8.26.0100"
         assert values["col_trib"] == "TJSP"
         assert values["col_vara"] == "1a Vara Civel de Sao Paulo"
         assert values["col_tipo"] == {"label": "Citação"}
@@ -124,7 +124,7 @@ class TestBuildProvidenciaColumnValues:
             hearing_datetime=datetime(2026, 8, 5, 14, 30),
         )
         intimacao = ParsedIntimacao(
-            process_number="1001234-56.2026.8.26.0100",
+            process_number="1001234-83.2026.8.26.0100",
             notification_type=NOTIFICATION_TYPE_AUDIENCIA,
         )
 
@@ -179,7 +179,7 @@ class TestBuildProvidenciaColumnValues:
 
     def test_should_skip_empty_fields(self) -> None:
         intimacao = ParsedIntimacao(
-            process_number="1001234-56.2026.8.26.0100",
+            process_number="1001234-83.2026.8.26.0100",
             notification_type=NOTIFICATION_TYPE_CITACAO,
         )
         values = build_providencia_column_values(
@@ -282,10 +282,10 @@ class TestFindExistingItemIdByName:
                 {
                     "items_page": {
                         "items": [
-                            {"id": "12", "name": "1001234-56.2026.8.26.0100 — Outra coisa"},
+                            {"id": "12", "name": "1001234-83.2026.8.26.0100 — Outra coisa"},
                             {
                                 "id": "34",
-                                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
                             },
                         ],
                     },
@@ -296,7 +296,7 @@ class TestFindExistingItemIdByName:
             found = juridico_monday._find_existing_item_id_by_name(
                 api_token="token-teste",
                 board_id="123",
-                item_name="1001234-56.2026.8.26.0100 — Apresentar contestação",
+                item_name="1001234-83.2026.8.26.0100 — Apresentar contestação",
             )
         assert found == "34"
 
@@ -306,7 +306,7 @@ class TestFindExistingItemIdByName:
                 {
                     "items_page": {
                         "items": [
-                            {"id": "12", "name": "1001234-56.2026.8.26.0100 — Analisar recurso"},
+                            {"id": "12", "name": "1001234-83.2026.8.26.0100 — Analisar recurso"},
                         ],
                     },
                 },
@@ -316,7 +316,7 @@ class TestFindExistingItemIdByName:
             found = juridico_monday._find_existing_item_id_by_name(
                 api_token="token-teste",
                 board_id="123",
-                item_name="1001234-56.2026.8.26.0100 — Apresentar contestação",
+                item_name="1001234-83.2026.8.26.0100 — Apresentar contestação",
             )
         assert found is None
 
@@ -367,7 +367,7 @@ class TestRegisterProvidencia:
         assert result.skipped_duplicate is False
         assert result.item_url == "https://empresa.monday.com/boards/123/pulses/777"
         assert create_item.call_args.kwargs["item_name"] == (
-            "1001234-56.2026.8.26.0100 — Apresentar contestação"
+            "1001234-83.2026.8.26.0100 — Apresentar contestação"
         )
         applied = apply_values.call_args.kwargs["column_values"]
         # prazo fatal real 07/08 lançado com 2 dias úteis de segurança
@@ -400,7 +400,7 @@ class TestRegisterProvidencia:
         existing = [
             {
                 "id": "999",
-                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
                 "group_title": "Prazos Processos",
             },
         ]
@@ -430,7 +430,7 @@ class TestRegisterProvidencia:
         assert result.skipped_duplicate is True
         assert result.item_id == "999"
         create_item.assert_not_called()
-        assert search_items.call_args.kwargs["name_contains"] == "1001234-56.2026.8.26.0100"
+        assert search_items.call_args.kwargs["name_contains"] == "1001234-83.2026.8.26.0100"
         note = create_update.call_args.kwargs["body"]
         assert "msg-outro-email" in note
         assert "Apresentar contestação" in note
@@ -440,7 +440,7 @@ class TestRegisterProvidencia:
         existing = [
             {
                 "id": "1000",
-                "name": "1001234-56.2026.8.26.0100 — Analisar sentença e avaliar recurso",
+                "name": "1001234-83.2026.8.26.0100 — Analisar sentença e avaliar recurso",
             },
         ]
         with (
@@ -470,7 +470,7 @@ class TestRegisterProvidencia:
     def test_should_create_item_when_existing_providencia_is_earlier_stage(self) -> None:
         """Sentença nova cria item mesmo com prazo de contestação antigo no board."""
         existing = [
-            {"id": "555", "name": "1001234-56.2026.8.26.0100 — Apresentar contestação"},
+            {"id": "555", "name": "1001234-83.2026.8.26.0100 — Apresentar contestação"},
         ]
         providencia = Providencia(
             action_type=ACTION_ANALISAR_RECURSO,
@@ -513,7 +513,7 @@ class TestRegisterProvidencia:
         existing = [
             {
                 "id": "999",
-                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
                 "group_title": done_group,
             },
         ]
@@ -547,12 +547,12 @@ class TestRegisterProvidencia:
         existing = [
             {
                 "id": "999",
-                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
                 "group_title": "Prazos cumpridos",
             },
             {
                 "id": "1000",
-                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
                 "group_title": "Prazos Processos",
             },
         ]
@@ -638,7 +638,7 @@ class TestRegisterProvidencia:
 
     def test_should_ignore_items_of_other_processes_or_unknown_names(self) -> None:
         existing = [
-            {"id": "1", "name": "9999999-99.2026.8.26.0999 — Apresentar contestação"},
+            {"id": "1", "name": "9999999-44.2026.8.26.0999 — Apresentar contestação"},
             {"id": "2", "name": "Item manual sem padrão"},
         ]
         with (
@@ -703,7 +703,7 @@ class TestRegisterAudiencia:
         assert result.item_id == "888"
         assert load_context.call_args.kwargs["board_name"] == "audiencias"
         assert create_item.call_args.kwargs["item_name"] == (
-            "1001234-56.2026.8.26.0100 — Audiência 05/08/2026 14:30"
+            "1001234-83.2026.8.26.0100 — Audiência 05/08/2026 14:30"
         )
         applied = apply_values.call_args.kwargs["column_values"]
         assert applied["col_aud"] == {"date": "2026-08-05", "time": "17:30:00"}
@@ -739,7 +739,7 @@ class TestRegisterAudiencia:
         assert result is not None
         applied = apply_values.call_args.kwargs["column_values"]
         assert applied["col_data"] == {"date": "2026-08-05", "time": "17:30:00"}
-        assert applied["col_num"] == {"text": "1001234-56.2026.8.26.0100"}
+        assert applied["col_num"] == {"text": "1001234-83.2026.8.26.0100"}
         assert "col_rel" not in applied  # board_relation não aceita texto
         assert "col_link" not in applied  # link fica para preenchimento manual
         assert "col_orient" not in applied
@@ -757,7 +757,7 @@ class TestRegisterAudiencia:
         existing = [
             {
                 "id": "891",
-                "name": "1001234-56.2026.8.26.0100 — Audiência 05/08/2026 14:30",
+                "name": "1001234-83.2026.8.26.0100 — Audiência 05/08/2026 14:30",
                 "group_title": "Audiências (Procons e Processos)",
             },
         ]

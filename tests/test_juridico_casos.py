@@ -56,7 +56,7 @@ KPI_BOARD = {
 }
 
 INTIMACAO_CITACAO = ParsedIntimacao(
-    process_number="1001234-56.2026.8.26.0100",
+    process_number="1001234-83.2026.8.26.0100",
     notification_type=NOTIFICATION_TYPE_CITACAO,
     tribunal="TJSP",
     summary="Citação.",
@@ -68,7 +68,7 @@ class TestIsTrabalhista:
         assert is_trabalhista("1000817-79.2026.5.02.0511") is True
 
     def test_should_return_false_for_common_justice(self) -> None:
-        assert is_trabalhista("1001234-56.2026.8.26.0100") is False
+        assert is_trabalhista("1001234-83.2026.8.26.0100") is False
 
     def test_should_return_false_for_malformed_number(self) -> None:
         assert is_trabalhista("123") is False
@@ -85,7 +85,7 @@ class TestFindCaseItem:
                 return_value={"id": "901", "name": "Fulana de Tal"},
             ) as search,
         ):
-            case = find_case_item("1001234-56.2026.8.26.0100", api_token="token")
+            case = find_case_item("1001234-83.2026.8.26.0100", api_token="token")
 
         assert case is not None
         assert case.item_id == "901"
@@ -99,11 +99,11 @@ class TestFindCaseItem:
             patch.object(casos, "_board_columns_with_settings", return_value=PROCESSOS_BOARD),
             patch.object(casos, "_search_case_in_board", return_value=None),
         ):
-            assert find_case_item("1001234-56.2026.8.26.0100", api_token="token") is None
+            assert find_case_item("1001234-83.2026.8.26.0100", api_token="token") is None
 
     def test_should_return_none_without_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("MONDAY_API_TOKEN", raising=False)
-        assert find_case_item("1001234-56.2026.8.26.0100") is None
+        assert find_case_item("1001234-83.2026.8.26.0100") is None
 
 
 class TestCreateCaseForCitacao:
@@ -123,7 +123,7 @@ class TestCreateCaseForCitacao:
         # número CNJ escrito na coluna "Número" (long_text)
         variables = gql.call_args.kwargs["variables"]
         assert "n_mero" in variables["columnValues"]
-        assert "1001234-56.2026.8.26.0100" in variables["columnValues"]
+        assert "1001234-83.2026.8.26.0100" in variables["columnValues"]
 
     def test_should_not_create_case_for_trabalhista(self) -> None:
         intimacao = ParsedIntimacao(
@@ -219,7 +219,7 @@ class TestUpdateKpiForStage:
             patch.object(casos, "_graphql_request") as gql,
         ):
             applied = update_kpi_for_stage(
-                "1001234-56.2026.8.26.0100",
+                "1001234-83.2026.8.26.0100",
                 api_token="token",
                 stage=STAGE_ACORDO,
                 decision_date=date(2026, 6, 20),
@@ -240,7 +240,7 @@ class TestUpdateKpiForStage:
             patch.object(casos, "_graphql_request"),
         ):
             applied = update_kpi_for_stage(
-                "1001234-56.2026.8.26.0100",
+                "1001234-83.2026.8.26.0100",
                 api_token="token",
                 stage=STAGE_ENCERRAMENTO,
                 decision_date=None,
@@ -256,7 +256,7 @@ class TestUpdateKpiForStage:
             patch.object(casos, "_graphql_request") as gql,
         ):
             applied = update_kpi_for_stage(
-                "1001234-56.2026.8.26.0100",
+                "1001234-83.2026.8.26.0100",
                 api_token="token",
                 stage=STAGE_ACORDO,
                 decision_date=None,
@@ -277,7 +277,7 @@ class TestSyncCaseBoards:
     def test_should_link_annotate_and_update_stage(self) -> None:
         case = CaseRef(board_id="555", item_id="901", item_name="Fulana", source="judicial")
         intimacao = ParsedIntimacao(
-            process_number="1001234-56.2026.8.26.0100",
+            process_number="1001234-83.2026.8.26.0100",
             notification_type=NOTIFICATION_TYPE_INTIMACAO,
         )
         with (
@@ -341,7 +341,7 @@ class TestSyncCaseBoards:
 
     def test_should_report_missing_case_without_creating_for_intimacao(self) -> None:
         intimacao = ParsedIntimacao(
-            process_number="1001234-56.2026.8.26.0100",
+            process_number="1001234-83.2026.8.26.0100",
             notification_type=NOTIFICATION_TYPE_INTIMACAO,
         )
         with (

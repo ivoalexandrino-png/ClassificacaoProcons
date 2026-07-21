@@ -39,7 +39,7 @@ PJE_INTIMACAO_TEXT = """
 Poder Judiciário do Estado de São Paulo
 1ª Vara Cível do Foro Central da Comarca de São Paulo
 
-Processo nº 1001234-56.2026.8.26.0100
+Processo nº 1001234-83.2026.8.26.0100
 Classe: Procedimento Comum Cível
 
 Fica a parte ré INTIMADA da decisão proferida nos autos, devendo apresentar
@@ -48,14 +48,14 @@ manifestação no prazo de 15 (quinze) dias úteis.
 
 CITACAO_TEXT = """
 JUSTIÇA DO TRABALHO — 2ª Vara do Trabalho de São Paulo
-Processo 0001234-56.2026.5.02.0011
+Processo 0001234-94.2026.5.02.0011
 
 CITAÇÃO da empresa ré para apresentar defesa no prazo de 15 dias.
 """
 
 AUDIENCIA_HTML = """
 <html><body>
-<p>Processo nº 1001234-56.2026.8.26.0100</p>
+<p>Processo nº 1001234-83.2026.8.26.0100</p>
 <p>Audiência de conciliação designada para o dia 05/08/2026 às 14:30,
 na 3ª Vara Cível de São Paulo.</p>
 </body></html>
@@ -98,7 +98,7 @@ class TestIsJudicialNotification:
             "---------- Forwarded message ----------\n"
             "De: PJe TJSP <naoresponda@tjsp.jus.br>\n"
             "Assunto: Expediente\n\n"
-            "Processo 1001234-56.2026.8.26.0100."
+            "Processo 1001234-83.2026.8.26.0100."
         )
         assert is_judicial_notification(
             subject="Olha isso aqui",
@@ -114,7 +114,7 @@ class TestIsJudicialNotification:
         assert is_judicial_notification(
             subject="Segue para providências",
             sender="Ivo <adv.ialexandrino@gmail.com>",
-            body="Processo 1001234-56.2026.8.26.0100 — prazo de 15 dias na 1ª Vara Cível.",
+            body="Processo 1001234-83.2026.8.26.0100 — prazo de 15 dias na 1ª Vara Cível.",
         )
 
     def test_should_match_dje_official_sender(self) -> None:
@@ -134,7 +134,7 @@ class TestIsJudicialNotification:
         assert is_judicial_notification(
             subject="Segue para providências",
             sender="Advogado <advogado.pessoal@gmail.com>",
-            body="Processo 1001234-56.2026.8.26.0100 — prazo de 15 dias na 1ª Vara Cível.",
+            body="Processo 1001234-83.2026.8.26.0100 — prazo de 15 dias na 1ª Vara Cível.",
         )
 
     def test_should_not_match_forwarder_email_without_judicial_content(
@@ -152,7 +152,7 @@ class TestIsJudicialNotification:
         assert is_judicial_notification(
             subject="Encaminhando",
             sender="alguem@example.com",
-            body="Intimação no processo 1001234-56.2026.8.26.0100, prazo de 5 dias.",
+            body="Intimação no processo 1001234-83.2026.8.26.0100, prazo de 5 dias.",
         )
 
     def test_should_not_match_when_sender_and_subject_are_unrelated(self) -> None:
@@ -173,7 +173,7 @@ class TestParseJudicialNotificationBody:
     def test_should_parse_intimacao_with_deadline_in_business_days(self) -> None:
         result = parse_judicial_notification_body(text=PJE_INTIMACAO_TEXT)
 
-        assert result.process_number == "1001234-56.2026.8.26.0100"
+        assert result.process_number == "1001234-83.2026.8.26.0100"
         assert result.notification_type == NOTIFICATION_TYPE_DECISAO
         assert result.tribunal == "TJSP"
         assert result.court_unit is not None
@@ -185,7 +185,7 @@ class TestParseJudicialNotificationBody:
     def test_should_parse_citacao_from_labor_court(self) -> None:
         result = parse_judicial_notification_body(text=CITACAO_TEXT)
 
-        assert result.process_number == "0001234-56.2026.5.02.0011"
+        assert result.process_number == "0001234-94.2026.5.02.0011"
         assert result.notification_type == NOTIFICATION_TYPE_CITACAO
         assert result.tribunal == "TRT2"
         assert result.deadline_days == 15
@@ -198,36 +198,36 @@ class TestParseJudicialNotificationBody:
 
     def test_should_parse_explicit_deadline_date(self) -> None:
         text = (
-            "Processo 1001234-56.2026.8.26.0100. Intimação: prazo fatal em 20/08/2026 "
+            "Processo 1001234-83.2026.8.26.0100. Intimação: prazo fatal em 20/08/2026 "
             "para manifestação."
         )
         result = parse_judicial_notification_body(text=text)
         assert result.deadline_date == date(2026, 8, 20)
 
     def test_should_flag_calendar_days_when_prazo_corrido(self) -> None:
-        text = "Processo 1001234-56.2026.8.26.0100. Prazo de 10 dias corridos."
+        text = "Processo 1001234-83.2026.8.26.0100. Prazo de 10 dias corridos."
         result = parse_judicial_notification_body(text=text)
         assert result.deadline_days == 10
         assert result.deadline_in_business_days is False
 
     def test_should_detect_sentenca(self) -> None:
-        text = "Processo 1001234-56.2026.8.26.0100. Publicada a sentença nos autos."
+        text = "Processo 1001234-83.2026.8.26.0100. Publicada a sentença nos autos."
         result = parse_judicial_notification_body(text=text)
         assert result.notification_type == NOTIFICATION_TYPE_SENTENCA
 
     def test_should_default_to_intimacao_when_type_is_unclear(self) -> None:
-        text = "Processo 1001234-56.2026.8.26.0100. Juntada de petição."
+        text = "Processo 1001234-83.2026.8.26.0100. Juntada de petição."
         result = parse_judicial_notification_body(text=text)
         assert result.notification_type == NOTIFICATION_TYPE_INTIMACAO
 
     def test_should_detect_citacao_with_cite_se(self) -> None:
-        text = "Processo 1001234-56.2026.8.26.0100. Cite-se a parte ré."
+        text = "Processo 1001234-83.2026.8.26.0100. Cite-se a parte ré."
         result = parse_judicial_notification_body(text=text)
         assert result.notification_type == NOTIFICATION_TYPE_CITACAO
 
     def test_should_detect_citacao_when_citado_para_contestar(self) -> None:
         text = (
-            "Processo 1001234-56.2026.8.26.0100. O réu fica citado para "
+            "Processo 1001234-83.2026.8.26.0100. O réu fica citado para "
             "apresentar contestação no prazo legal."
         )
         result = parse_judicial_notification_body(text=text)
@@ -252,7 +252,7 @@ class TestParseJudicialNotificationBody:
         assert result.notification_type == NOTIFICATION_TYPE_DECISAO
 
     def test_should_not_detect_citacao_from_projudi_subject_boilerplate(self) -> None:
-        text = "Processo 1001234-56.2026.8.26.0100. [PROJUDI] Informação de intimação/citação."
+        text = "Processo 1001234-83.2026.8.26.0100. [PROJUDI] Informação de intimação/citação."
         result = parse_judicial_notification_body(text=text)
         assert result.notification_type == NOTIFICATION_TYPE_INTIMACAO
 
@@ -295,7 +295,7 @@ class TestParseJudicialNotificationBody:
         assert result.deadline_in_business_days is True
 
     def test_should_extract_deadline_in_words_with_corridos(self) -> None:
-        text = "Processo 1001234-56.2026.8.26.0100. Prazo de quinze dias corridos."
+        text = "Processo 1001234-83.2026.8.26.0100. Prazo de quinze dias corridos."
         result = parse_judicial_notification_body(text=text)
         assert result.deadline_days == 15
         assert result.deadline_in_business_days is False
@@ -311,9 +311,9 @@ class TestParseJudicialNotificationBody:
     def test_should_use_subject_when_body_lacks_process_number(self) -> None:
         result = parse_judicial_notification_body(
             text="Nova movimentação disponível no sistema.",
-            subject="Push processo 1001234-56.2026.8.26.0100",
+            subject="Push processo 1001234-83.2026.8.26.0100",
         )
-        assert result.process_number == "1001234-56.2026.8.26.0100"
+        assert result.process_number == "1001234-83.2026.8.26.0100"
 
     def test_should_raise_when_body_is_empty(self) -> None:
         with pytest.raises(IntimacaoParseError, match="Corpo do e-mail vazio"):
@@ -345,7 +345,7 @@ class TestParseJudicialNotificationBody:
     def test_should_keep_single_process_email_as_one_intimacao(self) -> None:
         results = parse_judicial_notifications(text=CITACAO_TEXT)
         assert len(results) == 1
-        assert results[0].process_number == "0001234-56.2026.5.02.0011"
+        assert results[0].process_number == "0001234-94.2026.5.02.0011"
 
     def test_should_merge_repeated_segments_of_same_process(self) -> None:
         """eproc lista o mesmo processo várias vezes (um bloco por evento)."""
@@ -361,6 +361,6 @@ class TestParseJudicialNotificationBody:
         assert results[0].has_deadline_trigger is True
 
     def test_should_truncate_long_summary(self) -> None:
-        text = "Processo 1001234-56.2026.8.26.0100. " + "conteúdo " * 200
+        text = "Processo 1001234-83.2026.8.26.0100. " + "conteúdo " * 200
         result = parse_judicial_notification_body(text=text)
         assert len(result.summary) <= 600

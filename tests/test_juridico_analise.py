@@ -21,7 +21,7 @@ from classificacao_procons.juridico.models import (
 )
 
 INTIMACAO = ParsedIntimacao(
-    process_number="1001234-56.2026.8.26.0100",
+    process_number="1001234-83.2026.8.26.0100",
     notification_type=NOTIFICATION_TYPE_CITACAO,
     tribunal="TJSP",
     court_unit="4a Vara Civel de Sao Paulo",
@@ -61,7 +61,7 @@ class TestBuildHeuristicAnalysis:
         )
 
         assert analysis.source == ANALYSIS_SOURCE_HEURISTIC
-        assert "1001234-56.2026.8.26.0100" in analysis.text
+        assert "1001234-83.2026.8.26.0100" in analysis.text
         assert "Apresentar contestação" in analysis.text
         assert "2026-08-07" in analysis.text
         assert "05/08/2026 14:30" in analysis.text
@@ -118,7 +118,7 @@ class TestAnalyzeCase:
         assert analysis.source == ANALYSIS_SOURCE_GEMINI
         assert "citação recebida" in analysis.text
         prompt = gemini_request.call_args.kwargs["parts"][0]["text"]
-        assert "1001234-56.2026.8.26.0100" in prompt
+        assert "1001234-83.2026.8.26.0100" in prompt
         assert "CITAÇÃO da parte ré" in prompt
         assert "Expedição de citação" in prompt
 

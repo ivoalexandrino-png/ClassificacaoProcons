@@ -14,14 +14,14 @@ from classificacao_procons.juridico.datajud import (
     get_api_key_from_env,
 )
 
-PROCESS_NUMBER = "1001234-56.2026.8.26.0100"
+PROCESS_NUMBER = "1001234-83.2026.8.26.0100"
 
 
 def _datajud_response(movements: list[dict]) -> dict:
     return {
         "hits": {
             "hits": [
-                {"_source": {"numeroProcesso": "10012345620268260100", "movimentos": movements}},
+                {"_source": {"numeroProcesso": "10012348320268260100", "movimentos": movements}},
             ],
         },
     }
@@ -90,12 +90,12 @@ class TestFetchCaseMovements:
 
     def test_should_raise_when_tribunal_is_not_supported(self) -> None:
         with pytest.raises(DataJudError, match="Tribunal não suportado"):
-            fetch_case_movements("1001234-56.2026.1.00.0000", api_key="chave")
+            fetch_case_movements("1001234-03.2026.1.00.0000", api_key="chave")
 
     def test_should_use_explicit_alias_when_provided(self) -> None:
         payload = _datajud_response([])
         with patch("urllib.request.urlopen", _mock_urlopen(payload)) as urlopen:
-            fetch_case_movements("1001234-56.2026.1.00.0000", api_key="chave", alias="stf")
+            fetch_case_movements("1001234-03.2026.1.00.0000", api_key="chave", alias="stf")
         request = urlopen.call_args.args[0]
         assert "api_publica_stf" in request.full_url
 

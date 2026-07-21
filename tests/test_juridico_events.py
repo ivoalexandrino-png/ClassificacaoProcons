@@ -17,7 +17,7 @@ from classificacao_procons.juridico.events import (
 def _event(event_type: str = EVENT_ELABORAR_PECA) -> AgentEvent:
     return AgentEvent(
         event_type=event_type,
-        process_number="1001234-56.2026.8.26.0100",
+        process_number="1001234-83.2026.8.26.0100",
         action_type="contestar",
         due_date="2026-08-07",
         payload={"summary": "citação recebida"},
@@ -32,7 +32,7 @@ class TestEmitEvent:
         assert stamped.created_at != ""
         stored = list_events(events_path=events_path)
         assert len(stored) == 1
-        assert stored[0].process_number == "1001234-56.2026.8.26.0100"
+        assert stored[0].process_number == "1001234-83.2026.8.26.0100"
         assert stored[0].payload == {"summary": "citação recebida"}
 
     def test_should_append_multiple_events_in_order(self, tmp_path: Path) -> None:

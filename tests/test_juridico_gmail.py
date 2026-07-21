@@ -10,7 +10,7 @@ def _build_gmail_message(
     *,
     subject: str = "Intimação eletrônica",
     sender: str = "naoresponda@tjsp.jus.br",
-    body: str = "Processo 1001234-56.2026.8.26.0100. Prazo de 15 dias úteis.",
+    body: str = "Processo 1001234-83.2026.8.26.0100. Prazo de 15 dias úteis.",
 ) -> dict:
     encoded = base64.urlsafe_b64encode(body.encode()).decode()
     return {
@@ -40,13 +40,13 @@ class TestGmailJuridicoFetcher:
         assert result is not None
         assert result.message_id == "msg-001"
         assert result.subject == "Intimação eletrônica"
-        assert "1001234-56.2026.8.26.0100" in result.body_text
+        assert "1001234-83.2026.8.26.0100" in result.body_text
 
     def test_should_fetch_forwarded_notification_from_personal_email(self) -> None:
         body = (
             "---------- Forwarded message ----------\n"
             "De: PJe TJSP <naoresponda@tjsp.jus.br>\n\n"
-            "Processo 1001234-56.2026.8.26.0100. Prazo de 15 dias úteis."
+            "Processo 1001234-83.2026.8.26.0100. Prazo de 15 dias úteis."
         )
         service = MagicMock()
         messages = service.users.return_value.messages.return_value
@@ -60,7 +60,7 @@ class TestGmailJuridicoFetcher:
         result = fetcher.fetch_notification("msg-fwd")
 
         assert result is not None
-        assert "1001234-56.2026.8.26.0100" in result.body_text
+        assert "1001234-83.2026.8.26.0100" in result.body_text
 
     def test_should_return_none_when_email_is_not_judicial(self) -> None:
         service = MagicMock()

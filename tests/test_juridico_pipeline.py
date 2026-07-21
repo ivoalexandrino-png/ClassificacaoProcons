@@ -27,7 +27,7 @@ from classificacao_procons.juridico.pipeline import (
 from classificacao_procons.monday.client import MondayClientError, MondayRegistrationResult
 
 CITACAO_BODY = (
-    "Processo 1001234-56.2026.8.26.0100\n"
+    "Processo 1001234-83.2026.8.26.0100\n"
     "CITAÇÃO da empresa ré para apresentar contestação no prazo de 15 (quinze) dias úteis."
 )
 
@@ -133,7 +133,7 @@ class TestProcessNewIntimacoes:
         assert len(results) == 1
         result = results[0]
         assert result.status == "success"
-        assert result.process_number == "1001234-56.2026.8.26.0100"
+        assert result.process_number == "1001234-83.2026.8.26.0100"
         assert result.action_type == "contestar"
         assert result.requires_action is True
         assert result.due_date is not None
@@ -461,7 +461,7 @@ class TestProcessNewIntimacoes:
             [
                 _notification(
                     body=(
-                        "Processo 1001234-56.2026.8.26.0100. "
+                        "Processo 1001234-83.2026.8.26.0100. "
                         "Processo arquivado definitivamente."
                     ),
                 ),
@@ -488,7 +488,7 @@ class TestProcessNewIntimacoes:
             body=(
                 "---------- Forwarded message ----------\n"
                 "De: PJe TJSP <naoresponda@tjsp.jus.br>\n\n"
-                "Nova comunicação no processo 1001234-56.2026.8.26.0100."
+                "Nova comunicação no processo 1001234-83.2026.8.26.0100."
             ),
             subject="Fwd: Intimação eletrônica",
         )
