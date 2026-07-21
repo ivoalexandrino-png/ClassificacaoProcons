@@ -103,9 +103,53 @@ class TestFetchCaseMovements:
         """Timeout no meio da leitura (TimeoutError) não pode derrubar o batch."""
         with (
             patch("urllib.request.urlopen", MagicMock(side_effect=TimeoutError("read timed out"))),
+            patch("classificacao_procons.juridico.datajud.time.sleep"),
             pytest.raises(DataJudError, match="DataJud indisponível"),
         ):
             fetch_case_movements(PROCESS_NUMBER, api_key="chave")
+
+    def test_should_retry_on_http_429_and_succeed(self) -> None:
+        """Rate limit do DataJud (429) é retentado com backoff."""
+        payload = _datajud_response([{"nome": "Conclusão"}])
+        response = MagicMock()
+        response.read.return_value = json.dumps(payload).encode("utf-8")
+        response.__enter__ = MagicMock(return_value=response)
+        response.__exit__ = MagicMock(return_value=False)
+        error_429 = urllib.error.HTTPError(
+            url="https://api-publica.datajud.cnj.jus.br",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=io.BytesIO(b"rejected"),
+        )
+        urlopen = MagicMock(side_effect=[error_429, response])
+        with (
+            patch("urllib.request.urlopen", urlopen),
+            patch("classificacao_procons.juridico.datajud.time.sleep") as sleep,
+        ):
+            movements = fetch_case_movements(PROCESS_NUMBER, api_key="chave")
+
+        assert [item.movement_name for item in movements] == ["Conclusão"]
+        assert urlopen.call_count == 2
+        sleep.assert_called_once()
+
+    def test_should_not_retry_on_http_401(self) -> None:
+        error_401 = urllib.error.HTTPError(
+            url="https://api-publica.datajud.cnj.jus.br",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=io.BytesIO(b"unauthorized"),
+        )
+        urlopen = MagicMock(side_effect=error_401)
+        with (
+            patch("urllib.request.urlopen", urlopen),
+            patch("classificacao_procons.juridico.datajud.time.sleep") as sleep,
+            pytest.raises(DataJudError, match="HTTP 401"),
+        ):
+            fetch_case_movements(PROCESS_NUMBER, api_key="chave")
+        assert urlopen.call_count == 1
+        sleep.assert_not_called()
 
     def test_should_raise_on_http_error(self) -> None:
         error = urllib.error.HTTPError(

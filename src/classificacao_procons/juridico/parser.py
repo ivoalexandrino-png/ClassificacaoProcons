@@ -85,13 +85,32 @@ _COURT_UNIT_PATTERN = re.compile(
 )
 
 _NOTIFICATION_TYPE_KEYWORDS: Final[tuple[tuple[str, str], ...]] = (
-    ("citacao", NOTIFICATION_TYPE_CITACAO),
-    ("citado", NOTIFICATION_TYPE_CITACAO),
     ("audiencia", NOTIFICATION_TYPE_AUDIENCIA),
     ("sentenca", NOTIFICATION_TYPE_SENTENCA),
     ("decisao", NOTIFICATION_TYPE_DECISAO),
     ("despacho", NOTIFICATION_TYPE_DECISAO),
 )
+
+# Citação exige contexto explícito: "citado" solto aparece em falsos positivos
+# como "recurso acima citado" e listas "intimado(s)/citado(s)"; o par
+# "intimação/citação" é boilerplate de assunto do PROJUDI.
+_CITACAO_PAIR_BOILERPLATE: Final[tuple[str, ...]] = (
+    "intimacao/citacao",
+    "citacao/intimacao",
+)
+
+_CITACAO_CONTEXT_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"\bcite\s*-?\s*se\b"),
+    re.compile(r"\bcitacao\b"),
+    re.compile(r"\bcitad[oa]s?\s*(?:\([^)]*\))?\s*para\b"),
+)
+
+
+def _mentions_citacao(normalized_text: str) -> bool:
+    cleaned = normalized_text
+    for boilerplate in _CITACAO_PAIR_BOILERPLATE:
+        cleaned = cleaned.replace(boilerplate, " ")
+    return any(pattern.search(cleaned) for pattern in _CITACAO_CONTEXT_PATTERNS)
 
 
 class IntimacaoParseError(ValueError):
@@ -158,6 +177,8 @@ def is_judicial_notification(
 
 
 def _detect_notification_type(normalized_text: str) -> str:
+    if _mentions_citacao(normalized_text):
+        return NOTIFICATION_TYPE_CITACAO
     for keyword, notification_type in _NOTIFICATION_TYPE_KEYWORDS:
         if keyword in normalized_text:
             return notification_type

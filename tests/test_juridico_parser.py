@@ -202,6 +202,42 @@ class TestParseJudicialNotificationBody:
         result = parse_judicial_notification_body(text=text)
         assert result.notification_type == NOTIFICATION_TYPE_INTIMACAO
 
+    def test_should_detect_citacao_with_cite_se(self) -> None:
+        text = "Processo 1001234-56.2026.8.26.0100. Cite-se a parte ré."
+        result = parse_judicial_notification_body(text=text)
+        assert result.notification_type == NOTIFICATION_TYPE_CITACAO
+
+    def test_should_detect_citacao_when_citado_para_contestar(self) -> None:
+        text = (
+            "Processo 1001234-56.2026.8.26.0100. O réu fica citado para "
+            "apresentar contestação no prazo legal."
+        )
+        result = parse_judicial_notification_body(text=text)
+        assert result.notification_type == NOTIFICATION_TYPE_CITACAO
+
+    def test_should_not_detect_citacao_from_recurso_acima_citado(self) -> None:
+        """Falso positivo real (PROJUDI): "recurso acima citado" não é citação."""
+        text = (
+            "Processo 0026891-32.2026.8.16.0000. Uma intimação no recurso acima "
+            "citado, referente à movimentação Juntada de Acórdão, foi expedida."
+        )
+        result = parse_judicial_notification_body(text=text)
+        assert result.notification_type == NOTIFICATION_TYPE_INTIMACAO
+
+    def test_should_not_detect_citacao_from_intimado_citado_party_list(self) -> None:
+        """Falso positivo real (Recorte OAB): lista "Intimado(s)/Citado(s) - …"."""
+        text = (
+            "Processo 1013709-36.2020.8.26.0309. Despacho nos autos. "
+            "Intimado(s)/Citado(s) - B4A Comercio de Cosmeticos e Servicos S.A."
+        )
+        result = parse_judicial_notification_body(text=text)
+        assert result.notification_type == NOTIFICATION_TYPE_DECISAO
+
+    def test_should_not_detect_citacao_from_projudi_subject_boilerplate(self) -> None:
+        text = "Processo 1001234-56.2026.8.26.0100. [PROJUDI] Informação de intimação/citação."
+        result = parse_judicial_notification_body(text=text)
+        assert result.notification_type == NOTIFICATION_TYPE_INTIMACAO
+
     def test_should_use_subject_when_body_lacks_process_number(self) -> None:
         result = parse_judicial_notification_body(
             text="Nova movimentação disponível no sistema.",
