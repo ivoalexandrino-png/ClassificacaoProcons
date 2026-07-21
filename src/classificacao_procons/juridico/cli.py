@@ -143,6 +143,7 @@ def _run_portal(args: argparse.Namespace) -> int:
         PortalRequiresInteraction,
         fetch_process_content,
     )
+    from classificacao_procons.juridico.portais.token_email import gmail_token_provider
 
     acronym = args.tribunal or tribunal_acronym(args.numero)
     if not acronym:
@@ -165,11 +166,21 @@ def _run_portal(args: argparse.Namespace) -> int:
         print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
         return 1
 
+    token_provider = None
+    if args.token_email:
+        token_provider = lambda login: gmail_token_provider(  # noqa: E731
+            login,
+            token_path=args.token,
+        )
+    elif args.token_code:
+        token_provider = lambda _login: args.token_code  # noqa: E731
+
     try:
         content = fetch_process_content(
             args.numero,
             credential=credential,
             headless=not args.headed,
+            token_provider=token_provider,
         )
     except PortalRequiresInteraction as exc:
         print(json.dumps({"needs_interaction": str(exc)}, ensure_ascii=False), file=sys.stderr)
@@ -308,6 +319,15 @@ def main(argv: list[str] | None = None) -> int:
         "--headed",
         action="store_true",
         help="Abre o navegador com interface (para resolver captcha/2FA manualmente).",
+    )
+    portal_parser.add_argument(
+        "--token-email",
+        action="store_true",
+        help="Lê o código 2FA do e-SAJ na caixa Gmail autorizada (se o código chegar lá).",
+    )
+    portal_parser.add_argument(
+        "--token-code",
+        help="Informa manualmente o código 2FA enviado ao e-mail cadastrado.",
     )
 
     boards_parser = subparsers.add_parser(

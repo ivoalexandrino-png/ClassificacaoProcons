@@ -144,16 +144,28 @@ juridico portal --numero "…" --tribunal TJSP --headed   # navegador visível
 ```
 
 Cobertura atual: **e-SAJ** (TJSP, TJCE e outros TJs SAJ), com login por
-CPF/senha. Limitações reais, tratadas explicitamente (o comando sai com código
-2 e mensagem `needs_interaction`, e o fluxo automático continua no DataJud):
+CPF/senha. A sessão autenticada é persistida em `credentials/esaj-session.json`
+(cookies), então o 2FA só é pedido de vez em quando, não a cada consulta.
 
-- **Captcha / 2FA / token**: e-SAJ não pede captcha no login por senha, mas a
-  consulta pública de 2º grau usa reCAPTCHA e alguns tribunais exigem 2FA — aí
-  é preciso rodar com `--headed` e resolver manualmente.
+**2FA (código por e-mail):** o e-SAJ envia um código ao e-mail cadastrado.
+Três formas de fornecê-lo:
+
+- `--token-code 123456`: cola o código manualmente (login pontual);
+- `--token-email`: lê o código na caixa Gmail autorizada — **só funciona se o
+  código chegar em `ivo.alexandrino@b4a.com.br`** (a caixa que o agente lê). Se
+  o e-SAJ manda para o e-mail pessoal, crie uma regra encaminhando as mensagens
+  de código do TJSP para a caixa corporativa;
+- `--headed`: navegador visível para resolver na tela (captcha/2FA/certificado).
+
+Limitações reais, tratadas explicitamente (o comando sai com código 2 e
+mensagem `needs_interaction`, e o fluxo automático continua no DataJud):
+
 - **Segredo de justiça**: mesmo autenticado, o portal só mostra o processo se
   o CPF logado for de advogado habilitado nos autos.
-- **Credenciais desatualizadas**: se o portal recusar login/senha, o agente
-  avisa e não insiste (evita bloqueio de conta).
+- **Credenciais desatualizadas / coluna Senha vazia**: se o portal recusar
+  login/senha, o agente avisa e não insiste (evita bloqueio de conta). A senha
+  tem de estar na coluna **Senha** do item do tribunal no quadro Acessos.
+- **Certificado digital A1/A3**: não automatizável por login simples.
 - **PROJUDI/EPROC/sistemas próprios**: ainda não implementados — só e-SAJ.
 
 ## Entrar no processo: teor + andamentos

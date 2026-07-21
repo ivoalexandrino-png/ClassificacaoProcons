@@ -8,7 +8,10 @@ levanta ``PortalRequiresInteraction`` e o fluxo cai para DataJud.
 
 from __future__ import annotations
 
+import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
@@ -19,11 +22,19 @@ from classificacao_procons.juridico.cnj import process_number_digits
 ESAJ_LOGIN_URL = "https://esaj.tjsp.jus.br/sajcas/login"
 ESAJ_CPOPG_URL = "https://esaj.tjsp.jus.br/cpopg/open.do"
 ESAJ_CPOSG_URL = "https://esaj.tjsp.jus.br/cposg/open.do"
+ESAJ_HOME_URL = "https://esaj.tjsp.jus.br/esaj/portal.do?servico=740000"
 _DEFAULT_TIMEOUT_MS = 45000
 _USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 )
+
+# Sessão autenticada persistida (cookies) para o 2FA ser pedido só de vez em
+# quando, não a cada consulta.
+DEFAULT_SESSION_PATH = "credentials/esaj-session.json"
+
+# Provedor do código 2FA: recebe o e-mail/login e devolve o código enviado.
+TokenProvider = Callable[[str], str | None]
 
 
 class PortalError(RuntimeError):
@@ -61,7 +72,44 @@ def _digits_to_unified(digits: str) -> tuple[str, str]:
     return f"{digits[:7]}-{digits[7:9]}.{digits[9:13]}.{digits[13]}.{digits[14:16]}", digits[16:]
 
 
-def _login(page, credential: PortalCredential) -> None:
+def _is_logged_in(page) -> bool:
+    page.goto(ESAJ_HOME_URL, timeout=_DEFAULT_TIMEOUT_MS, wait_until="domcontentloaded")
+    page.wait_for_timeout(1500)
+    body = page.inner_text("body").lower()
+    return "sair" in body or "caixa postal" in body
+
+
+def _submit_token(page, code: str) -> None:
+    """Preenche o código 2FA enviado por e-mail e confirma."""
+    field = (
+        page.query_selector("#token")
+        or page.query_selector("input[name=token]")
+        or page.query_selector("input[type=text]:visible")
+    )
+    if field is None:
+        raise PortalRequiresInteraction("Campo do código 2FA não encontrado no e-SAJ.")
+    field.fill(code)
+    button = page.query_selector("#btnEnviarToken") or page.query_selector("#btnOk")
+    if button:
+        button.click()
+    else:
+        page.keyboard.press("Enter")
+    page.wait_for_timeout(3000)
+
+
+def _requires_token(page) -> bool:
+    content = page.content().lower()
+    if page.query_selector("#btnEnviarToken") or page.query_selector("#btnReceberToken"):
+        return True
+    return "codigo" in content and "email" in content and "token" in content
+
+
+def _login(
+    page,
+    credential: PortalCredential,
+    *,
+    token_provider: TokenProvider | None = None,
+) -> None:
     page.goto(ESAJ_LOGIN_URL, timeout=_DEFAULT_TIMEOUT_MS, wait_until="domcontentloaded")
     page.wait_for_timeout(1500)
     if "recaptcha" in page.content().lower():
@@ -77,8 +125,21 @@ def _login(page, credential: PortalCredential) -> None:
     content = page.content().lower()
     if "senha inv" in content or "usuário ou senha" in content or "usuario ou senha" in content:
         raise PortalError("e-SAJ recusou as credenciais (login/senha).")
-    if "token" in content and "autenticacao" in content:
-        raise PortalRequiresInteraction("e-SAJ exigiu 2FA/token.")
+
+    if _requires_token(page):
+        if token_provider is None:
+            raise PortalRequiresInteraction(
+                "e-SAJ enviou um código 2FA ao e-mail cadastrado; nenhum provedor "
+                "de código configurado. Rode com --headed ou configure o token.",
+            )
+        code = token_provider(credential.login)
+        if not code:
+            raise PortalRequiresInteraction(
+                "Código 2FA do e-SAJ não recebido/localizado no e-mail a tempo.",
+            )
+        _submit_token(page, code)
+        if _requires_token(page):
+            raise PortalRequiresInteraction("Código 2FA do e-SAJ recusado ou expirado.")
 
 
 def _extract_content(page, process_number: str, source: str) -> ProcessContent:
@@ -134,14 +195,29 @@ def fetch_process_content(
     *,
     credential: PortalCredential,
     headless: bool = True,
+    token_provider: TokenProvider | None = None,
+    session_path: str | None = DEFAULT_SESSION_PATH,
 ) -> ProcessContent:
-    """Loga no e-SAJ e retorna a movimentação do processo (1º ou 2º grau)."""
+    """Loga no e-SAJ e retorna a movimentação do processo (1º ou 2º grau).
+
+    Reaproveita a sessão salva em ``session_path`` (cookies) para evitar 2FA a
+    cada consulta; só faz login completo quando a sessão expirou.
+    """
+    storage_state = session_path if session_path and Path(session_path).exists() else None
+
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=headless)
         try:
-            page = browser.new_page(user_agent=_USER_AGENT)
+            context = browser.new_context(user_agent=_USER_AGENT, storage_state=storage_state)
+            page = context.new_page()
             page.set_default_timeout(_DEFAULT_TIMEOUT_MS)
-            _login(page, credential)
+
+            if not (storage_state and _is_logged_in(page)):
+                _login(page, credential, token_provider=token_provider)
+                if session_path:
+                    Path(session_path).parent.mkdir(parents=True, exist_ok=True)
+                    context.storage_state(path=session_path)
+                    os.chmod(session_path, 0o600)
 
             last_error: PortalError | None = None
             for base_url, source in (
