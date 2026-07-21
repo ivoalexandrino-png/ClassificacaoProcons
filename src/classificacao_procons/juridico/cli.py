@@ -132,6 +132,69 @@ def _run_andamentos(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_portal(args: argparse.Namespace) -> int:
+    from classificacao_procons.juridico.acessos import (
+        AcessosError,
+        get_tribunal_credential,
+    )
+    from classificacao_procons.juridico.cnj import tribunal_acronym
+    from classificacao_procons.juridico.portais.esaj import (
+        PortalError,
+        PortalRequiresInteraction,
+        fetch_process_content,
+    )
+
+    acronym = args.tribunal or tribunal_acronym(args.numero)
+    if not acronym:
+        print(json.dumps({"error": "Tribunal não identificado pelo número CNJ."}), file=sys.stderr)
+        return 1
+
+    try:
+        credential = get_tribunal_credential(acronym)
+    except AcessosError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+    if credential is None:
+        print(
+            json.dumps({"error": f"Sem credencial de portal para {acronym} no quadro Acessos."}),
+            file=sys.stderr,
+        )
+        return 1
+    if "SAJ" not in credential.system:
+        message = f"Portal {credential.system} de {acronym} ainda não suportado (só e-SAJ)."
+        print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    try:
+        content = fetch_process_content(
+            args.numero,
+            credential=credential,
+            headless=not args.headed,
+        )
+    except PortalRequiresInteraction as exc:
+        print(json.dumps({"needs_interaction": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 2
+    except PortalError as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    print(
+        json.dumps(
+            {
+                "process_number": content.process_number,
+                "source": content.source,
+                "classe": content.classe,
+                "assunto": content.assunto,
+                "situacao": content.situacao,
+                "movements": content.movements,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    return 0
+
+
 def _run_boards(args: argparse.Namespace) -> int:
     try:
         boards = describe_boards(name_filter=args.filter)
@@ -232,6 +295,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     andamentos_parser.add_argument("--limit", type=int, default=20)
 
+    portal_parser = subparsers.add_parser(
+        "portal",
+        help="Consultar o teor do processo no portal do tribunal (e-SAJ, autenticado)",
+    )
+    portal_parser.add_argument("--numero", required=True, help="Número do processo (CNJ).")
+    portal_parser.add_argument(
+        "--tribunal",
+        help="Sigla do tribunal (ex.: TJSP); inferida do número se omitida.",
+    )
+    portal_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Abre o navegador com interface (para resolver captcha/2FA manualmente).",
+    )
+
     boards_parser = subparsers.add_parser(
         "boards",
         help="Listar boards do Monday com grupos, colunas e mapeamento detectado",
@@ -266,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_comunicacoes(args)
     if args.command == "andamentos":
         return _run_andamentos(args)
+    if args.command == "portal":
+        return _run_portal(args)
     if args.command == "boards":
         return _run_boards(args)
     if args.command == "events":

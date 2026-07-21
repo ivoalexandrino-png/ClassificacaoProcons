@@ -130,6 +130,32 @@ O `--dry-run` também consulta o DataJud/Comunica (somente leitura), então a
 triagem exibida já é a ciente do estágio. Sem `DATAJUD_API_KEY` (ou com
 `--no-datajud`), a reclassificação não acontece — revise a providência sugerida.
 
+## Acesso autenticado aos portais (teor do processo)
+
+Quando o DataJud é genérico demais (só nomes de andamento, sem o teor), o
+agente pode entrar no portal do tribunal e ler a movimentação — inclusive em
+processos com visualização restrita a advogados habilitados (segredo de
+justiça). As credenciais vêm do quadro **Acessos** do Monday (grupo "TJ's"/
+"STF"), resolvidas por `juridico/acessos.py` (senhas nunca são logadas).
+
+```bash
+juridico portal --numero "1013709-36.2020.8.26.0309"   # infere o tribunal
+juridico portal --numero "…" --tribunal TJSP --headed   # navegador visível
+```
+
+Cobertura atual: **e-SAJ** (TJSP, TJCE e outros TJs SAJ), com login por
+CPF/senha. Limitações reais, tratadas explicitamente (o comando sai com código
+2 e mensagem `needs_interaction`, e o fluxo automático continua no DataJud):
+
+- **Captcha / 2FA / token**: e-SAJ não pede captcha no login por senha, mas a
+  consulta pública de 2º grau usa reCAPTCHA e alguns tribunais exigem 2FA — aí
+  é preciso rodar com `--headed` e resolver manualmente.
+- **Segredo de justiça**: mesmo autenticado, o portal só mostra o processo se
+  o CPF logado for de advogado habilitado nos autos.
+- **Credenciais desatualizadas**: se o portal recusar login/senha, o agente
+  avisa e não insiste (evita bloqueio de conta).
+- **PROJUDI/EPROC/sistemas próprios**: ainda não implementados — só e-SAJ.
+
 ## Entrar no processo: teor + andamentos
 
 Antes de cadastrar no Monday, o agente "entra no processo" por duas fontes
@@ -320,6 +346,7 @@ e o CloudFront do CNJ responde 403.
 | `MONDAY_PROCESSOS_BOARD_ID` | — (padrão: por nome) | Id do quadro-mestre Processos Judiciais |
 | `MONDAY_TRABALHISTA_BOARD_ID` | — (padrão: por nome) | Id do quadro Processos Trabalhista |
 | `MONDAY_KPI_BOARD_ID` | — (padrão: por nome) | Id do quadro KPI - Processos Consumidores |
+| `MONDAY_ACESSOS_BOARD_ID` | — (padrão: por nome) | Id do quadro Acessos (credenciais de portais) |
 | `JURIDICO_GMAIL_QUERY` | — | Sobrescreve o filtro Gmail padrão |
 
 ## Limitações do MVP

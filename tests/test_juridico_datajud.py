@@ -17,6 +17,13 @@ from classificacao_procons.juridico.datajud import (
 PROCESS_NUMBER = "1001234-83.2026.8.26.0100"
 
 
+@pytest.fixture(autouse=True)
+def _no_throttle():
+    """Desliga o espaçamento entre chamadas para os testes não dormirem."""
+    with patch("classificacao_procons.juridico.datajud._throttle"):
+        yield
+
+
 def _datajud_response(movements: list[dict]) -> dict:
     return {
         "hits": {

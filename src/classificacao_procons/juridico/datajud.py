@@ -15,9 +15,13 @@ from classificacao_procons.juridico.models import CaseMovement
 DATAJUD_BASE_URL = "https://api-publica.datajud.cnj.jus.br"
 ENV_DATAJUD_API_KEY = "DATAJUD_API_KEY"
 REQUEST_TIMEOUT_SECONDS = 30
-MAX_DATAJUD_RETRIES = 3
-RETRY_BASE_DELAY_SECONDS = 5
+MAX_DATAJUD_RETRIES = 4
+RETRY_BASE_DELAY_SECONDS = 8
 _RETRYABLE_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
+# Intervalo mínimo entre chamadas ao DataJud, para não estourar o rate limit
+# do CNJ quando um lote grande de intimações é processado em sequência.
+MIN_INTERVAL_SECONDS = 1.5
+_last_request_at = 0.0
 
 
 class DataJudError(RuntimeError):
@@ -63,11 +67,22 @@ def _movement_from_payload(payload: dict) -> CaseMovement | None:
     )
 
 
+def _throttle() -> None:
+    """Espaça as chamadas ao DataJud para respeitar o rate limit do CNJ."""
+    global _last_request_at
+    now = time.monotonic()
+    wait = MIN_INTERVAL_SECONDS - (now - _last_request_at)
+    if wait > 0:
+        time.sleep(wait)
+    _last_request_at = time.monotonic()
+
+
 def _request_with_retries(*, url: str, payload: dict, api_key: str) -> dict:
     """POST no DataJud com retry para 429/5xx e timeouts (backoff exponencial)."""
     last_error: DataJudError | None = None
 
     for attempt in range(MAX_DATAJUD_RETRIES):
+        _throttle()
         request = urllib.request.Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
