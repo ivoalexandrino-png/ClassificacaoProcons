@@ -105,6 +105,23 @@ _CITACAO_CONTEXT_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\bcitad[oa]s?\s*(?:\([^)]*\))?\s*para\b"),
 )
 
+# Pushes/publicações que indicam prazo em curso sem trazer o prazo explícito:
+# intimação publicada (PJe), carta entregue (eproc), intimação lida
+# automaticamente (PROJUDI) e publicação em diário oficial (Jusbrasil).
+# "Decorrido/decurso de prazo" e "intimação expedida para outra parte" ficam
+# de fora de propósito (prazo encerrado ou de terceiro).
+_DEADLINE_TRIGGER_PATTERNS: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"publicad[oa]\s*(?:\([oa]\))?\s*[oa]?\s*(?:\([oa]\))?\s*intimacao"),
+    re.compile(r"juntada de carta[^\n]{0,120}comprovante de entrega"),
+    re.compile(r"leitura automatica de intimacao"),
+    re.compile(r"novas? publicac(?:ao|oes) encontradas?"),
+    re.compile(r"publicac(?:ao|oes) recentes? nos diarios"),
+)
+
+
+def _has_deadline_trigger(normalized_text: str) -> bool:
+    return any(pattern.search(normalized_text) for pattern in _DEADLINE_TRIGGER_PATTERNS)
+
 
 def _mentions_citacao(normalized_text: str) -> bool:
     cleaned = normalized_text
@@ -287,4 +304,5 @@ def parse_judicial_notification_body(
         deadline_date=_extract_deadline_date(normalized_text),
         hearing_datetime=_extract_hearing_datetime(normalized_text),
         summary=_build_summary(full_text),
+        has_deadline_trigger=_has_deadline_trigger(normalized_text),
     )

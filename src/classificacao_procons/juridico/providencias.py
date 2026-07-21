@@ -14,6 +14,7 @@ from classificacao_procons.juridico.models import (
     ACTION_CONTESTAR,
     ACTION_CUMPRIR_ACORDO,
     ACTION_MANIFESTAR,
+    ACTION_REVISAR_ANDAMENTO,
     ACTION_TOMAR_CIENCIA,
     ACTION_VERIFICAR_ENCERRAMENTO,
     NOTIFICATION_TYPE_AUDIENCIA,
@@ -28,6 +29,9 @@ from classificacao_procons.juridico.prazos import compute_due_date
 DEFAULT_CONTESTACAO_DAYS: Final = 15
 DEFAULT_RECURSO_DAYS: Final = 15
 DEFAULT_MANIFESTACAO_DAYS: Final = 5
+# Prazo curto para revisar intimação publicada sem prazo explícito no push:
+# o menor prazo processual comum é de 5 dias úteis — revisar antes disso.
+DEFAULT_REVISAO_DAYS: Final = 3
 
 ACTION_LABELS: Final[dict[str, str]] = {
     ACTION_CONTESTAR: "Apresentar contestação",
@@ -35,6 +39,7 @@ ACTION_LABELS: Final[dict[str, str]] = {
     ACTION_COMPARECER_AUDIENCIA: "Preparar e comparecer à audiência",
     ACTION_ANALISAR_RECURSO: "Analisar sentença e avaliar recurso",
     ACTION_ACOMPANHAR_ANDAMENTO: "Acompanhar andamento do processo",
+    ACTION_REVISAR_ANDAMENTO: "Revisar intimação e confirmar prazo",
     ACTION_CUMPRIR_ACORDO: "Acompanhar cumprimento do acordo homologado",
     ACTION_VERIFICAR_ENCERRAMENTO: "Verificar encerramento e obrigações finais",
     ACTION_TOMAR_CIENCIA: "Tomar ciência do andamento",
@@ -94,6 +99,7 @@ _SUPERSEDED_BY_STAGES: Final[dict[str, frozenset[str]]] = {
         {STAGE_CONTESTACAO, STAGE_SENTENCA, STAGE_ACORDO, STAGE_ENCERRAMENTO},
     ),
     ACTION_MANIFESTAR: frozenset({STAGE_ENCERRAMENTO}),
+    ACTION_REVISAR_ANDAMENTO: frozenset({STAGE_ACORDO, STAGE_ENCERRAMENTO}),
     ACTION_ANALISAR_RECURSO: frozenset({STAGE_ACORDO, STAGE_ENCERRAMENTO}),
 }
 
@@ -107,8 +113,12 @@ _STAGE_RECLASSIFICATION: Final[dict[str, tuple[str, int]]] = {
     STAGE_CONTESTACAO: (ACTION_ACOMPANHAR_ANDAMENTO, 10),
 }
 
-# Push de mera ciência só vira providência específica se o marco for recente
-# (evita reabrir sentenças/acordos antigos a cada push genérico).
+# Push de mera ciência (ou de revisão sem prazo explícito) só vira providência
+# específica se o marco for recente (evita reabrir sentenças/acordos antigos a
+# cada push genérico).
+_CIENCIA_UPGRADE_ACTIONS: Final[frozenset[str]] = frozenset(
+    {ACTION_TOMAR_CIENCIA, ACTION_REVISAR_ANDAMENTO},
+)
 _CIENCIA_UPGRADE_STAGES: Final[frozenset[str]] = frozenset(
     {STAGE_ENCERRAMENTO, STAGE_ACORDO, STAGE_SENTENCA},
 )
@@ -151,6 +161,10 @@ def _detect_action(intimacao: ParsedIntimacao, normalized_summary: str) -> str:
         return ACTION_MANIFESTAR
     if intimacao.deadline_days is not None or intimacao.deadline_date is not None:
         return ACTION_MANIFESTAR
+    if intimacao.has_deadline_trigger:
+        # Intimação publicada/expedida/lida sem o prazo no texto: há prazo
+        # correndo, mas só o teor diz qual — item para revisão com data curta.
+        return ACTION_REVISAR_ANDAMENTO
     return ACTION_TOMAR_CIENCIA
 
 
@@ -161,6 +175,8 @@ def _default_deadline_days(action_type: str) -> int | None:
         return DEFAULT_RECURSO_DAYS
     if action_type == ACTION_MANIFESTAR:
         return DEFAULT_MANIFESTACAO_DAYS
+    if action_type == ACTION_REVISAR_ANDAMENTO:
+        return DEFAULT_REVISAO_DAYS
     return None
 
 
@@ -269,7 +285,7 @@ def reclassify_providencia_from_movements(
         )
 
     if (
-        providencia.action_type == ACTION_TOMAR_CIENCIA
+        providencia.action_type in _CIENCIA_UPGRADE_ACTIONS
         and stage in _CIENCIA_UPGRADE_STAGES
         and _is_recent_marker(marker, base_date=base_date)
     ):

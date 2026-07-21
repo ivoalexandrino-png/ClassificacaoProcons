@@ -238,6 +238,42 @@ class TestParseJudicialNotificationBody:
         result = parse_judicial_notification_body(text=text)
         assert result.notification_type == NOTIFICATION_TYPE_INTIMACAO
 
+    def test_should_flag_deadline_trigger_when_intimacao_published_pje(self) -> None:
+        """Push real do TRT2/PJe: intimação publicada sem prazo no texto."""
+        text = (
+            "Processo 1001205-83.2025.5.02.0036. Eventos:\n"
+            "18/07/2026 02:11 Publicado(a) o(a) intimação em 17/07/2026\n"
+            "18/07/2026 02:11 Disponibilizado(a) o(a) intimação no Diário da Justiça"
+        )
+        result = parse_judicial_notification_body(text=text)
+        assert result.has_deadline_trigger is True
+        assert result.deadline_days is None
+
+    def test_should_flag_deadline_trigger_on_eproc_carta_entregue(self) -> None:
+        """Push real do eproc TJSC: carta com comprovante de entrega."""
+        text = (
+            "Num. Processo: 5007602-83.2026.8.24.0039\n"
+            "Movimentação: Juntada de carta pelo correio - comprovante de entrega -"
+        )
+        result = parse_judicial_notification_body(text=text)
+        assert result.has_deadline_trigger is True
+
+    def test_should_flag_deadline_trigger_on_jusbrasil_publication(self) -> None:
+        text = (
+            "Processo 5052249-56.2022.8.24.0023. Ivo, os processos que você acompanha "
+            "possuem novas informações! 1 nova publicação encontrada para você."
+        )
+        result = parse_judicial_notification_body(text=text)
+        assert result.has_deadline_trigger is True
+
+    def test_should_not_flag_trigger_on_decorrido_prazo_or_sigiloso(self) -> None:
+        for text in (
+            "Num. Processo: 4033019-49.2025.8.26.0002. Movimentação: Decorrido prazo -",
+            "Processo 1000817-79.2026.5.02.0511. Eventos: 19/07/2026 documento sigiloso",
+        ):
+            result = parse_judicial_notification_body(text=text)
+            assert result.has_deadline_trigger is False, text
+
     def test_should_use_subject_when_body_lacks_process_number(self) -> None:
         result = parse_judicial_notification_body(
             text="Nova movimentação disponível no sistema.",

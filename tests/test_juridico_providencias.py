@@ -9,6 +9,7 @@ from classificacao_procons.juridico.models import (
     ACTION_CONTESTAR,
     ACTION_CUMPRIR_ACORDO,
     ACTION_MANIFESTAR,
+    ACTION_REVISAR_ANDAMENTO,
     ACTION_TOMAR_CIENCIA,
     ACTION_VERIFICAR_ENCERRAMENTO,
     NOTIFICATION_TYPE_AUDIENCIA,
@@ -140,6 +141,31 @@ class TestClassifyProvidencia:
         assert result.action_type == ACTION_MANIFESTAR
         assert result.due_date == date(2026, 7, 31)  # 10 dias úteis
 
+    def test_should_require_review_when_deadline_trigger_without_explicit_deadline(self) -> None:
+        """Push "intimação publicada"/"carta entregue" sem prazo no texto: há
+        prazo correndo — cria item de revisão com data curta, não mera ciência."""
+        result = classify_providencia(
+            _intimacao(has_deadline_trigger=True),
+            base_date=BASE_DATE,
+        )
+        assert result.action_type == ACTION_REVISAR_ANDAMENTO
+        assert result.requires_action is True
+        assert result.requires_legal_document is False
+        assert result.due_date == date(2026, 7, 22)  # 3 dias úteis
+
+    def test_should_prefer_explicit_deadline_over_trigger(self) -> None:
+        result = classify_providencia(
+            _intimacao(deadline_days=15, has_deadline_trigger=True),
+            base_date=BASE_DATE,
+        )
+        assert result.action_type == ACTION_MANIFESTAR
+        assert result.due_date == date(2026, 8, 7)
+
+    def test_should_stay_ciencia_when_no_trigger_and_no_deadline(self) -> None:
+        result = classify_providencia(_intimacao(), base_date=BASE_DATE)
+        assert result.action_type == ACTION_TOMAR_CIENCIA
+        assert result.requires_action is False
+
 
 def _providencia_contestar() -> Providencia:
     return Providencia(
@@ -250,6 +276,24 @@ class TestReclassifyProvidenciaFromMovements:
         movements = [CaseMovement(movement_name="Arquivamento Definitivo")]
         result = _reclassify(providencia, movements)
         assert result.action_type == ACTION_VERIFICAR_ENCERRAMENTO
+
+    def test_should_upgrade_revisar_when_recent_acordo(self) -> None:
+        """Push de publicação (revisão) de processo com acordo recente vira
+        acompanhamento do acordo, não revisão genérica."""
+        providencia = Providencia(
+            action_type=ACTION_REVISAR_ANDAMENTO,
+            description="Revisar intimação e confirmar prazo",
+            requires_action=True,
+            due_date=date(2026, 7, 22),
+        )
+        movements = [
+            CaseMovement(
+                movement_name="Homologação de Transação",
+                movement_datetime=datetime(2026, 7, 10, 12, 0),
+            ),
+        ]
+        result = _reclassify(providencia, movements)
+        assert result.action_type == ACTION_CUMPRIR_ACORDO
 
     def test_should_upgrade_ciencia_when_recent_sentenca(self) -> None:
         # Push genérico ("decorrido prazo") de processo com sentença recente:

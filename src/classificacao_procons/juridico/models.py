@@ -16,6 +16,7 @@ ACTION_MANIFESTAR = "manifestar"
 ACTION_COMPARECER_AUDIENCIA = "comparecer_audiencia"
 ACTION_ANALISAR_RECURSO = "analisar_recurso"
 ACTION_ACOMPANHAR_ANDAMENTO = "acompanhar_andamento"
+ACTION_REVISAR_ANDAMENTO = "revisar_andamento"
 ACTION_CUMPRIR_ACORDO = "cumprir_acordo"
 ACTION_VERIFICAR_ENCERRAMENTO = "verificar_encerramento"
 ACTION_TOMAR_CIENCIA = "tomar_ciencia"
@@ -46,6 +47,9 @@ class ParsedIntimacao:
     deadline_date: date | None = None
     hearing_datetime: datetime | None = None
     summary: str = ""
+    # Push/publicação com gatilho de prazo (intimação publicada/expedida/lida,
+    # carta entregue) mas sem o prazo explícito no texto.
+    has_deadline_trigger: bool = False
 
 
 @dataclass(frozen=True)

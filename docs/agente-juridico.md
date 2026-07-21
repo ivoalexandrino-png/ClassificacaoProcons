@@ -75,11 +75,20 @@ O agente reconhece intimações por três caminhos:
 
 | Situação | Ação | Prazo padrão (se não houver no e-mail) |
 |----------|------|----------------------------------------|
-| Citação | Apresentar contestação | 15 dias úteis (CPC art. 335) |
+| Citação (contexto explícito: "cite-se", "citação", "citado para…") | Apresentar contestação | 15 dias úteis (CPC art. 335) |
 | Sentença | Analisar e avaliar recurso | 15 dias úteis |
 | Audiência designada | Preparar e comparecer | data da audiência |
-| Pedido de manifestação | Apresentar manifestação | 5 dias úteis (CPC art. 218 §3º) |
-| Arquivamento/trânsito em julgado | Tomar ciência | — (não cria item no Monday) |
+| Pedido de manifestação ou prazo explícito no texto | Apresentar manifestação | 5 dias úteis (CPC art. 218 §3º) |
+| Intimação publicada/carta entregue/publicação em diário **sem prazo no texto** | Revisar intimação e confirmar prazo | 3 dias úteis (revisão) |
+| Arquivamento/trânsito em julgado, "decorrido prazo", documento sigiloso | Tomar ciência | — (não cria item no Monday) |
+
+"Citado" solto não vira citação (falsos positivos reais: "recurso acima
+citado" do PROJUDI, listas "Intimado(s)/Citado(s)" de recortes). A linha de
+revisão cobre pushes que indicam prazo em curso sem dizer qual — PJe
+"Publicado(a) o(a) intimação", eproc "juntada de carta — comprovante de
+entrega", PROJUDI "Leitura Automática de Intimação" e publicações do
+Jusbrasil; o teor define o prazo real, então o item sai com data curta para
+revisão humana.
 
 Prazos em dias úteis excluem o dia do começo e prorrogam o termo final para o
 próximo dia útil (fins de semana; feriados forenses exigem calendário do
