@@ -165,7 +165,7 @@ def catch_up_contratos(
                 signed_pdf_url=document.signed_pdf_url,
                 options=pipeline_options,
             )
-        except ContractPipelineError as exc:
+        except (ContractPipelineError, OSError, TimeoutError) as exc:
             process_failed += 1
             items.append(
                 CatchUpProcessItemResult(
@@ -173,6 +173,17 @@ def catch_up_contratos(
                     document_name=document.name,
                     action="failed",
                     detail=str(exc),
+                ),
+            )
+            continue
+        except Exception as exc:
+            process_failed += 1
+            items.append(
+                CatchUpProcessItemResult(
+                    document_id=document.document_id,
+                    document_name=document.name,
+                    action="failed",
+                    detail=f"{type(exc).__name__}: {exc}",
                 ),
             )
             continue

@@ -29,7 +29,7 @@ on:
 jobs:
   catch-up:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
 
     steps:
       - name: Set workflow parameters
