@@ -10,6 +10,8 @@ import pytest
 
 from classificacao_procons.juridico.datajud import (
     DataJudError,
+    fetch_case_dossier,
+    fetch_case_metadata,
     fetch_case_movements,
     get_api_key_from_env,
 )
@@ -39,6 +41,54 @@ def _mock_urlopen(payload: dict) -> MagicMock:
     response.read.return_value = json.dumps(payload).encode("utf-8")
     response.__enter__.return_value = response
     return MagicMock(return_value=response)
+
+
+def _source_response(source: dict) -> dict:
+    return {"hits": {"hits": [{"_source": source}]}}
+
+
+class TestFetchCaseMetadataAndDossier:
+    def test_should_read_secrecy_and_system(self) -> None:
+        payload = _source_response(
+            {
+                "nivelSigilo": 1,
+                "sistema": {"nome": "SAJ"},
+                "grau": "G1",
+                "classe": {"nome": "Procedimento Comum Cível"},
+            },
+        )
+        with patch("urllib.request.urlopen", _mock_urlopen(payload)):
+            metadata = fetch_case_metadata(PROCESS_NUMBER, api_key="chave")
+        assert metadata is not None
+        assert metadata.is_secret is True
+        assert metadata.sistema == "SAJ"
+        assert metadata.classe == "Procedimento Comum Cível"
+
+    def test_should_treat_zero_secrecy_as_public(self) -> None:
+        payload = _source_response({"nivelSigilo": 0, "sistema": {"nome": "Projudi"}})
+        with patch("urllib.request.urlopen", _mock_urlopen(payload)):
+            metadata = fetch_case_metadata(PROCESS_NUMBER, api_key="chave")
+        assert metadata.is_secret is False
+        assert metadata.sistema == "Projudi"
+
+    def test_should_return_none_when_process_not_indexed(self) -> None:
+        with patch("urllib.request.urlopen", _mock_urlopen({"hits": {"hits": []}})):
+            assert fetch_case_metadata(PROCESS_NUMBER, api_key="chave") is None
+
+    def test_dossier_should_return_metadata_and_movements_in_one_call(self) -> None:
+        payload = _source_response(
+            {
+                "nivelSigilo": 0,
+                "sistema": {"nome": "SAJ"},
+                "movimentos": [{"nome": "Conclusão", "dataHora": "2026-07-01T00:00:00Z"}],
+            },
+        )
+        urlopen = _mock_urlopen(payload)
+        with patch("urllib.request.urlopen", urlopen):
+            metadata, movements = fetch_case_dossier(PROCESS_NUMBER, api_key="chave")
+        assert metadata.sistema == "SAJ"
+        assert [m.movement_name for m in movements] == ["Conclusão"]
+        assert urlopen.call_count == 1  # uma só chamada ao DataJud
 
 
 class TestFetchCaseMovements:

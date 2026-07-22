@@ -18,6 +18,7 @@ from classificacao_procons.juridico.models import (
     ACTION_MANIFESTAR,
     ACTION_REVISAR_ANDAMENTO,
     ACTION_VERIFICAR_ENCERRAMENTO,
+    ACTION_VERIFICAR_SEGREDO,
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
     NOTIFICATION_TYPE_DECISAO,
@@ -484,6 +485,8 @@ _ACTION_STAGE_RANK: dict[str, int] = {
     ACTION_ANALISAR_RECURSO: 3,
     ACTION_CUMPRIR_ACORDO: 4,
     ACTION_VERIFICAR_ENCERRAMENTO: 5,
+    # Segredo de justiça é ortogonal às fases: não deve deduplicar contra elas.
+    ACTION_VERIFICAR_SEGREDO: 2,
 }
 
 _DESCRIPTION_TO_ACTION: dict[str, str] = {

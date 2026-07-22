@@ -81,6 +81,7 @@ O agente reconhece intimações por três caminhos:
 | Pedido de manifestação ou prazo explícito no texto | Apresentar manifestação | 5 dias úteis (CPC art. 218 §3º) |
 | Intimação publicada/carta entregue/publicação em diário **sem prazo no texto** | Revisar intimação e confirmar prazo | 3 dias úteis (revisão) |
 | Arquivamento/trânsito em julgado, "decorrido prazo", documento sigiloso | Tomar ciência | — (não cria item no Monday) |
+| Processo em segredo de justiça (nível de sigilo no DataJud) | Verificar (segredo de justiça) | prazo da triagem preliminar (conferir manual) |
 
 "Citado" solto não vira citação (falsos positivos reais: "recurso acima
 citado" do PROJUDI, listas "Intimado(s)/Citado(s)" de recortes). A linha de
@@ -129,6 +130,23 @@ específica em vez de deixar passar (marcos mais antigos não reabrem casos).
 O `--dry-run` também consulta o DataJud/Comunica (somente leitura), então a
 triagem exibida já é a ciente do estágio. Sem `DATAJUD_API_KEY` (ou com
 `--no-datajud`), a reclassificação não acontece — revise a providência sugerida.
+
+### Segredo de justiça e múltiplos sistemas do tribunal
+
+O DataJud informa, além dos andamentos, o **nível de sigilo** e o **sistema**
+que indexa o processo (`fetch_case_dossier`, numa única chamada). Com isso:
+
+- **Segredo de justiça** (`nivelSigilo > 0`): o agente não tenta ler o teor
+  (exige advogado habilitado + 2FA no e-mail pessoal). Cria um item claro no
+  Monday — **"Verificar (segredo de justiça)"** — com a triagem preliminar do
+  e-mail e nota pedindo conferência manual do prazo no portal.
+- **Sistema do processo**: um mesmo tribunal usa vários sistemas (e-SAJ, PJe,
+  Projudi, eproc, processo eletrônico). O `juridico portal` lê o campo
+  `sistema` do DataJud e roteia; hoje o scraping cobre **só e-SAJ (SAJ)** —
+  PJe/Projudi/eproc são reportados como não suportados (o andamento continua
+  vindo do DataJud, que cobre todos os sistemas). O número CNJ sozinho **não**
+  diz o sistema (o mesmo TJ tem processos em sistemas diferentes), por isso a
+  escolha vem do DataJud, não da sigla do tribunal.
 
 ## Acesso autenticado aos portais (teor do processo)
 

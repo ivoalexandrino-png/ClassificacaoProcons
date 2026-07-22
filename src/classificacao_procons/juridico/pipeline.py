@@ -17,7 +17,7 @@ from classificacao_procons.juridico.casos import sync_case_boards
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 from classificacao_procons.juridico.datajud import (
     DataJudError,
-    fetch_case_movements,
+    fetch_case_dossier,
     get_api_key_from_env,
 )
 from classificacao_procons.juridico.events import (
@@ -31,6 +31,7 @@ from classificacao_procons.juridico.gmail import GmailJuridicoFetcher
 from classificacao_procons.juridico.models import (
     CaseAnalysis,
     CaseCommunication,
+    CaseMetadata,
     CaseMovement,
     JudicialNotificationEmail,
     ParsedIntimacao,
@@ -52,6 +53,7 @@ from classificacao_procons.juridico.providencias import (
     STAGE_ACORDO,
     STAGE_ENCERRAMENTO,
     affects_contingency,
+    build_secrecy_providencia,
     classify_providencia,
     detect_process_stage,
     reclassify_providencia_from_movements,
@@ -101,22 +103,25 @@ def _save_processed_messages(state_path: Path, message_ids: set[str]) -> None:
     state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _fetch_movements_if_configured(
+def _fetch_dossier_if_configured(
     intimacao: ParsedIntimacao,
     *,
     options: JuridicoPipelineOptions,
-) -> tuple[list[CaseMovement], str | None]:
-    """Consulta o DataJud quando há chave; falha na consulta não bloqueia o fluxo."""
+) -> tuple[CaseMetadata | None, list[CaseMovement], str | None]:
+    """Metadados (sigilo/sistema) + andamentos do DataJud numa só chamada.
+
+    Falha na consulta não bloqueia o fluxo (o erro fica anotado no resultado).
+    """
     if not options.consult_datajud or not get_api_key_from_env():
-        return [], None
+        return None, [], None
     try:
-        movements = fetch_case_movements(
+        metadata, movements = fetch_case_dossier(
             intimacao.process_number,
             limit=options.datajud_limit,
         )
     except DataJudError as exc:
-        return [], str(exc)
-    return movements, None
+        return None, [], str(exc)
+    return metadata, movements, None
 
 
 def _fetch_communications_if_configured(
@@ -404,7 +409,7 @@ def _process_intimacao(
         email_text=notification.body_text,
         communications=communications,
     )
-    movements, datajud_error = _fetch_movements_if_configured(intimacao, options=options)
+    metadata, movements, datajud_error = _fetch_dossier_if_configured(intimacao, options=options)
 
     # 3. Triagem ciente do estágio: se o DataJud mostra que a providência do
     # e-mail já foi superada (ou que há marco recente num push de ciência),
@@ -415,6 +420,9 @@ def _process_intimacao(
         movements,
         base_date=notification.received_at.date(),
     )
+    # Segredo de justiça: o agente não lê o teor — vira item de verificação.
+    if metadata is not None and metadata.is_secret:
+        providencia = build_secrecy_providencia(providencia)
 
     if options.dry_run:
         return ProcessedIntimacao(

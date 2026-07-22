@@ -19,6 +19,7 @@ ACTION_ACOMPANHAR_ANDAMENTO = "acompanhar_andamento"
 ACTION_REVISAR_ANDAMENTO = "revisar_andamento"
 ACTION_CUMPRIR_ACORDO = "cumprir_acordo"
 ACTION_VERIFICAR_ENCERRAMENTO = "verificar_encerramento"
+ACTION_VERIFICAR_SEGREDO = "verificar_segredo"
 ACTION_TOMAR_CIENCIA = "tomar_ciencia"
 
 
@@ -73,6 +74,21 @@ class CaseMovement:
     movement_name: str
     movement_code: int | None = None
     movement_datetime: datetime | None = None
+
+
+@dataclass(frozen=True)
+class CaseMetadata:
+    """Metadados do processo no DataJud (sigilo, sistema, grau, classe)."""
+
+    nivel_sigilo: int | None = None
+    sistema: str | None = None
+    grau: str | None = None
+    classe: str | None = None
+
+    @property
+    def is_secret(self) -> bool:
+        """Segredo de justiça: nível de sigilo maior que zero."""
+        return self.nivel_sigilo is not None and self.nivel_sigilo > 0
 
 
 @dataclass(frozen=True)

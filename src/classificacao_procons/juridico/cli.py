@@ -151,6 +151,33 @@ def _run_portal(args: argparse.Namespace) -> int:
         print(json.dumps({"error": "Tribunal não identificado pelo número CNJ."}), file=sys.stderr)
         return 1
 
+    # O mesmo tribunal pode ter vários sistemas (e-SAJ, PJe, Projudi, eproc); o
+    # DataJud informa qual sistema indexa este processo. Só e-SAJ (SAJ) é
+    # suportado no scraping; os demais são reportados claramente.
+    sistema = None
+    try:
+        from classificacao_procons.juridico.datajud import DataJudError, fetch_case_metadata
+
+        metadata = fetch_case_metadata(args.numero)
+        sistema = metadata.sistema if metadata else None
+    except DataJudError:
+        sistema = None
+    if sistema and "SAJ" not in sistema.upper():
+        print(
+            json.dumps(
+                {
+                    "unsupported_system": sistema,
+                    "info": (
+                        f"Processo tramita no sistema {sistema}; o scraping de portal "
+                        "cobre só e-SAJ por ora. Andamentos seguem pelo DataJud."
+                    ),
+                },
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
+        return 2
+
     content = None
     secrecy = False
 

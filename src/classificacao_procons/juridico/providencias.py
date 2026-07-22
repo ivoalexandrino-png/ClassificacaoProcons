@@ -17,6 +17,7 @@ from classificacao_procons.juridico.models import (
     ACTION_REVISAR_ANDAMENTO,
     ACTION_TOMAR_CIENCIA,
     ACTION_VERIFICAR_ENCERRAMENTO,
+    ACTION_VERIFICAR_SEGREDO,
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
     NOTIFICATION_TYPE_SENTENCA,
@@ -42,6 +43,7 @@ ACTION_LABELS: Final[dict[str, str]] = {
     ACTION_REVISAR_ANDAMENTO: "Revisar intimação e confirmar prazo",
     ACTION_CUMPRIR_ACORDO: "Acompanhar cumprimento do acordo homologado",
     ACTION_VERIFICAR_ENCERRAMENTO: "Verificar encerramento e obrigações finais",
+    ACTION_VERIFICAR_SEGREDO: "Verificar (segredo de justiça)",
     ACTION_TOMAR_CIENCIA: "Tomar ciência do andamento",
 }
 
@@ -298,6 +300,31 @@ def reclassify_providencia_from_movements(
         )
 
     return providencia
+
+
+def build_secrecy_providencia(providencia: Providencia) -> Providencia:
+    """Processo em segredo de justiça: item de verificação manual, sem prazo.
+
+    O agente não consegue ler o teor (exige advogado habilitado + 2FA no
+    e-mail pessoal), então cadastra um item claro para conferência humana,
+    preservando a data de audiência se houver.
+    """
+    stage_note = (
+        "Processo em SEGREDO DE JUSTIÇA (nível de sigilo no DataJud). O agente "
+        "não acessa o teor (exige advogado habilitado nos autos e 2FA). "
+        f"Triagem preliminar pelo e-mail: {providencia.description}. "
+        "Verificar manualmente o prazo e a providência no portal do tribunal."
+    )
+    return Providencia(
+        action_type=ACTION_VERIFICAR_SEGREDO,
+        description=ACTION_LABELS[ACTION_VERIFICAR_SEGREDO],
+        requires_action=True,
+        due_date=providencia.due_date,
+        hearing_datetime=providencia.hearing_datetime,
+        requires_legal_document=False,
+        affects_contingency=providencia.affects_contingency,
+        stage_note=stage_note,
+    )
 
 
 def classify_providencia(intimacao: ParsedIntimacao, *, base_date: date) -> Providencia:

@@ -16,6 +16,7 @@ from classificacao_procons.juridico.events import (
 )
 from classificacao_procons.juridico.models import (
     CaseCommunication,
+    CaseMetadata,
     CaseMovement,
     JudicialNotificationEmail,
 )
@@ -223,14 +224,17 @@ class TestProcessNewIntimacoes:
         monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
         monkeypatch.setattr(
             juridico_pipeline,
-            "fetch_case_movements",
-            lambda process_number, *, limit=5: [
-                CaseMovement(
-                    movement_name="Homologação de Transação",
-                    movement_code=466,
-                    movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
-                ),
-            ],
+            "fetch_case_dossier",
+            lambda process_number, *, limit=5: (
+                None,
+                [
+                    CaseMovement(
+                        movement_name="Homologação de Transação",
+                        movement_code=466,
+                        movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
+                    ),
+                ],
+            ),
         )
 
         results = process_new_intimacoes(options)
@@ -262,13 +266,16 @@ class TestProcessNewIntimacoes:
         monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
         monkeypatch.setattr(
             juridico_pipeline,
-            "fetch_case_movements",
-            lambda process_number, *, limit=5: [
-                CaseMovement(
-                    movement_name="Homologação de Transação",
-                    movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
-                ),
-            ],
+            "fetch_case_dossier",
+            lambda process_number, *, limit=5: (
+                None,
+                [
+                    CaseMovement(
+                        movement_name="Homologação de Transação",
+                        movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
+                    ),
+                ],
+            ),
         )
 
         dry_options = JuridicoPipelineOptions(
@@ -332,13 +339,16 @@ class TestProcessNewIntimacoes:
         monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
         monkeypatch.setattr(
             juridico_pipeline,
-            "fetch_case_movements",
-            lambda process_number, *, limit=5: [
-                CaseMovement(
-                    movement_name="Homologação de Transação",
-                    movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
-                ),
-            ],
+            "fetch_case_dossier",
+            lambda process_number, *, limit=5: (
+                None,
+                [
+                    CaseMovement(
+                        movement_name="Homologação de Transação",
+                        movement_datetime=datetime(2026, 6, 20, 15, 2, tzinfo=UTC),
+                    ),
+                ],
+            ),
         )
 
         results = process_new_intimacoes(options)
@@ -405,6 +415,40 @@ class TestProcessNewIntimacoes:
         assert fetcher.marked_read == ["msg-001"]
         state = json.loads(options.state_path.read_text(encoding="utf-8"))
         assert state["message_ids"] == ["msg-001"]
+
+    def test_should_flag_secret_case_for_manual_verification(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        options: JuridicoPipelineOptions,
+    ) -> None:
+        """Segredo de justiça (nivelSigilo>0 no DataJud): item de verificação."""
+        fetcher = FakeFetcher([_notification()])
+        registration = MondayRegistrationResult(
+            item_id="900",
+            board_id="123",
+            item_url="https://empresa.monday.com/boards/123/pulses/900",
+        )
+        register_calls = _patch_pipeline(monkeypatch, fetcher, registration=registration)
+        monkeypatch.setattr(juridico_pipeline, "get_api_key_from_env", lambda: "chave")
+        monkeypatch.setattr(
+            juridico_pipeline,
+            "fetch_case_dossier",
+            lambda process_number, *, limit=5: (
+                CaseMetadata(nivel_sigilo=1, sistema="SAJ", grau="G1"),
+                [],
+            ),
+        )
+
+        results = process_new_intimacoes(options)
+        result = results[0]
+
+        assert result.status == "success"
+        assert result.action_type == "verificar_segredo"
+        assert result.requires_action is True
+        assert result.stage_note is not None
+        assert "SEGREDO DE JUSTIÇA" in result.stage_note
+        assert len(register_calls) == 1
+        assert register_calls[0]["providencia"].action_type == "verificar_segredo"
 
     def test_should_report_monday_error_without_losing_events(
         self,
