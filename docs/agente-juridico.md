@@ -141,12 +141,23 @@ que indexa o processo (`fetch_case_dossier`, numa única chamada). Com isso:
   Monday — **"Verificar (segredo de justiça)"** — com a triagem preliminar do
   e-mail e nota pedindo conferência manual do prazo no portal.
 - **Sistema do processo**: um mesmo tribunal usa vários sistemas (e-SAJ, PJe,
-  Projudi, eproc, processo eletrônico). O `juridico portal` lê o campo
-  `sistema` do DataJud e roteia; hoje o scraping cobre **só e-SAJ (SAJ)** —
-  PJe/Projudi/eproc são reportados como não suportados (o andamento continua
-  vindo do DataJud, que cobre todos os sistemas). O número CNJ sozinho **não**
-  diz o sistema (o mesmo TJ tem processos em sistemas diferentes), por isso a
-  escolha vem do DataJud, não da sigla do tribunal.
+  Projudi, eproc, processo eletrônico) e o número CNJ **não** diz qual. O
+  `juridico portal` lê o campo `sistema` do DataJud e roteia para o cliente
+  certo (`portais/router.py`). Estado de cada sistema:
+
+  | Sistema | Acesso | Situação no agente |
+  |---------|--------|--------------------|
+  | **e-SAJ** (SAJ) | consulta pública sem captcha | **funciona** (teor completo); segredo cai no login autenticado |
+  | **PJe** (Justiça do Trabalho etc.) | consulta pública com **captcha obrigatório** (Res. 139/2014 CSJT) | detecta o captcha e cai para o DataJud |
+  | **Projudi** | sem consulta pública; login com **captcha** (reCAPTCHA/Turing, varia por TJ) | detecta o captcha e cai para o DataJud; com login sem captcha + credencial, lê o teor |
+  | **eproc / próprios** | varia | ainda sem scraper; DataJud |
+
+  Ou seja: **o e-SAJ é o único com leitura pública automatizável hoje**. Os
+  demais tribunais protegem a consulta com captcha (política deles); nesses
+  casos o agente reporta e segue com os andamentos do DataJud, que cobre todos
+  os sistemas. Os clientes de PJe e Projudi já existem e passam a ler o teor
+  automaticamente caso o tribunal dispense o captcha (ou haja login sem
+  captcha com credencial no quadro Acessos).
 
 ## Acesso autenticado aos portais (teor do processo)
 

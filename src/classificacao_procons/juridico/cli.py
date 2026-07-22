@@ -132,17 +132,24 @@ def _run_andamentos(args: argparse.Namespace) -> int:
     return 0
 
 
+def _portal_system(numero: str) -> str | None:
+    try:
+        from classificacao_procons.juridico.datajud import fetch_case_metadata
+
+        metadata = fetch_case_metadata(numero)
+        return metadata.sistema if metadata else None
+    except Exception:  # noqa: BLE001 — roteamento é otimização; nunca derruba o comando
+        return None
+
+
 def _run_portal(args: argparse.Namespace) -> int:
-    from classificacao_procons.juridico.acessos import (
-        AcessosError,
-        get_tribunal_credential,
-    )
+    from classificacao_procons.juridico.acessos import AcessosError, get_tribunal_credential
     from classificacao_procons.juridico.cnj import tribunal_acronym
-    from classificacao_procons.juridico.portais.esaj import (
+    from classificacao_procons.juridico.portais import esaj, router
+    from classificacao_procons.juridico.portais.base import (
         PortalError,
         PortalRequiresInteraction,
-        fetch_process_content,
-        fetch_process_content_public,
+        PortalUnsupported,
     )
     from classificacao_procons.juridico.portais.token_email import gmail_token_provider
 
@@ -151,71 +158,46 @@ def _run_portal(args: argparse.Namespace) -> int:
         print(json.dumps({"error": "Tribunal não identificado pelo número CNJ."}), file=sys.stderr)
         return 1
 
-    # O mesmo tribunal pode ter vários sistemas (e-SAJ, PJe, Projudi, eproc); o
-    # DataJud informa qual sistema indexa este processo. Só e-SAJ (SAJ) é
-    # suportado no scraping; os demais são reportados claramente.
-    sistema = None
-    try:
-        from classificacao_procons.juridico.datajud import fetch_case_metadata
-
-        metadata = fetch_case_metadata(args.numero)
-        sistema = metadata.sistema if metadata else None
-    except Exception:  # noqa: BLE001 — roteamento é otimização; nunca derruba o comando
-        sistema = None
-    if sistema and "SAJ" not in sistema.upper():
-        print(
-            json.dumps(
-                {
-                    "unsupported_system": sistema,
-                    "info": (
-                        f"Processo tramita no sistema {sistema}; o scraping de portal "
-                        "cobre só e-SAJ por ora. Andamentos seguem pelo DataJud."
-                    ),
-                },
-                ensure_ascii=False,
-            ),
-            file=sys.stderr,
-        )
-        return 2
+    # O DataJud diz qual sistema (e-SAJ/PJe/Projudi/eproc) indexa o processo.
+    sistema = args.sistema or _portal_system(args.numero)
 
     content = None
     secrecy = False
 
-    # 1) Consulta pública primeiro (sem login, sem 2FA) — cobre a maioria.
     if not args.autenticado:
         try:
-            content = fetch_process_content_public(args.numero, headless=not args.headed)
+            content = router.fetch_process_content(
+                args.numero,
+                sistema=sistema,
+                tribunal=acronym,
+                headless=not args.headed,
+            )
         except PortalRequiresInteraction as exc:
             secrecy = True
-            print(
-                json.dumps({"info": f"Consulta pública indisponível: {exc}"}, ensure_ascii=False),
-                file=sys.stderr,
-            )
+            print(json.dumps({"info": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        except PortalUnsupported as exc:
+            print(json.dumps({"unsupported_system": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
         except PortalError as exc:
-            print(
-                json.dumps({"info": f"Consulta pública falhou: {exc}"}, ensure_ascii=False),
-                file=sys.stderr,
-            )
+            msg = json.dumps({"info": f"Consulta falhou: {exc}"}, ensure_ascii=False)
+            print(msg, file=sys.stderr)
 
-    # 2) Fallback autenticado (segredo de justiça / --autenticado).
-    if content is None and (secrecy or args.autenticado):
+    # Fallback autenticado no e-SAJ (segredo de justiça / --autenticado).
+    if content is None and (secrecy or args.autenticado) and "SAJ" in (sistema or "TJ").upper():
         try:
             credential = get_tribunal_credential(acronym)
         except AcessosError as exc:
             print(json.dumps({"error": str(exc)}), file=sys.stderr)
             return 1
-        if credential is None:
+        if credential is None or "SAJ" not in credential.system:
             print(
                 json.dumps(
-                    {"error": f"Sem credencial de portal para {acronym} no quadro Acessos."},
+                    {"needs_interaction": f"Sem credencial e-SAJ válida para {acronym}."},
+                    ensure_ascii=False,
                 ),
                 file=sys.stderr,
             )
-            return 2 if secrecy else 1
-        if "SAJ" not in credential.system:
-            message = f"Portal {credential.system} de {acronym} ainda não suportado (só e-SAJ)."
-            print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
-            return 1
+            return 2
 
         token_provider = None
         if args.token_email:
@@ -227,7 +209,7 @@ def _run_portal(args: argparse.Namespace) -> int:
             token_provider = lambda _login: args.token_code  # noqa: E731
 
         try:
-            content = fetch_process_content(
+            content = esaj.fetch_process_content(
                 args.numero,
                 credential=credential,
                 headless=not args.headed,
@@ -372,6 +354,10 @@ def main(argv: list[str] | None = None) -> int:
     portal_parser.add_argument(
         "--tribunal",
         help="Sigla do tribunal (ex.: TJSP); inferida do número se omitida.",
+    )
+    portal_parser.add_argument(
+        "--sistema",
+        help="Sistema do tribunal (e-SAJ, PJe, Projudi); inferido do DataJud se omitido.",
     )
     portal_parser.add_argument(
         "--headed",

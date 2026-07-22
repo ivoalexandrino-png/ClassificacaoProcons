@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -18,16 +17,19 @@ from playwright.sync_api import sync_playwright
 
 from classificacao_procons.juridico.acessos import PortalCredential
 from classificacao_procons.juridico.cnj import process_number_digits
+from classificacao_procons.juridico.portais.base import (
+    _DEFAULT_TIMEOUT_MS,
+    _USER_AGENT,
+    PortalError,
+    PortalRequiresInteraction,
+    ProcessContent,
+    dedupe_movements,
+)
 
 ESAJ_LOGIN_URL = "https://esaj.tjsp.jus.br/sajcas/login"
 ESAJ_CPOPG_URL = "https://esaj.tjsp.jus.br/cpopg/open.do"
 ESAJ_CPOSG_URL = "https://esaj.tjsp.jus.br/cposg/open.do"
 ESAJ_HOME_URL = "https://esaj.tjsp.jus.br/esaj/portal.do?servico=740000"
-_DEFAULT_TIMEOUT_MS = 45000
-_USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-)
 
 # Sessão autenticada persistida (cookies) para o 2FA ser pedido só de vez em
 # quando, não a cada consulta.
@@ -35,36 +37,6 @@ DEFAULT_SESSION_PATH = "credentials/esaj-session.json"
 
 # Provedor do código 2FA: recebe o e-mail/login e devolve o código enviado.
 TokenProvider = Callable[[str], str | None]
-
-
-class PortalError(RuntimeError):
-    """Falha ao consultar o portal do tribunal."""
-
-
-class PortalRequiresInteraction(PortalError):
-    """Portal exigiu captcha/2FA/certificado — precisa de humano."""
-
-
-@dataclass(frozen=True)
-class ProcessContent:
-    process_number: str
-    source: str
-    classe: str | None = None
-    assunto: str | None = None
-    situacao: str | None = None
-    movements: list[str] = field(default_factory=list)
-
-    def as_text(self) -> str:
-        header = " — ".join(
-            part for part in (self.classe, self.assunto, self.situacao) if part
-        )
-        lines = [f"Teor do processo {self.process_number} (fonte: {self.source})"]
-        if header:
-            lines.append(header)
-        if self.movements:
-            lines.append("Movimentações:")
-            lines.extend(f"- {movement}" for movement in self.movements)
-        return "\n".join(lines)
 
 
 def _digits_to_unified(digits: str) -> tuple[str, str]:
@@ -159,13 +131,7 @@ def _extract_content(page, process_number: str, source: str) -> ProcessContent:
     rows = page.query_selector_all("#tabelaTodasMovimentacoes tr")
     if not rows:
         rows = page.query_selector_all("#tabelaUltimasMovimentacoes tr")
-    movements: list[str] = []
-    seen: set[str] = set()
-    for row in rows:
-        text = " ".join(row.inner_text().split())[:300]
-        if text and text not in seen:
-            seen.add(text)
-            movements.append(text)
+    movements = dedupe_movements([row.inner_text() for row in rows])
 
     return ProcessContent(
         process_number=process_number,
