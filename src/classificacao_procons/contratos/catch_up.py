@@ -247,10 +247,8 @@ def _skip_signed_processing_reason(
         return "not_fully_signed"
     if controle_item is None:
         return None
-    if not _status_matches(controle_item.status, CONTROLE_STATUS_ASSINADO):
-        return None
-    if controle_item.related_contract_item_ids:
-        return "already_in_contratos"
+    if _status_matches(controle_item.status, CONTROLE_STATUS_ASSINADO):
+        return "controle_already_assinado"
     return None
 
 

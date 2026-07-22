@@ -76,6 +76,51 @@ class TestCatchUpContratos:
     @patch("classificacao_procons.contratos.catch_up.build_controle_assinaturas_index")
     @patch("classificacao_procons.contratos.catch_up.list_documents")
     @patch("classificacao_procons.contratos.catch_up.sync_controle_from_autentique")
+    def test_should_skip_when_controle_already_assinado(
+        self,
+        sync_mock,
+        list_mock,
+        index_mock,
+        process_mock,
+    ) -> None:
+        sync_mock.return_value = ControleSyncResult(
+            total_autentique=1,
+            already_in_monday=1,
+            created=0,
+            updated=0,
+            skipped=0,
+            failed=0,
+            dry_run=False,
+            items=(),
+        )
+        document = _signed_document(document_id="doc-2", name="Contrato B")
+        list_mock.return_value = [document]
+        index_mock.return_value = MagicMock(
+            get_item=lambda _document_id: ControleAssinaturasItem(
+                item_id="101",
+                name="Contrato B",
+                status="Assinado",
+                tipo="Fornecedor",
+                signature_link=None,
+                related_contract_item_ids=(),
+            ),
+        )
+
+        result = catch_up_contratos(
+            monday_api_token="monday-token",
+            autentique_api_token="autentique-token",
+            dry_run=False,
+            max_pages=1,
+        )
+
+        assert result.skipped == 1
+        assert result.processed == 0
+        process_mock.assert_not_called()
+
+    @patch("classificacao_procons.contratos.catch_up.process_finished_document")
+    @patch("classificacao_procons.contratos.catch_up.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.catch_up.list_documents")
+    @patch("classificacao_procons.contratos.catch_up.sync_controle_from_autentique")
     def test_should_skip_when_already_linked_in_contratos(
         self,
         sync_mock,
