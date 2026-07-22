@@ -1,0 +1,4 @@
+{
+  "install": "python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'",
+  "start": "sleep 3 && if [ -n \"$GITHUB_ACTIONS_PAT\" ]; then printf '%s' \"$GITHUB_ACTIONS_PAT\" | gh auth login --with-token 2>/dev/null || true; fi && if [ -n \"$GMAIL_OAUTH_JSON\" ] && [ -n \"$GMAIL_TOKEN_JSON\" ]; then mkdir -p credentials && printf '%s' \"$GMAIL_OAUTH_JSON\" > credentials/gmail-oauth.json && printf '%s' \"$GMAIL_TOKEN_JSON\" > credentials/gmail-token.json; fi"
+}

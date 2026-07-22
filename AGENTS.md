@@ -32,3 +32,23 @@ Nunca commitar `credentials/`. Usar Secret Manager em produção.
 - `playwright install chromium` já roda no update script; o browser fica em `~/.cache/ms-playwright` e sobe headless sem `--with-deps`. É necessário só para o scraping do portal (comando `process`).
 - `ruff check src tests` e `pytest` rodam 100% offline (os testes mockam Gmail/Drive/Monday/Gemini/Playwright).
 - Os comandos que tocam serviços externos — `procon-email list/process/elaborate/register-monday` — exigem segredos ausentes neste ambiente: OAuth do Google (`credentials/gmail-oauth.json` + token), token do Monday (`MONDAY_API_TOKEN`) e `GEMINI_API_KEY`. Sem eles, valide via testes mockados e via o parser offline (`parse_procon_notification_body`), que é o núcleo do MVP.
+
+### Contratos (Autentique → Monday/Drive)
+
+Setup completo: `docs/cloud-agent-autonomia.md`.
+
+Secrets necessários no Cursor: `MONDAY_API_TOKEN`, `AUTENTIQUE_API_TOKEN`, `GEMINI_API_KEY`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`, `GITHUB_ACTIONS_PAT`.
+
+Catch-up em lote (recomendado):
+
+```bash
+source .venv/bin/activate
+contratos-webhook sync-all --dry-run --max-pages 50
+contratos-webhook sync-all --max-pages 50
+```
+
+Disparar workflow no GitHub (requer `GITHUB_ACTIONS_PAT` configurado no start hook):
+
+```bash
+gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" -f dry_run=false -f max_pages=50
+```
