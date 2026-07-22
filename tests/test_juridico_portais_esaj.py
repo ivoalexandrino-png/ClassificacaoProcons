@@ -7,8 +7,17 @@ from classificacao_procons.juridico.portais import esaj
 from classificacao_procons.juridico.portais.esaj import (
     PortalError,
     PortalRequiresInteraction,
+    _digits_to_unified,
     _login,
 )
+
+
+class TestDigitsToUnified:
+    def test_should_split_into_esaj_fields(self) -> None:
+        # bug real: o campo unificado leva só NNNNNNN-DD.AAAA; o foro é à parte
+        numero, foro = _digits_to_unified("10026051620258260198")
+        assert numero == "1002605-16.2025"
+        assert foro == "0198"
 
 CRED = PortalCredential("TJ-SP", "E-SAJ", "40712473807", "senha-nova")
 

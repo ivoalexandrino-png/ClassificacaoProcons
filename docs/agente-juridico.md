@@ -143,8 +143,18 @@ juridico portal --numero "1013709-36.2020.8.26.0309"   # infere o tribunal
 juridico portal --numero "…" --tribunal TJSP --headed   # navegador visível
 ```
 
-Cobertura atual: **e-SAJ** (TJSP, TJCE e outros TJs SAJ), com login por
-CPF/senha. A sessão autenticada é persistida em `credentials/esaj-session.json`
+O comando tenta primeiro a **consulta pública** (sem login, sem 2FA), que
+cobre a maioria dos processos e traz classe, situação e movimentação. Só cai
+para o modo **autenticado** quando o processo está em segredo de justiça (ou
+com `--autenticado`).
+
+```bash
+juridico portal --numero "1002605-16.2025.8.26.0198"   # público, sem login
+juridico portal --numero "…" --autenticado --token-code 123456
+```
+
+Cobertura atual: **e-SAJ** (TJSP, TJCE e outros TJs SAJ). No modo autenticado o
+login é por CPF/senha e a sessão é persistida em `credentials/esaj-session.json`
 (cookies), então o 2FA só é pedido de vez em quando, não a cada consulta.
 
 **2FA (código por e-mail):** o e-SAJ envia um código ao e-mail cadastrado.

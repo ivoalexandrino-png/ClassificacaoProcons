@@ -68,8 +68,13 @@ class ProcessContent:
 
 
 def _digits_to_unified(digits: str) -> tuple[str, str]:
-    """Divide os 20 dígitos em (NNNNNNN-DD.AAAA.J.TR, OOOO) para o e-SAJ."""
-    return f"{digits[:7]}-{digits[7:9]}.{digits[9:13]}.{digits[13]}.{digits[14:16]}", digits[16:]
+    """Divide os 20 dígitos para os dois campos do e-SAJ.
+
+    O campo ``numeroDigitoAnoUnificado`` recebe só ``NNNNNNN-DD.AAAA`` (o
+    ``.J.TR`` fica fixo na tela); ``foroNumeroUnificado`` recebe os 4 dígitos
+    finais (o foro/origem).
+    """
+    return f"{digits[:7]}-{digits[7:9]}.{digits[9:13]}", digits[16:]
 
 
 def _is_logged_in(page) -> bool:
@@ -150,14 +155,17 @@ def _extract_content(page, process_number: str, source: str) -> ProcessContent:
         value = " ".join(element.inner_text().split()).strip()
         return value or None
 
-    rows = page.query_selector_all(
-        "#tabelaTodasMovimentacoes tr, #tabelaUltimasMovimentacoes tr",
-    )
-    movements = []
+    # "Todas" e "Últimas" repetem linhas; preferir a tabela completa e dedupe.
+    rows = page.query_selector_all("#tabelaTodasMovimentacoes tr")
+    if not rows:
+        rows = page.query_selector_all("#tabelaUltimasMovimentacoes tr")
+    movements: list[str] = []
+    seen: set[str] = set()
     for row in rows:
-        text = " ".join(row.inner_text().split())
-        if text:
-            movements.append(text[:300])
+        text = " ".join(row.inner_text().split())[:300]
+        if text and text not in seen:
+            seen.add(text)
+            movements.append(text)
 
     return ProcessContent(
         process_number=process_number,
@@ -177,17 +185,77 @@ def _consult_instance(page, *, base_url: str, process_number: str, source: str) 
     page.wait_for_timeout(1200)
     page.fill("#numeroDigitoAnoUnificado", numero_unificado)
     page.fill("#foroNumeroUnificado", foro)
-    page.click("#pbConsultar")
-    page.wait_for_timeout(3500)
+    consultar = page.query_selector("#botaoConsultarProcessos") or page.query_selector(
+        "#pbConsultar",
+    )
+    if consultar is None:
+        raise PortalError("Botão de consulta do e-SAJ não encontrado.")
+    try:
+        with page.expect_navigation(timeout=_DEFAULT_TIMEOUT_MS):
+            consultar.click()
+    except PlaywrightTimeoutError:
+        # algumas consultas resolvem sem troca de URL (resultado inline)
+        page.wait_for_timeout(2000)
+    page.wait_for_timeout(2000)
 
     content = page.content().lower()
     if "recaptcha" in content or "g-recaptcha" in content:
         raise PortalRequiresInteraction("e-SAJ exigiu captcha na consulta.")
-    if "senha do processo" in content or "necessário identificar-se" in content:
+
+    # A extração define o veredito: se veio classe/movimentação, é público.
+    # "Identificar-se" aparece no cabeçalho de QUALQUER página e não indica
+    # segredo por si só — o sinal real é a tela "SENHA DO PROCESSO" sem dados.
+    result = _extract_content(page, process_number, source)
+    if result.movements or result.classe:
+        return result
+
+    if "senha do processo" in content or "segredo de justi" in content:
         raise PortalRequiresInteraction(
             "Processo em segredo de justiça: exige advogado habilitado nos autos.",
         )
-    return _extract_content(page, process_number, source)
+    raise PortalError("Processo não encontrado nesta instância do e-SAJ.")
+
+
+def fetch_process_content_public(
+    process_number: str,
+    *,
+    headless: bool = True,
+) -> ProcessContent:
+    """Consulta pública do e-SAJ, SEM login (cobre processos não sigilosos).
+
+    É o caminho preferencial: não precisa de credencial nem 2FA. Levanta
+    ``PortalRequiresInteraction`` quando o processo está em segredo de justiça
+    (exige advogado habilitado) — aí o chamador tenta o modo autenticado.
+    """
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=headless)
+        try:
+            page = browser.new_context(user_agent=_USER_AGENT).new_page()
+            page.set_default_timeout(_DEFAULT_TIMEOUT_MS)
+            last_error: PortalError | None = None
+            for base_url, source in (
+                (ESAJ_CPOPG_URL, "e-SAJ 1º grau (público)"),
+                (ESAJ_CPOSG_URL, "e-SAJ 2º grau (público)"),
+            ):
+                try:
+                    content = _consult_instance(
+                        page,
+                        base_url=base_url,
+                        process_number=process_number,
+                        source=source,
+                    )
+                except PortalRequiresInteraction:
+                    raise
+                except PortalError as exc:
+                    last_error = exc
+                    continue
+                if content.movements or content.classe:
+                    return content
+            if last_error:
+                raise last_error
+            raise PortalError("Processo não encontrado no e-SAJ (1º/2º grau).")
+        finally:
+            browser.close()
 
 
 def fetch_process_content(

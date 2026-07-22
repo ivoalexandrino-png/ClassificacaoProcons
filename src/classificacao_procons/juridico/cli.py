@@ -142,6 +142,7 @@ def _run_portal(args: argparse.Namespace) -> int:
         PortalError,
         PortalRequiresInteraction,
         fetch_process_content,
+        fetch_process_content_public,
     )
     from classificacao_procons.juridico.portais.token_email import gmail_token_provider
 
@@ -150,44 +151,74 @@ def _run_portal(args: argparse.Namespace) -> int:
         print(json.dumps({"error": "Tribunal não identificado pelo número CNJ."}), file=sys.stderr)
         return 1
 
-    try:
-        credential = get_tribunal_credential(acronym)
-    except AcessosError as exc:
-        print(json.dumps({"error": str(exc)}), file=sys.stderr)
-        return 1
-    if credential is None:
+    content = None
+    secrecy = False
+
+    # 1) Consulta pública primeiro (sem login, sem 2FA) — cobre a maioria.
+    if not args.autenticado:
+        try:
+            content = fetch_process_content_public(args.numero, headless=not args.headed)
+        except PortalRequiresInteraction as exc:
+            secrecy = True
+            print(
+                json.dumps({"info": f"Consulta pública indisponível: {exc}"}, ensure_ascii=False),
+                file=sys.stderr,
+            )
+        except PortalError as exc:
+            print(
+                json.dumps({"info": f"Consulta pública falhou: {exc}"}, ensure_ascii=False),
+                file=sys.stderr,
+            )
+
+    # 2) Fallback autenticado (segredo de justiça / --autenticado).
+    if content is None and (secrecy or args.autenticado):
+        try:
+            credential = get_tribunal_credential(acronym)
+        except AcessosError as exc:
+            print(json.dumps({"error": str(exc)}), file=sys.stderr)
+            return 1
+        if credential is None:
+            print(
+                json.dumps(
+                    {"error": f"Sem credencial de portal para {acronym} no quadro Acessos."},
+                ),
+                file=sys.stderr,
+            )
+            return 2 if secrecy else 1
+        if "SAJ" not in credential.system:
+            message = f"Portal {credential.system} de {acronym} ainda não suportado (só e-SAJ)."
+            print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
+            return 1
+
+        token_provider = None
+        if args.token_email:
+            token_provider = lambda login: gmail_token_provider(  # noqa: E731
+                login,
+                token_path=args.token,
+            )
+        elif args.token_code:
+            token_provider = lambda _login: args.token_code  # noqa: E731
+
+        try:
+            content = fetch_process_content(
+                args.numero,
+                credential=credential,
+                headless=not args.headed,
+                token_provider=token_provider,
+            )
+        except PortalRequiresInteraction as exc:
+            print(json.dumps({"needs_interaction": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+        except PortalError as exc:
+            print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 1
+
+    if content is None:
         print(
-            json.dumps({"error": f"Sem credencial de portal para {acronym} no quadro Acessos."}),
+            json.dumps({"needs_interaction": "Consulta pública sem dados."}, ensure_ascii=False),
             file=sys.stderr,
         )
-        return 1
-    if "SAJ" not in credential.system:
-        message = f"Portal {credential.system} de {acronym} ainda não suportado (só e-SAJ)."
-        print(json.dumps({"error": message}, ensure_ascii=False), file=sys.stderr)
-        return 1
-
-    token_provider = None
-    if args.token_email:
-        token_provider = lambda login: gmail_token_provider(  # noqa: E731
-            login,
-            token_path=args.token,
-        )
-    elif args.token_code:
-        token_provider = lambda _login: args.token_code  # noqa: E731
-
-    try:
-        content = fetch_process_content(
-            args.numero,
-            credential=credential,
-            headless=not args.headed,
-            token_provider=token_provider,
-        )
-    except PortalRequiresInteraction as exc:
-        print(json.dumps({"needs_interaction": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 2
-    except PortalError as exc:
-        print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
-        return 1
 
     print(
         json.dumps(
@@ -319,6 +350,11 @@ def main(argv: list[str] | None = None) -> int:
         "--headed",
         action="store_true",
         help="Abre o navegador com interface (para resolver captcha/2FA manualmente).",
+    )
+    portal_parser.add_argument(
+        "--autenticado",
+        action="store_true",
+        help="Pula a consulta pública e vai direto ao login (útil para segredo de justiça).",
     )
     portal_parser.add_argument(
         "--token-email",
