@@ -14,6 +14,7 @@ from classificacao_procons.contratos.autentique.webhook import (
     parse_webhook_event,
     verify_webhook_signature,
 )
+from classificacao_procons.contratos.catch_up import CatchUpError, catch_up_contratos
 from classificacao_procons.contratos.contratos_enrichment import (
     ContratosEnrichmentError,
     process_contratos_item_created,
@@ -108,6 +109,34 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if result.failed == 0 else 1
+
+
+def _run_sync_all(args: argparse.Namespace) -> int:
+    try:
+        result = catch_up_contratos(
+            dry_run=args.dry_run,
+            max_pages=args.max_pages,
+            skip_gemini=args.skip_gemini,
+            token_path=args.token,
+            process_signed=not args.sync_controle_only,
+        )
+    except CatchUpError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    summary = {
+        "sync_created": result.sync_created,
+        "sync_updated": result.sync_updated,
+        "sync_failed": result.sync_failed,
+        "signed_total": result.signed_total,
+        "processed": result.processed,
+        "skipped": result.skipped,
+        "process_failed": result.process_failed,
+        "dry_run": result.dry_run,
+        "items": [item.__dict__ for item in result.items if item.action != "skipped"],
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if result.sync_failed == 0 and result.process_failed == 0 else 1
 
 
 def _run_process_document(args: argparse.Namespace) -> int:
@@ -314,6 +343,21 @@ def main(argv: list[str] | None = None) -> int:
         help="Não atualiza itens existentes (somente cria faltantes)",
     )
     sync_parser.set_defaults(func=_run_sync_controle)
+
+    sync_all_parser = subparsers.add_parser(
+        "sync-all",
+        help="Sincroniza Controle Assinaturas e processa contratos totalmente assinados",
+    )
+    sync_all_parser.add_argument("--dry-run", action="store_true")
+    sync_all_parser.add_argument("--max-pages", type=int, default=50)
+    sync_all_parser.add_argument("--skip-gemini", action="store_true")
+    sync_all_parser.add_argument("--token", default="credentials/gmail-token.json")
+    sync_all_parser.add_argument(
+        "--sync-controle-only",
+        action="store_true",
+        help="Somente sincroniza Controle Assinaturas (não processa assinados)",
+    )
+    sync_all_parser.set_defaults(func=_run_sync_all)
 
     register_parser = subparsers.add_parser(
         "register-controle",
