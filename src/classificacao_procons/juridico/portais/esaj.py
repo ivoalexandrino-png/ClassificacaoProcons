@@ -181,22 +181,26 @@ def _consult_instance(page, *, base_url: str, process_number: str, source: str) 
     digits = process_number_digits(process_number)
     numero_unificado, foro = _digits_to_unified(digits)
 
-    page.goto(base_url, timeout=_DEFAULT_TIMEOUT_MS, wait_until="domcontentloaded")
-    page.wait_for_timeout(1200)
-    page.fill("#numeroDigitoAnoUnificado", numero_unificado)
-    page.fill("#foroNumeroUnificado", foro)
-    consultar = page.query_selector("#botaoConsultarProcessos") or page.query_selector(
-        "#pbConsultar",
-    )
-    if consultar is None:
-        raise PortalError("Botão de consulta do e-SAJ não encontrado.")
     try:
-        with page.expect_navigation(timeout=_DEFAULT_TIMEOUT_MS):
-            consultar.click()
-    except PlaywrightTimeoutError:
-        # algumas consultas resolvem sem troca de URL (resultado inline)
+        page.goto(base_url, timeout=_DEFAULT_TIMEOUT_MS, wait_until="domcontentloaded")
+        page.wait_for_timeout(1200)
+        page.fill("#numeroDigitoAnoUnificado", numero_unificado)
+        page.fill("#foroNumeroUnificado", foro)
+        consultar = page.query_selector("#botaoConsultarProcessos") or page.query_selector(
+            "#pbConsultar",
+        )
+        if consultar is None:
+            raise PortalError("Botão de consulta do e-SAJ não encontrado.")
+        try:
+            with page.expect_navigation(timeout=_DEFAULT_TIMEOUT_MS):
+                consultar.click()
+        except PlaywrightTimeoutError:
+            # algumas consultas resolvem sem troca de URL (resultado inline)
+            page.wait_for_timeout(2000)
         page.wait_for_timeout(2000)
-    page.wait_for_timeout(2000)
+    except PlaywrightTimeoutError as exc:
+        # e-SAJ lento/instável: não pode virar traceback — vira erro tratável.
+        raise PortalError(f"e-SAJ não respondeu a tempo ({source}): {exc}") from exc
 
     content = page.content().lower()
     if "recaptcha" in content or "g-recaptcha" in content:

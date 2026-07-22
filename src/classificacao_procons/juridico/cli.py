@@ -156,11 +156,11 @@ def _run_portal(args: argparse.Namespace) -> int:
     # suportado no scraping; os demais são reportados claramente.
     sistema = None
     try:
-        from classificacao_procons.juridico.datajud import DataJudError, fetch_case_metadata
+        from classificacao_procons.juridico.datajud import fetch_case_metadata
 
         metadata = fetch_case_metadata(args.numero)
         sistema = metadata.sistema if metadata else None
-    except DataJudError:
+    except Exception:  # noqa: BLE001 — roteamento é otimização; nunca derruba o comando
         sistema = None
     if sistema and "SAJ" not in sistema.upper():
         print(
