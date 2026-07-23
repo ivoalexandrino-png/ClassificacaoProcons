@@ -14,6 +14,8 @@ venv/
 
 # Credenciais (nunca commitar)
 credentials/
+!src/classificacao_procons/credentials/
+!src/classificacao_procons/credentials/*.py
 *.json
 !pyproject.toml
 !.cursor/environment.json
