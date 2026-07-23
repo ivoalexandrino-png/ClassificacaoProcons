@@ -54,6 +54,7 @@ class PipelineOptions:
     monday_board_name: str = DEFAULT_BOARD_NAME
     monday_group_name: str = DEFAULT_GROUP_NAME
     register_on_monday: bool = True
+    source_ids: tuple[str, ...] | None = None
 
 
 def calculate_sac_and_legal_deadlines(*, base_date: date | None = None) -> tuple[date, date]:
@@ -197,7 +198,9 @@ def _process_proconsumidor_notification(
         token_path=options.token_path,
     )
 
-    sac_deadline, legal_deadline = calculate_sac_and_legal_deadlines()
+    sac_deadline, legal_deadline = calculate_sac_and_legal_deadlines(
+        base_date=notification.received_at.date(),
+    )
 
     processed_protocols.add(state_key)
     _save_processed_protocols(options.state_path, processed_protocols)
@@ -270,7 +273,9 @@ def _process_sp_notification(
         token_path=options.token_path,
     )
 
-    sac_deadline, legal_deadline = calculate_sac_and_legal_deadlines()
+    sac_deadline, legal_deadline = calculate_sac_and_legal_deadlines(
+        base_date=notification.received_at.date(),
+    )
 
     processed_protocols.add(protocol)
     _save_processed_protocols(options.state_path, processed_protocols)
@@ -355,6 +360,14 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
         notifications = fetcher.list_unread_notifications(max_results=options.max_results)
     except GmailClientError as exc:
         raise PipelineError(str(exc)) from exc
+
+    if options.source_ids:
+        allowed_sources = {source_id.strip().lower() for source_id in options.source_ids}
+        notifications = [
+            notification
+            for notification in notifications
+            if notification.source_id in allowed_sources
+        ]
 
     processed_protocols = _load_processed_protocols(options.state_path)
     results: list[ProcessedComplaint] = []

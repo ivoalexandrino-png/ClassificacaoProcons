@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -17,6 +17,11 @@ from classificacao_procons.models import ProconComplaint
 
 DEFAULT_TIMEOUT_MS: Final = 90_000
 PAGE_LOAD_WAIT_UNTIL: Final = "domcontentloaded"
+DEFAULT_USER_AGENT: Final = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
 
 
 class ProconsumidorPortalError(RuntimeError):
@@ -112,16 +117,44 @@ def _select_supplier(page: Page, supplier_label: str) -> bool:
     return True
 
 
-def _login(page: Page, credentials: PortalCredentials) -> None:
-    portal_url = credentials.portal_url or "https://proconsumidor.mj.gov.br/#/login"
-    page.goto(portal_url, wait_until=PAGE_LOAD_WAIT_UNTIL, timeout=DEFAULT_TIMEOUT_MS)
+def _create_browser_context(playwright: Any, *, headless: bool) -> tuple[Any, Any]:
+    browser = playwright.chromium.launch(
+        headless=headless,
+        args=["--disable-blink-features=AutomationControlled"],
+    )
+    context = browser.new_context(
+        locale="pt-BR",
+        timezone_id="America/Sao_Paulo",
+        user_agent=DEFAULT_USER_AGENT,
+        viewport={"width": 1920, "height": 1080},
+        extra_http_headers={
+            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        },
+    )
+    return browser, context
+
+
+def _assert_portal_accessible(page: Page, *, portal_url: str) -> None:
+    response = page.goto(portal_url, wait_until=PAGE_LOAD_WAIT_UNTIL, timeout=DEFAULT_TIMEOUT_MS)
     page.wait_for_timeout(3000)
+
+    if response is not None and response.status == 403:
+        raise ProconsumidorPortalError(
+            "Portal Proconsumidor bloqueou o acesso (403). "
+            "Execute em máquina local no Brasil (scripts/run-proconsumidor-process.sh).",
+        )
 
     body_text = page.inner_text("body")
     if "403" in body_text and "Forbidden" in body_text:
         raise ProconsumidorPortalError(
-            "Portal Proconsumidor bloqueou o acesso (403). Execute localmente ou ajuste rede.",
+            "Portal Proconsumidor bloqueou o acesso (403). "
+            "Execute em máquina local no Brasil (scripts/run-proconsumidor-process.sh).",
         )
+
+
+def _login(page: Page, credentials: PortalCredentials) -> None:
+    portal_url = credentials.portal_url or "https://proconsumidor.mj.gov.br/#/login"
+    _assert_portal_accessible(page, portal_url=portal_url)
 
     _click_gestor_empresa_access(page)
     _fill_login_fields(page, login=credentials.login, password=credentials.password)
@@ -217,8 +250,8 @@ def fetch_proconsumidor_complaint(options: ProconsumidorPortalOptions) -> Procon
     options.download_dir.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=options.headless)
-        page = browser.new_page()
+        browser, context = _create_browser_context(playwright, headless=options.headless)
+        page = context.new_page()
         try:
             if not _open_complaint_with_suppliers(
                 page,
@@ -253,4 +286,5 @@ def fetch_proconsumidor_complaint(options: ProconsumidorPortalOptions) -> Procon
                 "Portal Proconsumidor não respondeu a tempo durante o acesso.",
             ) from exc
         finally:
+            context.close()
             browser.close()
