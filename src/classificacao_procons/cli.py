@@ -9,12 +9,12 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-from classificacao_procons.email import GmailClientError, GmailProconFetcher
 from classificacao_procons.email.auth import (
     get_authorization_url,
     has_valid_token,
     save_token_from_code,
 )
+from classificacao_procons.email.gmail import GmailClientError, GmailProconFetcher
 from classificacao_procons.pipeline import (
     PipelineError,
     PipelineOptions,
@@ -105,6 +105,17 @@ def _serialize_processed(item: object) -> dict[str, object]:
     return data
 
 
+def _parse_source_ids(value: str | None) -> tuple[str, ...] | None:
+    if not value:
+        return None
+    source_ids = tuple(
+        source_id.strip().lower()
+        for source_id in value.split(",")
+        if source_id.strip()
+    )
+    return source_ids or None
+
+
 def _run_process(args: argparse.Namespace) -> int:
     if not args.dry_run and not has_valid_token(args.token):
         print("Google não conectado. Rode: procon-email auth", file=sys.stderr)
@@ -117,6 +128,7 @@ def _run_process(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
         credentials_path=args.credentials,
         token_path=args.token,
+        source_ids=_parse_source_ids(args.sources),
     )
 
     try:
@@ -269,6 +281,10 @@ def main(argv: list[str] | None = None) -> int:
         "--no-mark-read",
         action="store_true",
         help="Não marca os e-mails como lidos após sucesso.",
+    )
+    process_parser.add_argument(
+        "--sources",
+        help="Filtra fontes (ex.: proconsumidor,sp). Padrão: todas.",
     )
 
     elaborate_parser = subparsers.add_parser(
