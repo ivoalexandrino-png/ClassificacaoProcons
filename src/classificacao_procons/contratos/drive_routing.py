@@ -14,8 +14,52 @@ from classificacao_procons.contratos.constants import (
     DRIVE_SUBFOLDER_RH_CLT,
     DRIVE_SUBFOLDER_RH_PJ,
     MINUTAS_SUBFOLDER_BY_CATEGORY,
-    MONDAY_GROUP_CONTRATOS_PJ,
-    MONDAY_GROUP_CONTRATOS_TRABALHO_CLT,
+    MONDAY_TIPO_RH,
+)
+
+RH_PJ_KEYWORDS: tuple[str, ...] = (
+    "contrato pj",
+    "prestador pj",
+    "pessoa juridica intern",
+    "pessoa jurídica intern",
+    "contrato de prestacao de servicos pj",
+    "contrato de prestação de serviços pj",
+)
+
+RH_CLT_KEYWORDS: tuple[str, ...] = (
+    "rescisao",
+    "rescisão",
+    "admissao",
+    "admissão",
+    "contrato de trabalho",
+    "clt",
+    "empregado",
+    "funcionario",
+    "funcionário",
+    "holerite",
+    "trct",
+    "acordo trabalhista",
+    "codigo de conduta",
+    "código de conduta",
+    "codigo de etica",
+    "código de ética",
+    "ferias",
+    "férias",
+    "tce",
+    "termo de compromisso de estagio",
+    "termo de compromisso de estágio",
+    "compromisso de estagio",
+    "compromisso de estágio",
+    "contrato de estagio",
+    "contrato de estágio",
+    "estagio",
+    "estágio",
+    "estagiario",
+    "estagiário",
+    "aviso previo",
+    "aviso prévio",
+    "homologacao",
+    "homologação",
 )
 
 
@@ -31,39 +75,30 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", without_marks).strip()
 
 
+def _matches_rh_pj(blob: str) -> bool:
+    if any(keyword in blob for keyword in RH_PJ_KEYWORDS):
+        return True
+    return " pj " in f" {blob} " and "intern" in blob
+
+
+def _matches_rh_clt(blob: str) -> bool:
+    return any(keyword in blob for keyword in RH_CLT_KEYWORDS)
+
+
+def is_rh_document(*, document_name: str, contract_type: str | None = None) -> bool:
+    """Indica se o documento pertence ao fluxo de RH."""
+    blob = _normalize_text(f"{document_name} {contract_type or ''}")
+    return _matches_rh_pj(blob) or _matches_rh_clt(blob)
+
+
 def infer_category(*, document_name: str, contract_type: str | None = None) -> str:
     """Infere categoria do contrato a partir do nome e tipo extraído."""
     blob = _normalize_text(f"{document_name} {contract_type or ''}")
 
-    rh_clt_keywords = (
-        "rescisao",
-        "rescisão",
-        "admissao",
-        "admissão",
-        "contrato de trabalho",
-        "clt",
-        "empregado",
-        "funcionario",
-        "funcionário",
-        "holerite",
-        "trct",
-        "acordo trabalhista",
-    )
-    if any(keyword in blob for keyword in rh_clt_keywords):
+    if _matches_rh_pj(blob):
+        return "rh_pj"
+    if _matches_rh_clt(blob):
         return "rh_clt"
-
-    rh_pj_keywords = (
-        "contrato pj",
-        "prestador pj",
-        "pessoa juridica intern",
-        "pessoa jurídica intern",
-        "contrato de prestacao de servicos pj",
-        "contrato de prestação de serviços pj",
-    )
-    if any(keyword in blob for keyword in rh_pj_keywords):
-        return "rh_pj"
-    if " pj " in f" {blob} " and "intern" in blob:
-        return "rh_pj"
 
     locacao_keywords = ("locacao", "locação", "imovel", "imóvel", "tower bridge")
     if any(keyword in blob for keyword in locacao_keywords):
@@ -97,10 +132,10 @@ def infer_category(*, document_name: str, contract_type: str | None = None) -> s
 
 def infer_monday_tipo(*, document_name: str, category: str) -> str:
     """Mapeia categoria para label Tipo do Monday (Controle Assinaturas / Contratos)."""
-    if category == "rh_clt":
-        return MONDAY_GROUP_CONTRATOS_TRABALHO_CLT
-    if category == "rh_pj":
-        return MONDAY_GROUP_CONTRATOS_PJ
+    if category in {"rh_clt", "rh_pj"}:
+        return MONDAY_TIPO_RH
+    if is_rh_document(document_name=document_name):
+        return MONDAY_TIPO_RH
     if category == "influencer":
         return "Contratos Influencers (Queens)"
     if category == "nda":
