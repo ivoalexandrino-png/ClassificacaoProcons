@@ -31,6 +31,9 @@ DEFAULT_GMAIL_QUERY = (
     ') OR ('
     'from:admin@proconsumidor.mj.gov.br '
     'subject:"Proconsumidor - Notificação"'
+    ') OR ('
+    'from:admin@proconsumidor.mj.gov.br '
+    'subject:"Notificação de Carta"'
     ')'
 )
 

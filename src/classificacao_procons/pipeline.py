@@ -11,7 +11,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from classificacao_procons.credentials import CredentialsError, resolve_portal_credentials
 from classificacao_procons.drive import DriveClientError, save_complaint_pdf
-from classificacao_procons.email import GmailClientError, GmailProconFetcher
+from classificacao_procons.email.gmail import GmailClientError, GmailProconFetcher
 from classificacao_procons.google_auth import (
     DEFAULT_DRIVE_PARENT_FOLDER_ID,
     has_gmail_modify_access,

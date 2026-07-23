@@ -50,3 +50,20 @@ class TestProconsumidorEmailParser:
     def test_should_raise_when_complaint_number_missing(self) -> None:
         with pytest.raises(ProconsumidorEmailParseError, match="Número da reclamação"):
             parse_proconsumidor_notification_body(html="<p>Sem número</p>")
+
+    def test_should_match_carta_notification_subject(self) -> None:
+        assert is_proconsumidor_notification(
+            subject="Notificação de Carta",
+            sender=PROCONSUMIDOR_SENDER,
+        )
+
+    def test_should_parse_carta_notification_body(self) -> None:
+        parsed = parse_proconsumidor_notification_body(
+            text=(
+                "Foi emitida uma carta relativa à reclamação "
+                "26.07.0158.011.00300-301 pelo Procon do Distrito Federal - DF."
+            ),
+        )
+        assert parsed.complaint_number == "26.07.0158.011.00300-301"
+        assert parsed.regional_org == "Procon do Distrito Federal - DF"
+        assert parsed.state == "DF"
