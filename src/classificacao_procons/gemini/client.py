@@ -33,6 +33,10 @@ class GeminiClientError(RuntimeError):
     """Erro ao gerar conteúdo com Gemini."""
 
 
+class GeminiQuotaError(GeminiClientError):
+    """Cota do Gemini esgotada (HTTP 429). Condição transitória — tentar depois."""
+
+
 @dataclass(frozen=True)
 class GeneratedResponse:
     analysis: str
@@ -169,7 +173,7 @@ def _gemini_request(
                 time.sleep(_gemini_retry_delay_seconds(code=exc.code, attempt=attempt))
                 continue
             if exc.code == 429:
-                raise GeminiClientError(
+                raise GeminiQuotaError(
                     "Limite gratuito do Gemini esgotado. Aguarde alguns minutos e tente "
                     "de novo, ou ative cobrança em https://aistudio.google.com/apikey",
                 ) from exc

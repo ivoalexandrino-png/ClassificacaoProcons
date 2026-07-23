@@ -21,6 +21,7 @@ from classificacao_procons.drive.reader import (
 )
 from classificacao_procons.gemini import (
     GeminiClientError,
+    GeminiQuotaError,
     generate_procon_response,
     get_api_key_from_env,
 )
@@ -198,6 +199,16 @@ def _elaborate_case(
             consumer_name=case.item_name,
             protocol_number=case.protocol_number or case.item_id,
             api_key=gemini_key,
+        )
+    except GeminiQuotaError as exc:
+        # Cota do Gemini esgotada: condição transitória. Não é erro do caso —
+        # fica pendente para a próxima execução (não marca como processado).
+        return ElaboratedResponseResult(
+            status="deferred_quota",
+            monday_item_id=case.item_id,
+            consumer_name=case.item_name,
+            protocol_number=case.protocol_number,
+            error=str(exc),
         )
     except GeminiClientError as exc:
         return ElaboratedResponseResult(

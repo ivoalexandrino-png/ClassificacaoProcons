@@ -1,10 +1,16 @@
 """Testes do cliente Gemini."""
 
+import io
+import urllib.error
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from classificacao_procons.gemini.client import (
     DEFAULT_GEMINI_MODEL,
     GeminiClientError,
+    GeminiQuotaError,
+    _gemini_request,
     _gemini_retry_delay_seconds,
     _is_retryable_gemini_http_error,
     _ordered_model_candidates,
@@ -13,6 +19,27 @@ from classificacao_procons.gemini.client import (
     get_model_from_env,
     resolve_gemini_model,
 )
+
+
+class TestGeminiQuota:
+    def test_should_raise_quota_error_on_429_after_retries(self) -> None:
+        error_429 = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=io.BytesIO(b"quota"),
+        )
+        with (
+            patch("urllib.request.urlopen", MagicMock(side_effect=error_429)),
+            patch("classificacao_procons.gemini.client.time.sleep"),
+            pytest.raises(GeminiQuotaError, match="Limite gratuito"),
+        ):
+            _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
+
+    def test_quota_error_is_gemini_client_error(self) -> None:
+        # subclasse: quem captura GeminiClientError também trata a cota (fallback)
+        assert issubclass(GeminiQuotaError, GeminiClientError)
 
 
 class TestGeminiHelpers:
