@@ -36,7 +36,10 @@ class AutentiqueDocumentSummary:
 
     @property
     def is_fully_signed(self) -> bool:
-        return bool(self.signed_pdf_url)
+        return is_document_fully_signed(
+            signed_pdf_url=self.signed_pdf_url,
+            signatures=self.signatures,
+        )
 
     def primary_signature_link(self) -> str | None:
         for signer in self.signatures:
@@ -52,6 +55,21 @@ class AutentiqueDocument:
     signed_pdf_url: str | None
     original_pdf_url: str | None
     created_at: str | None = None
+
+
+def is_document_fully_signed(
+    *,
+    signed_pdf_url: str | None,
+    signatures: tuple[AutentiqueSigner, ...] = (),
+) -> bool:
+    """Indica se todas as assinaturas foram concluídas.
+
+    O Autentique pode expor `files.signed` antes do último signatário; por isso
+    validamos cada assinatura quando a lista de signatários está disponível.
+    """
+    if signatures:
+        return all(signer.signed_at for signer in signatures)
+    return bool(signed_pdf_url)
 
 
 def get_api_token_from_env() -> str | None:
