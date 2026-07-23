@@ -76,6 +76,8 @@ def fetch_case_communications(
         raise ComunicaError(f"Comunica HTTP {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
         raise ComunicaError(f"Comunica indisponível: {exc.reason}") from exc
+    except OSError as exc:
+        raise ComunicaError(f"Comunica indisponível: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise ComunicaError("Comunica retornou resposta inválida.") from exc
 

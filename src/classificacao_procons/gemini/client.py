@@ -33,6 +33,10 @@ class GeminiClientError(RuntimeError):
     """Erro ao gerar conteúdo com Gemini."""
 
 
+class GeminiQuotaError(GeminiClientError):
+    """Cota do Gemini esgotada (HTTP 429). Condição transitória — tentar depois."""
+
+
 @dataclass(frozen=True)
 class GeneratedResponse:
     analysis: str
@@ -67,6 +71,8 @@ def list_generate_content_models(*, api_key: str) -> list[str]:
         raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
         raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+    except OSError as exc:
+        raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise GeminiClientError("Gemini retornou lista de modelos inválida.") from exc
 
@@ -167,7 +173,7 @@ def _gemini_request(
                 time.sleep(_gemini_retry_delay_seconds(code=exc.code, attempt=attempt))
                 continue
             if exc.code == 429:
-                raise GeminiClientError(
+                raise GeminiQuotaError(
                     "Limite gratuito do Gemini esgotado. Aguarde alguns minutos e tente "
                     "de novo, ou ative cobrança em https://aistudio.google.com/apikey",
                 ) from exc
@@ -181,6 +187,13 @@ def _gemini_request(
             raise last_error from exc
         except urllib.error.URLError as exc:
             raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+        except OSError as exc:
+            # Timeout no meio da leitura chega como TimeoutError (OSError),
+            # sem virar URLError — tratar como indisponibilidade retentável.
+            if attempt < MAX_GEMINI_RETRIES - 1:
+                time.sleep(_gemini_retry_delay_seconds(code=503, attempt=attempt))
+                continue
+            raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
         except json.JSONDecodeError as exc:
             raise GeminiClientError("Gemini retornou resposta inválida.") from exc
         else:

@@ -4,16 +4,24 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 
 from classificacao_procons.juridico.cnj import datajud_alias, process_number_digits
-from classificacao_procons.juridico.models import CaseMovement
+from classificacao_procons.juridico.models import CaseMetadata, CaseMovement
 
 DATAJUD_BASE_URL = "https://api-publica.datajud.cnj.jus.br"
 ENV_DATAJUD_API_KEY = "DATAJUD_API_KEY"
 REQUEST_TIMEOUT_SECONDS = 30
+MAX_DATAJUD_RETRIES = 4
+RETRY_BASE_DELAY_SECONDS = 8
+_RETRYABLE_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
+# Intervalo mínimo entre chamadas ao DataJud, para não estourar o rate limit
+# do CNJ quando um lote grande de intimações é processado em sequência.
+MIN_INTERVAL_SECONDS = 1.5
+_last_request_at = 0.0
 
 
 class DataJudError(RuntimeError):
@@ -59,6 +67,54 @@ def _movement_from_payload(payload: dict) -> CaseMovement | None:
     )
 
 
+def _throttle() -> None:
+    """Espaça as chamadas ao DataJud para respeitar o rate limit do CNJ."""
+    global _last_request_at
+    now = time.monotonic()
+    wait = MIN_INTERVAL_SECONDS - (now - _last_request_at)
+    if wait > 0:
+        time.sleep(wait)
+    _last_request_at = time.monotonic()
+
+
+def _request_with_retries(*, url: str, payload: dict, api_key: str) -> dict:
+    """POST no DataJud com retry para 429/5xx e timeouts (backoff exponencial)."""
+    last_error: DataJudError | None = None
+
+    for attempt in range(MAX_DATAJUD_RETRIES):
+        _throttle()
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"APIKey {api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            last_error = DataJudError(f"DataJud HTTP {exc.code}: {error_body}")
+            if exc.code not in _RETRYABLE_HTTP_CODES or attempt == MAX_DATAJUD_RETRIES - 1:
+                raise last_error from exc
+        except urllib.error.URLError as exc:
+            raise DataJudError(f"DataJud indisponível: {exc.reason}") from exc
+        except json.JSONDecodeError as exc:
+            raise DataJudError("DataJud retornou resposta inválida.") from exc
+        except OSError as exc:
+            # Timeout de leitura no meio da resposta chega como TimeoutError,
+            # que o urllib não converte em URLError — retentável.
+            last_error = DataJudError(f"DataJud indisponível: {exc}")
+            if attempt == MAX_DATAJUD_RETRIES - 1:
+                raise last_error from exc
+        time.sleep(RETRY_BASE_DELAY_SECONDS * (2**attempt))
+
+    raise last_error if last_error else DataJudError("DataJud indisponível.")
+
+
 def fetch_case_movements(
     process_number: str,
     *,
@@ -81,40 +137,27 @@ def fetch_case_movements(
             "Informe o alias do DataJud manualmente (ex.: tjsp).",
         )
 
-    payload = {
-        "query": {"match": {"numeroProcesso": process_number_digits(process_number)}},
-        "size": 1,
-    }
-    request = urllib.request.Request(
-        f"{DATAJUD_BASE_URL}/api_publica_{resolved_alias}/_search",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": f"APIKey {key}",
-            "Content-Type": "application/json",
+    source = _fetch_source(process_number, key=key, resolved_alias=resolved_alias)
+    return _movements_from_source(source, limit=limit)
+
+
+def _fetch_source(process_number: str, *, key: str, resolved_alias: str) -> dict:
+    body = _request_with_retries(
+        url=f"{DATAJUD_BASE_URL}/api_publica_{resolved_alias}/_search",
+        payload={
+            "query": {"match": {"numeroProcesso": process_number_digits(process_number)}},
+            "size": 1,
         },
-        method="POST",
+        api_key=key,
     )
-
-    try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-            body = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="replace")
-        raise DataJudError(f"DataJud HTTP {exc.code}: {error_body}") from exc
-    except urllib.error.URLError as exc:
-        raise DataJudError(f"DataJud indisponível: {exc.reason}") from exc
-    except json.JSONDecodeError as exc:
-        raise DataJudError("DataJud retornou resposta inválida.") from exc
-
     hits = body.get("hits", {}).get("hits", [])
-    if not hits:
-        return []
+    return hits[0].get("_source", {}) if hits else {}
 
-    source = hits[0].get("_source", {})
+
+def _movements_from_source(source: dict, *, limit: int) -> list[CaseMovement]:
     raw_movements = source.get("movimentos", [])
     if not isinstance(raw_movements, list):
         return []
-
     movements = [
         movement
         for payload_item in raw_movements
@@ -123,6 +166,62 @@ def fetch_case_movements(
     ]
     movements.sort(key=_movement_sort_key, reverse=True)
     return movements[:limit]
+
+
+def _metadata_from_source(source: dict) -> CaseMetadata:
+    nivel = source.get("nivelSigilo")
+    sistema = source.get("sistema")
+    classe = source.get("classe")
+    return CaseMetadata(
+        nivel_sigilo=int(nivel) if isinstance(nivel, int | str) and str(nivel).isdigit() else None,
+        sistema=str(sistema.get("nome")) if isinstance(sistema, dict) else None,
+        grau=str(source.get("grau")) if source.get("grau") else None,
+        classe=str(classe.get("nome")) if isinstance(classe, dict) else None,
+    )
+
+
+def fetch_case_dossier(
+    process_number: str,
+    *,
+    api_key: str | None = None,
+    alias: str | None = None,
+    limit: int = 20,
+) -> tuple[CaseMetadata | None, list[CaseMovement]]:
+    """Metadados + andamentos numa única consulta ao DataJud (economiza chamadas)."""
+    key = _normalize_api_key(api_key) if api_key else get_api_key_from_env()
+    if not key:
+        raise DataJudError("DATAJUD_API_KEY não configurada.")
+    resolved_alias = alias or datajud_alias(process_number)
+    if not resolved_alias:
+        raise DataJudError(f"Tribunal não suportado para o processo {process_number}.")
+
+    source = _fetch_source(process_number, key=key, resolved_alias=resolved_alias)
+    if not source:
+        return None, []
+    return _metadata_from_source(source), _movements_from_source(source, limit=limit)
+
+
+def fetch_case_metadata(
+    process_number: str,
+    *,
+    api_key: str | None = None,
+    alias: str | None = None,
+) -> CaseMetadata | None:
+    """Metadados do processo no DataJud: sigilo, sistema, grau e classe.
+
+    Usado para (1) detectar segredo de justiça sem depender de login e (2)
+    rotear a consulta ao portal certo (SAJ, PJe, Projudi, eproc). Retorna
+    ``None`` quando o processo não está indexado.
+    """
+    key = _normalize_api_key(api_key) if api_key else get_api_key_from_env()
+    if not key:
+        raise DataJudError("DATAJUD_API_KEY não configurada.")
+    resolved_alias = alias or datajud_alias(process_number)
+    if not resolved_alias:
+        raise DataJudError(f"Tribunal não suportado para o processo {process_number}.")
+
+    source = _fetch_source(process_number, key=key, resolved_alias=resolved_alias)
+    return _metadata_from_source(source) if source else None
 
 
 def _movement_sort_key(movement: CaseMovement) -> float:

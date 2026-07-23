@@ -5,10 +5,20 @@ from __future__ import annotations
 import os
 import re
 import unicodedata
-from datetime import datetime
+from datetime import UTC, date, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from classificacao_procons.juridico.models import (
+    ACTION_ACOMPANHAR_ANDAMENTO,
+    ACTION_ANALISAR_RECURSO,
+    ACTION_COMPARECER_AUDIENCIA,
+    ACTION_CONTESTAR,
+    ACTION_CUMPRIR_ACORDO,
+    ACTION_MANIFESTAR,
+    ACTION_REVISAR_ANDAMENTO,
+    ACTION_VERIFICAR_ENCERRAMENTO,
+    ACTION_VERIFICAR_SEGREDO,
     NOTIFICATION_TYPE_AUDIENCIA,
     NOTIFICATION_TYPE_CITACAO,
     NOTIFICATION_TYPE_DECISAO,
@@ -17,6 +27,8 @@ from classificacao_procons.juridico.models import (
     ParsedIntimacao,
     Providencia,
 )
+from classificacao_procons.juridico.prazos import subtract_business_days
+from classificacao_procons.juridico.providencias import ACTION_LABELS
 from classificacao_procons.monday.client import (
     MondayBoardContext,
     MondayClientError,
@@ -50,6 +62,11 @@ ENV_AUDIENCIAS_BOARD_ID = "MONDAY_AUDIENCIAS_BOARD_ID"
 ENV_AUDIENCIAS_GROUP_NAME = "MONDAY_AUDIENCIAS_GROUP_NAME"
 DEFAULT_AUDIENCIAS_BOARD_NAME = "audiencias"
 DEFAULT_AUDIENCIAS_GROUP_NAME = ""
+
+# Margem de segurança: a data lançada nas colunas de prazo antecede o prazo
+# fatal real em 2 dias úteis; o prazo real fica registrado na análise e nas
+# anotações do item.
+MONDAY_SAFETY_BUSINESS_DAYS = 2
 
 FIELD_INTIMACAO_ID = "intimacao_id"
 FIELD_PROCESS_NUMBER = "process_number"
@@ -263,11 +280,27 @@ def resolve_juridico_field_for_column(title: str) -> str | None:
     return None
 
 
+def monday_due_date(due_date: date | None) -> date | None:
+    """Data lançada no quadro: 2 dias úteis antes do prazo fatal real."""
+    if due_date is None:
+        return None
+    return subtract_business_days(due_date, MONDAY_SAFETY_BUSINESS_DAYS)
+
+
+# Horários das intimações chegam em hora local de Brasília (sem fuso); o
+# Monday interpreta o campo "time" como UTC e exibe no fuso da conta.
+_BRAZIL_TZ = ZoneInfo("America/Sao_Paulo")
+
+
 def _hearing_column_value(hearing: datetime) -> dict[str, str]:
-    value: dict[str, str] = {"date": hearing.date().isoformat()}
-    if (hearing.hour, hearing.minute) != (0, 0):
-        value["time"] = hearing.strftime("%H:%M:%S")
-    return value
+    if (hearing.hour, hearing.minute) == (0, 0):
+        return {"date": hearing.date().isoformat()}
+    localized = hearing.replace(tzinfo=_BRAZIL_TZ) if hearing.tzinfo is None else hearing
+    utc_moment = localized.astimezone(UTC)
+    return {
+        "date": utc_moment.date().isoformat(),
+        "time": utc_moment.strftime("%H:%M:%S"),
+    }
 
 
 def build_providencia_column_values(
@@ -286,7 +319,7 @@ def build_providencia_column_values(
         FIELD_COURT_UNIT: intimacao.court_unit,
         FIELD_NOTIFICATION_TYPE: NOTIFICATION_TYPE_LABELS.get(intimacao.notification_type),
         FIELD_PROVIDENCIA: providencia.description,
-        FIELD_DUE_DATE: providencia.due_date,
+        FIELD_DUE_DATE: monday_due_date(providencia.due_date),
         FIELD_SUMMARY: intimacao.summary,
         FIELD_ANALYSIS: analysis,
     }
@@ -304,6 +337,11 @@ def build_providencia_column_values(
                 column_values[column.id] = _hearing_column_value(providencia.hearing_datetime)
             continue
 
+        if field == FIELD_PROCESS_NUMBER and column.column_type not in {"text", "long_text"}:
+            # "Processos Judiciais" (board_relation) e afins exigem id de item,
+            # não texto — enviar o número CNJ falharia silenciosamente.
+            continue
+
         raw_value = values.get(field)
         if raw_value in (None, ""):
             continue
@@ -312,11 +350,87 @@ def build_providencia_column_values(
     return column_values
 
 
+def _apply_audiencias_date_default(
+    columns: list[MondayColumn],
+    column_values: dict[str, Any],
+    providencia: Providencia,
+) -> dict[str, Any]:
+    """No quadro de audiências, a coluna de data chama-se só "Data".
+
+    Sem "audiência" no título ela não entra no mapeamento por palavra-chave;
+    aqui a data/hora da audiência é aplicada a colunas de data chamadas
+    "Data" que ainda não receberam valor.
+    """
+    if providencia.hearing_datetime is None:
+        return column_values
+    for column in columns:
+        if (
+            column.column_type == "date"
+            and _normalize_title(column.title) == "data"
+            and column.id not in column_values
+        ):
+            column_values[column.id] = _hearing_column_value(providencia.hearing_datetime)
+    return column_values
+
+
 def _find_intimacao_id_column(columns: list[MondayColumn]) -> MondayColumn | None:
     for column in columns:
         if resolve_juridico_field_for_column(column.title) == FIELD_INTIMACAO_ID:
             return column
     return None
+
+
+def _has_analysis_column(columns: list[MondayColumn]) -> bool:
+    return any(
+        resolve_juridico_field_for_column(column.title) == FIELD_ANALYSIS for column in columns
+    )
+
+
+def _search_items_by_name(
+    *,
+    api_token: str,
+    board_id: str,
+    name_contains: str,
+) -> list[dict[str, str]]:
+    """Itens do board cujo nome contém o texto (ex.: número do processo)."""
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: ID!, $itemName: CompareValue!) {
+          boards(ids: [$boardId]) {
+            items_page(
+              limit: 25
+              query_params: {
+                rules: [{column_id: "name", compare_value: $itemName, operator: contains_text}]
+              }
+            ) {
+              items {
+                id
+                name
+                group {
+                  title
+                }
+              }
+            }
+          }
+        }
+        """,
+        variables={"boardId": board_id, "itemName": name_contains},
+    )
+
+    boards = data.get("boards", [])
+    if not boards:
+        return []
+    items = boards[0].get("items_page", {}).get("items", [])
+    return [
+        {
+            "id": str(item["id"]),
+            "name": str(item.get("name", "")).strip(),
+            "group_title": str((item.get("group") or {}).get("title", "")),
+        }
+        for item in items
+        if item.get("id")
+    ]
 
 
 def _find_existing_item_id_by_name(
@@ -332,36 +446,137 @@ def _find_existing_item_id_by_name(
     uma providência nova (ex.: sentença meses depois) gera nome diferente e
     cria item novo.
     """
-    data = _graphql_request(
+    items = _search_items_by_name(
+        api_token=api_token,
+        board_id=board_id,
+        name_contains=item_name,
+    )
+    for item in items:
+        if item["name"] == item_name:
+            return item["id"]
+    return None
+
+
+# Grupos de itens já resolvidos: um prazo cumprido/concluído não "cobre" uma
+# intimação nova — só itens em grupos ativos contam para a deduplicação.
+_DONE_GROUP_KEYWORDS: tuple[str, ...] = (
+    "cumprido",
+    "concluido",
+    "finalizado",
+    "resolvido",
+    "feito",
+    "done",
+)
+
+
+def _is_done_group(group_title: str) -> bool:
+    normalized = _normalize_title(group_title)
+    return any(keyword in normalized for keyword in _DONE_GROUP_KEYWORDS)
+
+
+# Ordem das fases processuais das providências: um item existente de fase
+# igual ou posterior torna redundante uma providência nova de fase anterior.
+_ACTION_STAGE_RANK: dict[str, int] = {
+    ACTION_CONTESTAR: 1,
+    ACTION_MANIFESTAR: 2,
+    ACTION_COMPARECER_AUDIENCIA: 2,
+    ACTION_ACOMPANHAR_ANDAMENTO: 2,
+    ACTION_REVISAR_ANDAMENTO: 2,
+    ACTION_ANALISAR_RECURSO: 3,
+    ACTION_CUMPRIR_ACORDO: 4,
+    ACTION_VERIFICAR_ENCERRAMENTO: 5,
+    # Segredo de justiça é ortogonal às fases: não deve deduplicar contra elas.
+    ACTION_VERIFICAR_SEGREDO: 2,
+}
+
+_DESCRIPTION_TO_ACTION: dict[str, str] = {
+    _normalize_title(description): action for action, description in ACTION_LABELS.items()
+}
+
+
+def _action_for_item_name(item_name: str) -> str | None:
+    """Extrai a providência de um nome de item no formato "processo — descrição"."""
+    _, separator, description = item_name.partition("—")
+    if not separator:
+        return None
+    return _DESCRIPTION_TO_ACTION.get(_normalize_title(description))
+
+
+def _find_covering_item_for_process(
+    *,
+    api_token: str,
+    board_id: str,
+    process_number: str,
+    action_type: str,
+) -> dict[str, str] | None:
+    """Item aberto do mesmo processo que já cobre a providência nova.
+
+    Cobre quando a providência existente é a mesma, ou de fase posterior
+    (ex.: item "Analisar sentença" torna redundante um novo "Apresentar
+    contestação" vindo de push atrasado do mesmo processo). Itens em grupos
+    de prazos já cumpridos/concluídos não contam: prazo cumprido não cobre
+    intimação nova.
+    """
+    new_rank = _ACTION_STAGE_RANK.get(action_type)
+    items = _search_items_by_name(
+        api_token=api_token,
+        board_id=board_id,
+        name_contains=process_number,
+    )
+    for item in items:
+        if process_number not in item["name"]:
+            continue
+        if _is_done_group(item.get("group_title", "")):
+            continue
+        existing_action = _action_for_item_name(item["name"])
+        if existing_action is None:
+            continue
+        if existing_action == action_type:
+            return item
+        existing_rank = _ACTION_STAGE_RANK.get(existing_action)
+        if new_rank is not None and existing_rank is not None and existing_rank > new_rank:
+            return item
+    return None
+
+
+def _create_update(*, api_token: str, item_id: str, body: str) -> None:
+    """Anota o item existente (update na timeline do Monday)."""
+    _graphql_request(
         api_token=api_token,
         query="""
-        query ($boardId: ID!, $itemName: CompareValue!) {
-          boards(ids: [$boardId]) {
-            items_page(
-              limit: 10
-              query_params: {
-                rules: [{column_id: "name", compare_value: $itemName, operator: contains_text}]
-              }
-            ) {
-              items {
-                id
-                name
-              }
-            }
+        mutation ($itemId: ID!, $body: String!) {
+          create_update(item_id: $itemId, body: $body) {
+            id
           }
         }
         """,
-        variables={"boardId": board_id, "itemName": item_name},
+        variables={"itemId": item_id, "body": body},
     )
 
-    boards = data.get("boards", [])
-    if not boards:
-        return None
-    items = boards[0].get("items_page", {}).get("items", [])
-    for item in items:
-        if str(item.get("name", "")).strip() == item_name:
-            return str(item["id"])
-    return None
+
+def _skipped_duplicate_result(
+    *,
+    api_token: str,
+    context: MondayBoardContext,
+    existing_item_id: str,
+    duplicate_note: str | None,
+) -> MondayRegistrationResult:
+    if duplicate_note:
+        _create_update(
+            api_token=api_token,
+            item_id=existing_item_id,
+            body=duplicate_note,
+        )
+    return MondayRegistrationResult(
+        item_id=existing_item_id,
+        board_id=context.board_id,
+        item_url=_build_item_url(
+            account_slug=context.account_slug,
+            board_id=context.board_id,
+            item_id=existing_item_id,
+        ),
+        skipped_duplicate=True,
+    )
 
 
 def _create_item_with_dedupe(
@@ -371,15 +586,18 @@ def _create_item_with_dedupe(
     item_name: str,
     column_values: dict[str, Any],
     dedupe_value: str,
+    process_number: str | None = None,
+    action_type: str | None = None,
+    duplicate_note: str | None = None,
 ) -> MondayRegistrationResult:
     """Cria item no board, pulando quando a intimação já foi cadastrada.
 
-    Deduplica em duas camadas: pela coluna "ID Intimação" (quando o board
-    tiver uma) e pelo nome do item (processo + providência), que cobre
-    e-mails distintos sobre a mesma intimação.
+    Deduplica em três camadas: pela coluna "ID Intimação" (quando o board
+    tiver uma), pelo nome do item (processo + providência) e — quando
+    ``process_number``/``action_type`` são informados — por conteúdo: item
+    existente do mesmo processo com a mesma providência ou de fase posterior
+    não é recriado; o item existente recebe uma anotação (``duplicate_note``).
     """
-    existing_item_id: str | None = None
-
     intimacao_id_column = _find_intimacao_id_column(context.columns)
     if intimacao_id_column is not None:
         existing_item_id = _find_existing_item_id(
@@ -388,25 +606,42 @@ def _create_item_with_dedupe(
             protocol_column=intimacao_id_column,
             protocol_number=dedupe_value,
         )
+        if existing_item_id is not None:
+            # Mesmo e-mail reprocessado: nada novo para anotar.
+            return _skipped_duplicate_result(
+                api_token=api_token,
+                context=context,
+                existing_item_id=existing_item_id,
+                duplicate_note=None,
+            )
 
-    if existing_item_id is None:
+    if process_number and action_type:
+        covering_item = _find_covering_item_for_process(
+            api_token=api_token,
+            board_id=context.board_id,
+            process_number=process_number,
+            action_type=action_type,
+        )
+        if covering_item is not None:
+            return _skipped_duplicate_result(
+                api_token=api_token,
+                context=context,
+                existing_item_id=covering_item["id"],
+                duplicate_note=duplicate_note,
+            )
+    else:
         existing_item_id = _find_existing_item_id_by_name(
             api_token=api_token,
             board_id=context.board_id,
             item_name=item_name,
         )
-
-    if existing_item_id is not None:
-        return MondayRegistrationResult(
-            item_id=existing_item_id,
-            board_id=context.board_id,
-            item_url=_build_item_url(
-                account_slug=context.account_slug,
-                board_id=context.board_id,
-                item_id=existing_item_id,
-            ),
-            skipped_duplicate=True,
-        )
+        if existing_item_id is not None:
+            return _skipped_duplicate_result(
+                api_token=api_token,
+                context=context,
+                existing_item_id=existing_item_id,
+                duplicate_note=duplicate_note,
+            )
 
     item_id = _create_item(
         api_token=api_token,
@@ -463,13 +698,38 @@ def register_providencia(
             analysis=analysis,
         ),
     )
-    return _create_item_with_dedupe(
+    due = providencia.due_date.strftime("%d/%m/%Y") if providencia.due_date else "sem prazo"
+    duplicate_note = (
+        f"Nova intimação recebida (e-mail {message_id}): providência sugerida "
+        f'"{providencia.description}" (prazo fatal real {due}) já coberta por este '
+        "item — nenhum item novo foi criado. Revisar se algo mudou."
+    )
+    result = _create_item_with_dedupe(
         api_token=token,
         context=context,
         item_name=f"{intimacao.process_number} — {providencia.description}",
         column_values=column_values,
         dedupe_value=message_id,
+        process_number=intimacao.process_number,
+        action_type=providencia.action_type,
+        duplicate_note=duplicate_note,
     )
+
+    # O quadro real de prazos não tem coluna de análise/teor: sem isso, o
+    # andamento específico e o parecer iriam para lugar nenhum — vão como
+    # update na timeline do item recém-criado.
+    if analysis and not result.skipped_duplicate and not _has_analysis_column(context.columns):
+        body = analysis
+        launched = monday_due_date(providencia.due_date)
+        if providencia.due_date and launched:
+            body += (
+                f"\n\nPrazo fatal real: {providencia.due_date.strftime('%d/%m/%Y')}. "
+                f"Lançado no quadro em {launched.strftime('%d/%m/%Y')} "
+                f"({MONDAY_SAFETY_BUSINESS_DAYS} dias úteis de antecedência, por segurança)."
+            )
+        _create_update(api_token=token, item_id=result.item_id, body=body)
+
+    return result
 
 
 def register_audiencia(
@@ -505,22 +765,39 @@ def register_audiencia(
     )
     column_values = sanitize_column_values(
         context.column_details,
-        build_providencia_column_values(
+        _apply_audiencias_date_default(
             context.columns,
-            intimacao=intimacao,
-            providencia=providencia,
-            message_id=message_id,
-            analysis=analysis,
+            build_providencia_column_values(
+                context.columns,
+                intimacao=intimacao,
+                providencia=providencia,
+                message_id=message_id,
+                analysis=analysis,
+            ),
+            providencia,
         ),
     )
     item_name = f"{intimacao.process_number} — Audiência {hearing.strftime('%d/%m/%Y %H:%M')}"
-    return _create_item_with_dedupe(
+    duplicate_note = (
+        f"Nova intimação recebida (e-mail {message_id}): audiência de "
+        f"{hearing.strftime('%d/%m/%Y %H:%M')} já cadastrada neste item — "
+        "nenhum item novo foi criado. Revisar se algo mudou."
+    )
+    result = _create_item_with_dedupe(
         api_token=token,
         context=context,
         item_name=item_name,
         column_values=column_values,
         dedupe_value=message_id,
+        duplicate_note=duplicate_note,
     )
+
+    # Como no quadro de prazos: sem coluna de análise, o teor e o parecer
+    # vão como update na timeline do item.
+    if analysis and not result.skipped_duplicate and not _has_analysis_column(context.columns):
+        _create_update(api_token=token, item_id=result.item_id, body=analysis)
+
+    return result
 
 
 def describe_boards(

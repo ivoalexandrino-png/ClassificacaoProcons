@@ -19,13 +19,31 @@ _UF_BY_ESTADUAL_TR: dict[str, str] = {
 _MILITAR_ESTADUAL_BY_TR: dict[str, str] = {"13": "TJMMG", "21": "TJMRS", "26": "TJMSP"}
 
 
+def is_valid_check_digit(
+    sequential: str,
+    check: str,
+    year: str,
+    segment: str,
+    tribunal: str,
+    origin: str,
+) -> bool:
+    """Valida o dígito verificador da numeração única (Res. CNJ 65/2008).
+
+    ISO 7064 mod 97-10: DD = 98 − (NNNNNNNAAAAJTROOOO·100 mod 97). Filtra
+    falsos positivos do regex (códigos de barras, ids longos em links).
+    """
+    payload = int(f"{sequential}{year}{segment}{tribunal}{origin}00")
+    return 98 - (payload % 97) == int(check)
+
+
 def extract_process_number(text: str) -> str | None:
-    """Encontra o primeiro número de processo CNJ no texto, normalizado."""
-    match = PROCESS_NUMBER_PATTERN.search(text)
-    if not match:
-        return None
-    sequential, check, year, segment, tribunal, origin = match.groups()
-    return f"{sequential}-{check}.{year}.{segment}.{tribunal}.{origin}"
+    """Encontra o primeiro número de processo CNJ válido no texto."""
+    for match in PROCESS_NUMBER_PATTERN.finditer(text):
+        sequential, check, year, segment, tribunal, origin = match.groups()
+        if not is_valid_check_digit(sequential, check, year, segment, tribunal, origin):
+            continue
+        return f"{sequential}-{check}.{year}.{segment}.{tribunal}.{origin}"
+    return None
 
 
 def process_number_digits(process_number: str) -> str:

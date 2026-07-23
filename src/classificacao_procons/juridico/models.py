@@ -15,6 +15,11 @@ ACTION_CONTESTAR = "contestar"
 ACTION_MANIFESTAR = "manifestar"
 ACTION_COMPARECER_AUDIENCIA = "comparecer_audiencia"
 ACTION_ANALISAR_RECURSO = "analisar_recurso"
+ACTION_ACOMPANHAR_ANDAMENTO = "acompanhar_andamento"
+ACTION_REVISAR_ANDAMENTO = "revisar_andamento"
+ACTION_CUMPRIR_ACORDO = "cumprir_acordo"
+ACTION_VERIFICAR_ENCERRAMENTO = "verificar_encerramento"
+ACTION_VERIFICAR_SEGREDO = "verificar_segredo"
 ACTION_TOMAR_CIENCIA = "tomar_ciencia"
 
 
@@ -43,6 +48,9 @@ class ParsedIntimacao:
     deadline_date: date | None = None
     hearing_datetime: datetime | None = None
     summary: str = ""
+    # Push/publicação com gatilho de prazo (intimação publicada/expedida/lida,
+    # carta entregue) mas sem o prazo explícito no texto.
+    has_deadline_trigger: bool = False
 
 
 @dataclass(frozen=True)
@@ -56,6 +64,7 @@ class Providencia:
     hearing_datetime: datetime | None = None
     requires_legal_document: bool = False
     affects_contingency: bool = False
+    stage_note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,6 +74,21 @@ class CaseMovement:
     movement_name: str
     movement_code: int | None = None
     movement_datetime: datetime | None = None
+
+
+@dataclass(frozen=True)
+class CaseMetadata:
+    """Metadados do processo no DataJud (sigilo, sistema, grau, classe)."""
+
+    nivel_sigilo: int | None = None
+    sistema: str | None = None
+    grau: str | None = None
+    classe: str | None = None
+
+    @property
+    def is_secret(self) -> bool:
+        """Segredo de justiça: nível de sigilo maior que zero."""
+        return self.nivel_sigilo is not None and self.nivel_sigilo > 0
 
 
 @dataclass(frozen=True)
@@ -105,8 +129,11 @@ class ProcessedIntimacao:
     analysis: str = ""
     analysis_source: str = ""
     communications_count: int = 0
+    stage_note: str | None = None
     monday_item_url: str | None = None
     monday_audiencia_url: str | None = None
+    monday_prazo_skipped_duplicate: bool = False
     monday_error: str | None = None
+    case_sync_note: str | None = None
     events_emitted: list[str] = field(default_factory=list)
     error: str | None = None
