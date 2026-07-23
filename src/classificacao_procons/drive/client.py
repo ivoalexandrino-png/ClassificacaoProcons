@@ -55,6 +55,7 @@ def build_drive_pdf_filename(
     consumer_name: str,
     cip_number: str,
     complaint_date: date | None,
+    doc_label: str = "Atendimento Procon",
 ) -> str:
     """Gera nome do PDF: Atendimento Procon - NOME - CIP - DATA."""
     safe_name = _sanitize_file_name_part(consumer_name)
@@ -69,7 +70,25 @@ def build_drive_pdf_filename(
     if not safe_cip:
         raise DriveClientError("Número da CIP vazio.")
 
-    return f"Atendimento Procon - {safe_name} - {safe_cip} - {safe_date}.pdf"
+    return f"{doc_label} - {safe_name} - {safe_cip} - {safe_date}.pdf"
+
+
+def build_drive_pa_pdf_filename(
+    *,
+    consumer_name: str,
+    administrative_process_number: str,
+    complaint_date: date | None,
+) -> str:
+    """Gera nome do PDF de Processo Administrativo no Drive."""
+    safe_pa = _sanitize_file_name_part(administrative_process_number.replace("/", "-"))
+    if not safe_pa:
+        raise DriveClientError("Número do processo administrativo vazio.")
+    return build_drive_pdf_filename(
+        consumer_name=consumer_name,
+        cip_number=safe_pa,
+        complaint_date=complaint_date,
+        doc_label="Processo Administrativo Procon",
+    )
 
 
 def _build_drive_service(token_path: str | None = None):
@@ -241,6 +260,7 @@ def save_complaint_pdf(
     complaint_date: date | None = None,
     parent_folder_id: str | None = None,
     token_path: str | None = None,
+    file_name: str | None = None,
 ) -> DriveUploadResult:
     """
     Cria pasta da consumidora (se não existir) e envia o PDF.
@@ -261,7 +281,8 @@ def save_complaint_pdf(
         service,
         folder_id=folder_id,
         pdf_path=Path(pdf_path),
-        file_name=build_drive_pdf_filename(
+        file_name=file_name
+        or build_drive_pdf_filename(
             consumer_name=consumer_name,
             cip_number=cip_number,
             complaint_date=complaint_date,

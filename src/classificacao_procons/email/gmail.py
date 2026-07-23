@@ -12,7 +12,9 @@ from googleapiclient.errors import HttpError
 
 from classificacao_procons.email.parser import (
     ProconEmailParseError,
-    is_procon_cip_notification,
+    extract_administrative_process_number,
+    is_procon_notification,
+    is_procon_pa_notification,
     parse_procon_notification_body,
 )
 from classificacao_procons.google_auth import load_credentials
@@ -20,7 +22,8 @@ from classificacao_procons.models import ProconNotificationEmail
 
 DEFAULT_GMAIL_QUERY = (
     'from:procon.naoresponder@procon.sp.gov.br '
-    'subject:"Fundação Procon-SP - Notificação de emissão de CIP"'
+    '(subject:"Fundação Procon-SP - Notificação de emissão de CIP" '
+    'OR subject:"Processo Administrativo Aberto:")'
 )
 
 
@@ -77,7 +80,7 @@ def _parse_received_at(headers: list[dict[str, str]]) -> datetime:
 
 
 class GmailProconFetcher:
-    """Busca e-mails de notificação CIP do Procon-SP via Gmail API."""
+    """Busca e-mails de notificação do Procon-SP (CIP e PA) via Gmail API."""
 
     def __init__(self, service: Any) -> None:
         self._service = service
@@ -138,7 +141,7 @@ class GmailProconFetcher:
         subject = _header_value(headers, "Subject")
         sender = _header_value(headers, "From")
 
-        if not is_procon_cip_notification(subject=subject, sender=sender):
+        if not is_procon_notification(subject=subject, sender=sender):
             return None
 
         text_plain, text_html = _extract_bodies(payload)
@@ -147,6 +150,17 @@ class GmailProconFetcher:
         except ProconEmailParseError:
             return None
 
+        notification_type = (
+            "processo_administrativo"
+            if is_procon_pa_notification(subject=subject, sender=sender)
+            else "cip"
+        )
+        administrative_process_number = (
+            extract_administrative_process_number(subject)
+            if notification_type == "processo_administrativo"
+            else None
+        )
+
         return ProconNotificationEmail(
             message_id=message_id,
             subject=subject,
@@ -154,7 +168,9 @@ class GmailProconFetcher:
             received_at=_parse_received_at(headers),
             portal_url=parsed.portal_url,
             access_code=parsed.access_code,
+            notification_type=notification_type,
             protocol_number=parsed.protocol_number,
+            administrative_process_number=administrative_process_number,
             email_response_deadline=parsed.response_deadline,
             raw_snippet=message.get("snippet"),
         )

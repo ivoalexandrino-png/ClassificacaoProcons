@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 PROCON_SP_SENDER: Final = "procon.naoresponder@procon.sp.gov.br"
 PROCON_SP_SUBJECT: Final = "Fundação Procon-SP - Notificação de emissão de CIP"
+PROCON_PA_SUBJECT_PREFIX: Final = "Processo Administrativo Aberto:"
 PROCON_PORTAL_HOST: Final = "fornecedor2.procon.sp.gov.br"
 PROCON_PORTAL_LOGIN_URL: Final = f"https://{PROCON_PORTAL_HOST}/login"
 
@@ -31,6 +32,11 @@ _PROTOCOL_PATTERN = re.compile(
 
 _DEADLINE_PATTERN = re.compile(
     r"prazo final para an[aá]lise e resposta [eé]\s*(\d{2}-\d{2}-\d{4})",
+    re.IGNORECASE,
+)
+
+_PA_NUMBER_PATTERN = re.compile(
+    r"processo\s+administrativo\s+aberto\s*:\s*([\d.]+)",
     re.IGNORECASE,
 )
 
@@ -63,6 +69,32 @@ def is_procon_cip_notification(*, subject: str, sender: str) -> bool:
         normalized_subject == PROCON_SP_SUBJECT
         and normalized_sender == PROCON_SP_SENDER
     )
+
+
+def is_procon_pa_notification(*, subject: str, sender: str) -> bool:
+    """Retorna True se o e-mail corresponde a abertura de Processo Administrativo."""
+    normalized_subject = " ".join(subject.split())
+    normalized_sender = normalize_email_address(sender)
+    if normalized_sender != PROCON_SP_SENDER:
+        return False
+    return normalized_subject.lower().startswith(PROCON_PA_SUBJECT_PREFIX.lower())
+
+
+def is_procon_notification(*, subject: str, sender: str) -> bool:
+    """Retorna True para notificações CIP ou Processo Administrativo do Procon-SP."""
+    return is_procon_cip_notification(subject=subject, sender=sender) or is_procon_pa_notification(
+        subject=subject,
+        sender=sender,
+    )
+
+
+def extract_administrative_process_number(subject: str) -> str | None:
+    """Extrai o número do processo administrativo do assunto do e-mail."""
+    normalized_subject = " ".join(subject.split())
+    match = _PA_NUMBER_PATTERN.search(normalized_subject)
+    if match:
+        return match.group(1).strip()
+    return None
 
 
 def _html_to_text(html: str) -> str:

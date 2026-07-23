@@ -10,6 +10,7 @@ from pathlib import Path
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from classificacao_procons.drive import DriveClientError, save_complaint_pdf
+from classificacao_procons.drive.client import build_drive_pa_pdf_filename
 from classificacao_procons.email import GmailClientError, GmailProconFetcher
 from classificacao_procons.google_auth import (
     DEFAULT_DRIVE_PARENT_FOLDER_ID,
@@ -21,12 +22,15 @@ from classificacao_procons.monday import MondayClientError, register_complaint
 from classificacao_procons.monday.client import (
     DEFAULT_BOARD_NAME,
     DEFAULT_GROUP_NAME,
+    calculate_pa_response_deadline,
     get_api_token_from_env,
+    update_administrative_process,
 )
 from classificacao_procons.portal import PortalFetchOptions, ProconPortalError, fetch_complaint
 
 DEFAULT_DOWNLOAD_DIR = Path("downloads")
 DEFAULT_STATE_PATH = Path("data/processed-protocols.json")
+PA_STATE_PREFIX = "pa:"
 
 
 class PipelineError(RuntimeError):
@@ -74,6 +78,18 @@ def _save_processed_protocols(state_path: Path, protocols: set[str]) -> None:
     state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _pa_state_key(pa_number: str) -> str:
+    return f"{PA_STATE_PREFIX}{pa_number}"
+
+
+def _is_pa_processed(processed_protocols: set[str], pa_number: str) -> bool:
+    return _pa_state_key(pa_number) in processed_protocols
+
+
+def _mark_pa_processed(processed_protocols: set[str], pa_number: str) -> None:
+    processed_protocols.add(_pa_state_key(pa_number))
+
+
 def _resolve_protocol(notification: ProconNotificationEmail, complaint_protocol: str) -> str:
     if complaint_protocol:
         return complaint_protocol
@@ -116,36 +132,56 @@ def _register_on_monday_if_configured(
     return replace(result, monday_item_url=monday_result.item_url)
 
 
-def _process_notification(
+def _update_pa_on_monday_if_configured(
+    result: ProcessedComplaint,
+    *,
+    options: PipelineOptions,
+) -> ProcessedComplaint:
+    if not options.register_on_monday or result.status != "success":
+        return result
+
+    api_token = _resolve_monday_api_token(options)
+    if not api_token:
+        return result
+
+    try:
+        monday_result = update_administrative_process(
+            result,
+            api_token=api_token,
+            board_name=options.monday_board_name,
+        )
+    except MondayClientError as exc:
+        return replace(result, monday_error=str(exc))
+
+    if monday_result is None:
+        return result
+
+    return replace(result, monday_item_url=monday_result.item_url)
+
+
+def _resolve_administrative_process_number(
+    notification: ProconNotificationEmail,
+    complaint_pa_number: str | None,
+) -> str:
+    if notification.administrative_process_number:
+        return notification.administrative_process_number
+    if complaint_pa_number:
+        return complaint_pa_number
+    raise ProconPortalError("Número do processo administrativo não encontrado.")
+
+
+def _process_cip_notification(
     notification: ProconNotificationEmail,
     *,
     options: PipelineOptions,
     processed_protocols: set[str],
     fetcher: GmailProconFetcher,
 ) -> ProcessedComplaint:
-    if options.dry_run:
-        protocol = notification.protocol_number or notification.access_code
-        return ProcessedComplaint(
-            status="dry_run",
-            message_id=notification.message_id,
-            access_code=notification.access_code,
-            protocol_number=protocol,
-            consumer_name="",
-            consumer_cpf="",
-            complaint_date=None,
-            procon_response_deadline=None,
-            sac_deadline=None,
-            legal_deadline=None,
-            cause="",
-            state="SP",
-            pdf_url=None,
-            drive_folder_url=None,
-        )
-
     complaint = fetch_complaint(
         PortalFetchOptions(
             access_code=notification.access_code,
             download_dir=options.download_dir,
+            complaint_kind="reclamacao",
         ),
     )
 
@@ -204,8 +240,141 @@ def _process_notification(
         state=complaint.state,
         pdf_url=drive_result.pdf_url,
         drive_folder_url=drive_result.consumer_folder_url,
+        notification_type="cip",
     )
     return _register_on_monday_if_configured(result, options=options)
+
+
+def _process_administrative_process_notification(
+    notification: ProconNotificationEmail,
+    *,
+    options: PipelineOptions,
+    processed_protocols: set[str],
+    fetcher: GmailProconFetcher,
+) -> ProcessedComplaint:
+    complaint = fetch_complaint(
+        PortalFetchOptions(
+            access_code=notification.access_code,
+            download_dir=options.download_dir,
+            complaint_kind="processo_administrativo",
+        ),
+    )
+
+    pa_number = _resolve_administrative_process_number(
+        notification,
+        complaint.administrative_process_number,
+    )
+    protocol = _resolve_protocol(notification, complaint.cip_fa_number)
+
+    if _is_pa_processed(processed_protocols, pa_number):
+        return ProcessedComplaint(
+            status="skipped_duplicate",
+            message_id=notification.message_id,
+            access_code=notification.access_code,
+            protocol_number=protocol,
+            consumer_name=complaint.consumer_name,
+            consumer_cpf=complaint.consumer_cpf,
+            complaint_date=complaint.complaint_date,
+            procon_response_deadline=complaint.response_deadline,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause=complaint.cause,
+            state=complaint.state,
+            pdf_url=None,
+            drive_folder_url=None,
+            notification_type="processo_administrativo",
+            administrative_process_number=pa_number,
+            error="Processo administrativo já processado anteriormente.",
+        )
+
+    if not complaint.pdf_path:
+        raise ProconPortalError("PDF do processo administrativo não foi baixado do portal.")
+
+    pa_deadline = calculate_pa_response_deadline()
+    drive_result = save_complaint_pdf(
+        consumer_name=complaint.consumer_name,
+        pdf_path=complaint.pdf_path,
+        cip_number=protocol,
+        complaint_date=complaint.complaint_date,
+        parent_folder_id=options.parent_folder_id,
+        token_path=options.token_path,
+        file_name=build_drive_pa_pdf_filename(
+            consumer_name=complaint.consumer_name,
+            administrative_process_number=pa_number,
+            complaint_date=complaint.complaint_date,
+        ),
+    )
+
+    _mark_pa_processed(processed_protocols, pa_number)
+    _save_processed_protocols(options.state_path, processed_protocols)
+
+    if options.mark_read and has_gmail_modify_access(options.token_path):
+        fetcher.mark_as_read(notification.message_id)
+
+    result = ProcessedComplaint(
+        status="success",
+        message_id=notification.message_id,
+        access_code=notification.access_code,
+        protocol_number=protocol,
+        consumer_name=complaint.consumer_name,
+        consumer_cpf=complaint.consumer_cpf,
+        complaint_date=complaint.complaint_date,
+        procon_response_deadline=complaint.response_deadline,
+        sac_deadline=None,
+        legal_deadline=None,
+        cause=complaint.cause,
+        state=complaint.state,
+        pdf_url=drive_result.pdf_url,
+        drive_folder_url=drive_result.consumer_folder_url,
+        notification_type="processo_administrativo",
+        administrative_process_number=pa_number,
+        pa_response_deadline=pa_deadline,
+    )
+    return _update_pa_on_monday_if_configured(result, options=options)
+
+
+def _process_notification(
+    notification: ProconNotificationEmail,
+    *,
+    options: PipelineOptions,
+    processed_protocols: set[str],
+    fetcher: GmailProconFetcher,
+) -> ProcessedComplaint:
+    if options.dry_run:
+        protocol = notification.protocol_number or notification.access_code
+        return ProcessedComplaint(
+            status="dry_run",
+            message_id=notification.message_id,
+            access_code=notification.access_code,
+            protocol_number=protocol,
+            consumer_name="",
+            consumer_cpf="",
+            complaint_date=None,
+            procon_response_deadline=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            state="SP",
+            pdf_url=None,
+            drive_folder_url=None,
+            notification_type=notification.notification_type,
+            administrative_process_number=notification.administrative_process_number,
+        )
+
+    if notification.notification_type == "processo_administrativo":
+        return _process_administrative_process_notification(
+            notification,
+            options=options,
+            processed_protocols=processed_protocols,
+            fetcher=fetcher,
+        )
+
+    return _process_cip_notification(
+        notification,
+        options=options,
+        processed_protocols=processed_protocols,
+        fetcher=fetcher,
+    )
 
 
 def process_new_complaints(options: PipelineOptions | None = None) -> list[ProcessedComplaint]:
@@ -252,6 +421,8 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
                 state="SP",
                 pdf_url=None,
                 drive_folder_url=None,
+                notification_type=notification.notification_type,
+                administrative_process_number=notification.administrative_process_number,
                 error=str(exc),
             )
 
