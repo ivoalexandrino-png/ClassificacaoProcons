@@ -62,8 +62,27 @@ class TestGeminiHelpers:
             "São Paulo, [Data Atual]."
         )
         final = finalize_procon_response_text(text, signed_date=date(2026, 7, 24))
-        assert final.startswith("**ILUSTRÍSSIMO")
+        assert final.startswith("ILUSTRÍSSIMO(A) SENHOR(A)")
+        assert "**" not in final
         assert "24/07/2026" in final
+
+    def test_should_strip_markdown_headings_and_inline_formatting(self) -> None:
+        text = (
+            "### I. Breve Síntese da Reclamação\n\n"
+            "A marca *Glambox* cobrou **R$ 29,30**.\n"
+            "#### 3. Da Vedação ao Enriquecimento\n"
+            '> *"Art. 884. Aquele que..."*\n'
+            "---\n"
+        )
+        final = finalize_procon_response_text(text, signed_date=date(2026, 7, 24))
+        assert "###" not in final
+        assert "**" not in final
+        assert "*Glambox*" not in final
+        assert "Glambox" in final
+        assert "R$ 29,30" in final
+        assert "I. BREVE SÍNTESE DA RECLAMAÇÃO" in final
+        assert "3. DA VEDAÇÃO AO ENRIQUECIMENTO" in final
+        assert '>"' not in final
 
 
 class TestResolveGeminiModel:

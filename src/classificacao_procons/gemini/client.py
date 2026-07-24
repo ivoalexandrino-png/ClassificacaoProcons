@@ -39,6 +39,14 @@ _DATE_PLACEHOLDER_PATTERN = re.compile(
     r"\[(?:data\s*atual|data|DATA\s*ATUAL)\]",
     re.IGNORECASE,
 )
+_HEADER_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
+_HORIZONTAL_RULE_PATTERN = re.compile(r"^[-*_]{3,}\s*$")
+_PLAIN_TEXT_RULES = (
+    "- Formato: texto corrido em português, sem markdown.\n"
+    "- Proibido usar *, **, #, ###, ---, > ou outros marcadores de formatação.\n"
+    "- Use títulos de seção em MAIÚSCULAS (ex.: I. BREVE SÍNTESE DA RECLAMAÇÃO).\n"
+    "- Separe parágrafos com uma linha em branco.\n"
+)
 
 
 class GeminiClientError(RuntimeError):
@@ -155,6 +163,50 @@ def strip_gemini_meta_preamble(text: str) -> str:
     return cleaned.lstrip("-").strip()
 
 
+def _strip_inline_markdown(text: str) -> str:
+    current = text.strip()
+    for _ in range(4):
+        updated = re.sub(r"\*\*(.+?)\*\*", r"\1", current)
+        updated = re.sub(r"\*(.+?)\*", r"\1", updated)
+        updated = re.sub(r"__(.+?)__", r"\1", updated)
+        updated = re.sub(r"_(.+?)_", r"\1", updated)
+        if updated == current:
+            break
+        current = updated
+    return current
+
+
+def _collapse_blank_lines(text: str) -> str:
+    return re.sub(r"\n{3,}", "\n\n", text.strip())
+
+
+def strip_markdown_formatting(text: str) -> str:
+    """Converte markdown comum do Gemini em texto corrido para documento jurídico."""
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            lines.append("")
+            continue
+        if _HORIZONTAL_RULE_PATTERN.match(stripped):
+            lines.append("")
+            continue
+        if stripped.startswith(">"):
+            stripped = stripped.lstrip(">").strip()
+
+        header_match = _HEADER_PATTERN.match(stripped)
+        if header_match:
+            title = _strip_inline_markdown(header_match.group(2).strip())
+            if title:
+                lines.append(title.upper())
+                lines.append("")
+            continue
+
+        lines.append(_strip_inline_markdown(stripped))
+
+    return _collapse_blank_lines("\n".join(lines))
+
+
 def replace_response_date_placeholders(
     text: str,
     *,
@@ -187,6 +239,7 @@ def finalize_procon_response_text(
     """Aplica pós-processamento padrão ao texto da resposta ao Procon."""
     normalized = strip_gemini_meta_preamble(text)
     normalized = replace_response_date_placeholders(normalized, signed_date=signed_date)
+    normalized = strip_markdown_formatting(normalized)
     return apply_multa_replacement(normalized)
 
 
@@ -383,6 +436,7 @@ def generate_procon_response(
         "- Inicie diretamente com o endereçamento formal (ex.: ILUSTRÍSSIMO...).\n"
         f"- No fecho, use a data real: São Paulo, {signed_date}.\n"
         "- Não use placeholders como [Data Atual].\n"
+        f"{_PLAIN_TEXT_RULES}"
         "A resposta deve ser formal, clara e fundamentada nos documentos."
     )
     draft = finalize_procon_response_text(
@@ -397,7 +451,8 @@ def generate_procon_response(
         "- Proibido prefácios como 'Aqui está uma versão reestruturada' ou separadores '---'.\n"
         "- Inicie diretamente com o endereçamento formal.\n"
         f"- No fecho, use a data real: São Paulo, {signed_date}.\n"
-        "- Não use placeholders como [Data Atual].\n\n"
+        "- Não use placeholders como [Data Atual].\n"
+        f"{_PLAIN_TEXT_RULES}\n"
         f"RESPOSTA ATUAL:\n{draft}"
     )
     final_response = finalize_procon_response_text(
