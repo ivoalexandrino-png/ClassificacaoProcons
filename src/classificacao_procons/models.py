@@ -2,19 +2,32 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Literal
+
+NotificationType = Literal["cip", "processo_administrativo"]
+ComplaintKind = Literal["reclamacao", "processo_administrativo"]
 
 
 @dataclass(frozen=True)
 class ProconNotificationEmail:
-    """Dados extraídos de um e-mail de notificação de CIP do Procon-SP."""
+    """Dados extraídos de um e-mail de notificação Procon/Proconsumidor."""
 
     message_id: str
     subject: str
     sender: str
     received_at: datetime
     portal_url: str
-    access_code: str
+    source_id: str = "sp"
+    access_code: str = ""
+    notification_type: NotificationType = "cip"
     protocol_number: str | None = None
+    administrative_process_number: str | None = None
+    regional_org: str | None = None
+    state: str | None = None
+    consumer_name: str | None = None
+    consumer_cpf: str | None = None
+    complaint_date: date | None = None
+    cause: str | None = None
     email_response_deadline: str | None = None
     raw_snippet: str | None = None
 
@@ -33,6 +46,8 @@ class ProconComplaint:
     state: str = "SP"
     portal_url: str = ""
     pdf_path: str | None = None
+    complaint_kind: ComplaintKind = "reclamacao"
+    administrative_process_number: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +68,9 @@ class ProcessedComplaint:
     state: str
     pdf_url: str | None
     drive_folder_url: str | None
+    notification_type: NotificationType = "cip"
+    administrative_process_number: str | None = None
+    pa_response_deadline: date | None = None
     monday_item_url: str | None = None
     monday_error: str | None = None
     error: str | None = None

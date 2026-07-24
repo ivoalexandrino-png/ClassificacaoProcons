@@ -4,8 +4,34 @@ Checklist para o job **Procon hourly processing** rodar sem intervenção manual
 
 ## O que roda sozinho (a cada hora)
 
-1. `process` — e-mails Procon-SP → portal → Drive → Monday  
-2. `elaborate` — casos com **Docs SAC** no Monday → Gemini (com fallback OpenAI) → pasta **`Resposta Automatica`** no Drive
+Workflow **Procon hourly processing** (`main`):
+
+| Etapa | Comando | Fontes (`--sources`) |
+|-------|---------|----------------------|
+| `process` | `procon-email process` | `sp`, `sc`, `alerj`, `campinas`, `uberlandia` |
+| `elaborate` | `procon-email elaborate` | Todos os casos Monday com Docs SAC |
+
+Workflow **Proconsumidor local processing** (runner **self-hosted** — portal bloqueia datacenter):
+
+| Etapa | Fontes |
+|-------|--------|
+| `process` | `proconsumidor` (e-mail + portal MJ) |
+
+### Cobertura por origem
+
+| Origem | `source_id` | Automático em Actions |
+|--------|-------------|------------------------|
+| Procon-SP CIP | `sp` | Sim (hourly) |
+| Procon-SP Processo Administrativo | `sp` (PA) | Sim (hourly, mesmo job que CIP) |
+| Proconsumidor (MJ) | `proconsumidor` | Sim, com runner self-hosted |
+| Campinas | `campinas` | Sim (hourly) |
+| SC / SSP (e-mail + PDF) | `sc` | Sim (hourly) |
+| ALERJ (RJ) | `alerj` | Sim (hourly) |
+| Uberlândia | `uberlandia` | Sim (hourly) |
+
+Credenciais de portal (quando necessário): board Monday **Acessos** (`credentials` no código).
+
+Local Proconsumidor: `bash scripts/run-proconsumidor-process.sh` (Mac/PC no Brasil).
 
 ## Secrets no GitHub (Settings → Secrets and variables → Actions)
 

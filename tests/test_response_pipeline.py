@@ -3,7 +3,11 @@
 import json
 from unittest.mock import patch
 
-from classificacao_procons.drive.reader import DriveFileInfo, SacFolderContext
+from classificacao_procons.drive.reader import (
+    DriveFileInfo,
+    ExistingResponseOutputs,
+    SacFolderContext,
+)
 from classificacao_procons.gemini.client import GeminiQuotaError, GeneratedResponse
 from classificacao_procons.models import MondayCaseReady
 from classificacao_procons.response_pipeline import (
@@ -72,19 +76,18 @@ def test_should_defer_case_when_gemini_quota_exhausted(
 
     assert len(results) == 1
     assert results[0].status == "deferred_quota"
-    # não pode marcar como processado — precisa reprocessar na próxima execução
     if state_path.exists():
         saved = json.loads(state_path.read_text(encoding="utf-8"))
         assert "100" not in saved.get("item_ids", [])
 
 
-@patch("classificacao_procons.response_pipeline.find_existing_response_outputs", return_value=None)
 @patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
 @patch("classificacao_procons.response_pipeline.upload_pdf_file")
 @patch("classificacao_procons.response_pipeline.upload_text_file")
 @patch("classificacao_procons.response_pipeline.ensure_output_folder")
 @patch("classificacao_procons.response_pipeline.build_unified_response_pdf")
 @patch("classificacao_procons.response_pipeline.generate_procon_response")
+@patch("classificacao_procons.response_pipeline.find_existing_response_outputs", return_value=None)
 @patch("classificacao_procons.response_pipeline.download_drive_file")
 @patch("classificacao_procons.response_pipeline.resolve_sac_folder_context")
 @patch("classificacao_procons.response_pipeline.list_cases_ready_for_elaboration")
@@ -94,13 +97,13 @@ def test_should_elaborate_response_for_monday_case(
     list_cases_mock,
     resolve_sac_mock,
     download_mock,
+    _find_existing_mock,
     generate_mock,
     build_pdf_mock,
     ensure_folder_mock,
     upload_text_mock,
     upload_pdf_mock,
     update_monday_mock,
-    _find_existing_mock,
     tmp_path,
 ) -> None:
     list_cases_mock.return_value = [
@@ -185,8 +188,6 @@ def test_should_skip_when_response_files_already_exist_on_drive(
     update_monday_mock,
     tmp_path,
 ) -> None:
-    from classificacao_procons.drive.reader import ExistingResponseOutputs
-
     list_cases_mock.return_value = [
         MondayCaseReady(
             item_id="100",
