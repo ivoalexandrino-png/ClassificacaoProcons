@@ -181,9 +181,18 @@ def _run_elaborate(args: argparse.Namespace) -> int:
     print(json.dumps(output, ensure_ascii=False, indent=2))
 
     errors = [item for item in results if item.status == "error"]
+    deferred = [item for item in results if item.status == "deferred_quota"]
+    if deferred:
+        # Cota do Gemini esgotada: transitório, retomado na próxima execução.
+        # Não derruba o run horário (evita falso vermelho no workflow).
+        print(
+            f"Aviso: {len(deferred)} caso(s) adiado(s) por cota do Gemini "
+            "(serão retomados na próxima execução).",
+            file=sys.stderr,
+        )
     if not results:
         return 0
-    if len(errors) == len(results):
+    if errors and len(errors) == len(results):
         return 1
     if errors:
         print(

@@ -7,6 +7,7 @@ import pytest
 
 from classificacao_procons.juridico import monday as juridico_monday
 from classificacao_procons.juridico.models import (
+    ACTION_ANALISAR_RECURSO,
     ACTION_COMPARECER_AUDIENCIA,
     ACTION_CONTESTAR,
     NOTIFICATION_TYPE_AUDIENCIA,
@@ -38,7 +39,7 @@ BOARD_COLUMNS = [
 ]
 
 INTIMACAO = ParsedIntimacao(
-    process_number="1001234-56.2026.8.26.0100",
+    process_number="1001234-83.2026.8.26.0100",
     notification_type=NOTIFICATION_TYPE_CITACAO,
     tribunal="TJSP",
     court_unit="1a Vara Civel de Sao Paulo",
@@ -102,12 +103,13 @@ class TestBuildProvidenciaColumnValues:
         )
 
         assert values["col_id"] == "msg-001"
-        assert values["col_proc"] == "1001234-56.2026.8.26.0100"
+        assert values["col_proc"] == "1001234-83.2026.8.26.0100"
         assert values["col_trib"] == "TJSP"
         assert values["col_vara"] == "1a Vara Civel de Sao Paulo"
         assert values["col_tipo"] == {"label": "Citação"}
         assert values["col_prov"] == "Apresentar contestação"
-        assert values["col_prazo"] == {"date": "2026-08-07"}
+        # prazo fatal real 07/08 lançado com 2 dias úteis de segurança
+        assert values["col_prazo"] == {"date": "2026-08-05"}
         assert values["col_teor"] == {"text": "Citação para contestar em 15 dias úteis."}
         assert values["col_analise"] == {
             "text": "O que aconteceu: citação recebida; contestar até 07/08.",
@@ -122,7 +124,7 @@ class TestBuildProvidenciaColumnValues:
             hearing_datetime=datetime(2026, 8, 5, 14, 30),
         )
         intimacao = ParsedIntimacao(
-            process_number="1001234-56.2026.8.26.0100",
+            process_number="1001234-83.2026.8.26.0100",
             notification_type=NOTIFICATION_TYPE_AUDIENCIA,
         )
 
@@ -132,7 +134,7 @@ class TestBuildProvidenciaColumnValues:
             providencia=providencia,
             message_id="msg-002",
         )
-        assert values["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+        assert values["col_aud"] == {"date": "2026-08-05", "time": "17:30:00"}
 
     def test_should_not_write_hearing_into_non_date_columns(self) -> None:
         """"Link Audiência"/"Orientações de Audiência" (quadro real) ficam manuais."""
@@ -156,7 +158,7 @@ class TestBuildProvidenciaColumnValues:
             providencia=providencia,
             message_id="msg-005",
         )
-        assert values["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+        assert values["col_aud"] == {"date": "2026-08-05", "time": "17:30:00"}
         assert "col_link_aud" not in values
         assert "col_orient" not in values
 
@@ -177,7 +179,7 @@ class TestBuildProvidenciaColumnValues:
 
     def test_should_skip_empty_fields(self) -> None:
         intimacao = ParsedIntimacao(
-            process_number="1001234-56.2026.8.26.0100",
+            process_number="1001234-83.2026.8.26.0100",
             notification_type=NOTIFICATION_TYPE_CITACAO,
         )
         values = build_providencia_column_values(
@@ -190,14 +192,34 @@ class TestBuildProvidenciaColumnValues:
         assert "col_vara" not in values
 
 
-def _board_context() -> MondayBoardContext:
+def _board_context(columns: list[MondayColumn] | None = None) -> MondayBoardContext:
+    board_columns = columns if columns is not None else BOARD_COLUMNS
     return MondayBoardContext(
         board_id="123",
         group_id="grp",
-        columns=BOARD_COLUMNS,
-        column_details=[MondayColumnDetails(column=column) for column in BOARD_COLUMNS],
+        columns=board_columns,
+        column_details=[MondayColumnDetails(column=column) for column in board_columns],
         account_slug="empresa",
     )
+
+
+# Colunas do quadro "Prazos" real: sem "ID Intimação" e sem coluna de análise.
+REAL_PRAZOS_COLUMNS = [
+    MondayColumn(id="col_proc", title="Número Processo", column_type="text"),
+    MondayColumn(id="col_data", title="Data", column_type="date"),
+    MondayColumn(id="col_fatal", title="Fatal", column_type="date"),
+]
+
+# Colunas do quadro "Audiências" real: a data chama-se só "Data" e o número do
+# processo aparece em long_text e em board_relation (que não aceita texto).
+REAL_AUDIENCIAS_COLUMNS = [
+    MondayColumn(id="col_data", title="Data", column_type="date"),
+    MondayColumn(id="col_local", title="Local", column_type="location"),
+    MondayColumn(id="col_link", title="Link Audiência (se virtual)", column_type="link"),
+    MondayColumn(id="col_rel", title="Processos Judiciais", column_type="board_relation"),
+    MondayColumn(id="col_num", title="Número do Processo", column_type="long_text"),
+    MondayColumn(id="col_orient", title="Orientações de Audiência", column_type="text"),
+]
 
 
 class TestPickJuridicoBoard:
@@ -260,10 +282,10 @@ class TestFindExistingItemIdByName:
                 {
                     "items_page": {
                         "items": [
-                            {"id": "12", "name": "1001234-56.2026.8.26.0100 — Outra coisa"},
+                            {"id": "12", "name": "1001234-83.2026.8.26.0100 — Outra coisa"},
                             {
                                 "id": "34",
-                                "name": "1001234-56.2026.8.26.0100 — Apresentar contestação",
+                                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
                             },
                         ],
                     },
@@ -274,7 +296,7 @@ class TestFindExistingItemIdByName:
             found = juridico_monday._find_existing_item_id_by_name(
                 api_token="token-teste",
                 board_id="123",
-                item_name="1001234-56.2026.8.26.0100 — Apresentar contestação",
+                item_name="1001234-83.2026.8.26.0100 — Apresentar contestação",
             )
         assert found == "34"
 
@@ -284,7 +306,7 @@ class TestFindExistingItemIdByName:
                 {
                     "items_page": {
                         "items": [
-                            {"id": "12", "name": "1001234-56.2026.8.26.0100 — Analisar recurso"},
+                            {"id": "12", "name": "1001234-83.2026.8.26.0100 — Analisar recurso"},
                         ],
                     },
                 },
@@ -294,7 +316,7 @@ class TestFindExistingItemIdByName:
             found = juridico_monday._find_existing_item_id_by_name(
                 api_token="token-teste",
                 board_id="123",
-                item_name="1001234-56.2026.8.26.0100 — Apresentar contestação",
+                item_name="1001234-83.2026.8.26.0100 — Apresentar contestação",
             )
         assert found is None
 
@@ -329,7 +351,7 @@ class TestRegisterProvidencia:
                 return_value=_board_context(),
             ),
             patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
-            patch.object(juridico_monday, "_find_existing_item_id_by_name", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
             patch.object(juridico_monday, "_create_item", return_value="777") as create_item,
             patch.object(juridico_monday, "_apply_complaint_column_values") as apply_values,
         ):
@@ -345,10 +367,11 @@ class TestRegisterProvidencia:
         assert result.skipped_duplicate is False
         assert result.item_url == "https://empresa.monday.com/boards/123/pulses/777"
         assert create_item.call_args.kwargs["item_name"] == (
-            "1001234-56.2026.8.26.0100 — Apresentar contestação"
+            "1001234-83.2026.8.26.0100 — Apresentar contestação"
         )
         applied = apply_values.call_args.kwargs["column_values"]
-        assert applied["col_prazo"] == {"date": "2026-08-07"}
+        # prazo fatal real 07/08 lançado com 2 dias úteis de segurança
+        assert applied["col_prazo"] == {"date": "2026-08-05"}
 
     def test_should_skip_duplicate_when_intimacao_already_registered(self) -> None:
         with (
@@ -374,6 +397,13 @@ class TestRegisterProvidencia:
 
     def test_should_skip_duplicate_when_item_with_same_name_exists(self) -> None:
         """Dois e-mails distintos da mesma intimação não podem duplicar o item."""
+        existing = [
+            {
+                "id": "999",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
+                "group_title": "Prazos Processos",
+            },
+        ]
         with (
             patch.object(
                 juridico_monday,
@@ -383,9 +413,10 @@ class TestRegisterProvidencia:
             patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
             patch.object(
                 juridico_monday,
-                "_find_existing_item_id_by_name",
-                return_value="999",
-            ) as find_by_name,
+                "_search_items_by_name",
+                return_value=existing,
+            ) as search_items,
+            patch.object(juridico_monday, "_create_update") as create_update,
             patch.object(juridico_monday, "_create_item") as create_item,
         ):
             result = register_providencia(
@@ -399,9 +430,238 @@ class TestRegisterProvidencia:
         assert result.skipped_duplicate is True
         assert result.item_id == "999"
         create_item.assert_not_called()
-        assert find_by_name.call_args.kwargs["item_name"] == (
-            "1001234-56.2026.8.26.0100 — Apresentar contestação"
+        assert search_items.call_args.kwargs["name_contains"] == "1001234-83.2026.8.26.0100"
+        note = create_update.call_args.kwargs["body"]
+        assert "msg-outro-email" in note
+        assert "Apresentar contestação" in note
+
+    def test_should_skip_when_existing_item_has_later_stage_providencia(self) -> None:
+        """Push atrasado de citação não recria prazo se o processo já está em recurso."""
+        existing = [
+            {
+                "id": "1000",
+                "name": "1001234-83.2026.8.26.0100 — Analisar sentença e avaliar recurso",
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item") as create_item,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-push-atrasado",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is True
+        assert result.item_id == "1000"
+        create_item.assert_not_called()
+        create_update.assert_called_once()
+
+    def test_should_create_item_when_existing_providencia_is_earlier_stage(self) -> None:
+        """Sentença nova cria item mesmo com prazo de contestação antigo no board."""
+        existing = [
+            {"id": "555", "name": "1001234-83.2026.8.26.0100 — Apresentar contestação"},
+        ]
+        providencia = Providencia(
+            action_type=ACTION_ANALISAR_RECURSO,
+            description="Analisar sentença e avaliar recurso",
+            requires_action=True,
+            due_date=date(2026, 9, 1),
+            requires_legal_document=True,
         )
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item", return_value="556") as create_item,
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=providencia,
+                message_id="msg-sentenca",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        assert result.item_id == "556"
+        create_item.assert_called_once()
+        create_update.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "done_group",
+        ["Prazos cumpridos", "Concluídos", "Finalizados", "Done", "Resolvidos ✅"],
+    )
+    def test_should_create_item_when_existing_is_in_done_group(self, done_group: str) -> None:
+        """Prazo já cumprido (grupo de concluídos) não cobre intimação nova."""
+        existing = [
+            {
+                "id": "999",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
+                "group_title": done_group,
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item", return_value="1001") as create_item,
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-novo-prazo",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        assert result.item_id == "1001"
+        create_item.assert_called_once()
+        create_update.assert_not_called()
+
+    def test_should_dedupe_against_active_group_even_with_done_sibling(self) -> None:
+        """Item cumprido não interfere, mas item ativo do processo ainda deduplica."""
+        existing = [
+            {
+                "id": "999",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
+                "group_title": "Prazos cumpridos",
+            },
+            {
+                "id": "1000",
+                "name": "1001234-83.2026.8.26.0100 — Apresentar contestação",
+                "group_title": "Prazos Processos",
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_update") as create_update,
+            patch.object(juridico_monday, "_create_item") as create_item,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-repetido",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is True
+        assert result.item_id == "1000"  # o item ativo, não o cumprido
+        create_item.assert_not_called()
+        create_update.assert_called_once()
+
+    def test_should_post_analysis_as_update_when_board_lacks_analysis_column(self) -> None:
+        """O quadro real de prazos não tem coluna de análise: o andamento
+        específico vai como update na timeline do item criado."""
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(REAL_PRAZOS_COLUMNS),
+            ),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
+            patch.object(juridico_monday, "_create_item", return_value="777"),
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-001",
+                analysis="O DataJud mostra acordo homologado em 20/06/2026.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        create_update.assert_called_once()
+        assert create_update.call_args.kwargs["item_id"] == "777"
+        body = create_update.call_args.kwargs["body"]
+        assert "acordo homologado" in body
+        # o update registra o prazo fatal real e a data lançada com segurança
+        assert "Prazo fatal real: 07/08/2026" in body
+        assert "Lançado no quadro em 05/08/2026" in body
+
+    def test_should_not_post_analysis_update_when_board_has_analysis_column(self) -> None:
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
+            patch.object(juridico_monday, "_create_item", return_value="777"),
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-001",
+                analysis="Parecer do caso.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        create_update.assert_not_called()
+
+    def test_should_ignore_items_of_other_processes_or_unknown_names(self) -> None:
+        existing = [
+            {"id": "1", "name": "9999999-44.2026.8.26.0999 — Apresentar contestação"},
+            {"id": "2", "name": "Item manual sem padrão"},
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(),
+            ),
+            patch.object(juridico_monday, "_find_existing_item_id", return_value=None),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_item", return_value="3") as create_item,
+            patch.object(juridico_monday, "_apply_complaint_column_values"),
+        ):
+            result = register_providencia(
+                intimacao=INTIMACAO,
+                providencia=PROVIDENCIA,
+                message_id="msg-001",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is False
+        create_item.assert_called_once()
 
 
 class TestRegisterAudiencia:
@@ -443,7 +703,87 @@ class TestRegisterAudiencia:
         assert result.item_id == "888"
         assert load_context.call_args.kwargs["board_name"] == "audiencias"
         assert create_item.call_args.kwargs["item_name"] == (
-            "1001234-56.2026.8.26.0100 — Audiência 05/08/2026 14:30"
+            "1001234-83.2026.8.26.0100 — Audiência 05/08/2026 14:30"
         )
         applied = apply_values.call_args.kwargs["column_values"]
-        assert applied["col_aud"] == {"date": "2026-08-05", "time": "14:30:00"}
+        assert applied["col_aud"] == {"date": "2026-08-05", "time": "17:30:00"}
+
+    def test_should_fill_real_audiencias_board_columns(self) -> None:
+        """Quadro real: data em "Data", processo só nas colunas de texto,
+        board_relation intocada e análise como update (sem coluna própria)."""
+        providencia = Providencia(
+            action_type=ACTION_COMPARECER_AUDIENCIA,
+            description="Preparar e comparecer à audiência",
+            requires_action=True,
+            hearing_datetime=datetime(2026, 8, 5, 14, 30),
+        )
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(REAL_AUDIENCIAS_COLUMNS),
+            ),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=[]),
+            patch.object(juridico_monday, "_create_item", return_value="890"),
+            patch.object(juridico_monday, "_apply_complaint_column_values") as apply_values,
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_audiencia(
+                intimacao=INTIMACAO,
+                providencia=providencia,
+                message_id="msg-005",
+                analysis="Audiência de conciliação designada; ver teor no e-mail.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        applied = apply_values.call_args.kwargs["column_values"]
+        assert applied["col_data"] == {"date": "2026-08-05", "time": "17:30:00"}
+        assert applied["col_num"] == {"text": "1001234-83.2026.8.26.0100"}
+        assert "col_rel" not in applied  # board_relation não aceita texto
+        assert "col_link" not in applied  # link fica para preenchimento manual
+        assert "col_orient" not in applied
+        create_update.assert_called_once()
+        assert create_update.call_args.kwargs["item_id"] == "890"
+        assert "conciliação" in create_update.call_args.kwargs["body"]
+
+    def test_should_annotate_existing_item_when_audiencia_is_duplicated(self) -> None:
+        providencia = Providencia(
+            action_type=ACTION_COMPARECER_AUDIENCIA,
+            description="Preparar e comparecer à audiência",
+            requires_action=True,
+            hearing_datetime=datetime(2026, 8, 5, 14, 30),
+        )
+        existing = [
+            {
+                "id": "891",
+                "name": "1001234-83.2026.8.26.0100 — Audiência 05/08/2026 14:30",
+                "group_title": "Audiências (Procons e Processos)",
+            },
+        ]
+        with (
+            patch.object(
+                juridico_monday,
+                "_load_juridico_board_context",
+                return_value=_board_context(REAL_AUDIENCIAS_COLUMNS),
+            ),
+            patch.object(juridico_monday, "_search_items_by_name", return_value=existing),
+            patch.object(juridico_monday, "_create_item") as create_item,
+            patch.object(juridico_monday, "_create_update") as create_update,
+        ):
+            result = register_audiencia(
+                intimacao=INTIMACAO,
+                providencia=providencia,
+                message_id="msg-repetido",
+                analysis="Parecer.",
+                api_token="token-teste",
+            )
+
+        assert result is not None
+        assert result.skipped_duplicate is True
+        assert result.item_id == "891"
+        create_item.assert_not_called()
+        create_update.assert_called_once()
+        note = create_update.call_args.kwargs["body"]
+        assert "msg-repetido" in note
+        assert "05/08/2026 14:30" in note

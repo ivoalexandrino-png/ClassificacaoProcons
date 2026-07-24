@@ -37,6 +37,19 @@ def add_business_days(start: date, days: int) -> date:
     return next_business_day(current)
 
 
+def subtract_business_days(end: date, days: int) -> date:
+    """Recua `days` dias úteis a partir de `end` (margem de segurança)."""
+    if days < 0:
+        raise ValueError("Prazo em dias não pode ser negativo.")
+    current = end
+    remaining = days
+    while remaining > 0:
+        current -= timedelta(days=1)
+        if is_business_day(current):
+            remaining -= 1
+    return current
+
+
 def add_calendar_days(start: date, days: int) -> date:
     """Prazo em dias corridos; termo final prorrogado para o dia útil seguinte."""
     if days < 0:

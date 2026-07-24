@@ -75,15 +75,137 @@ O agente reconhece intimações por três caminhos:
 
 | Situação | Ação | Prazo padrão (se não houver no e-mail) |
 |----------|------|----------------------------------------|
-| Citação | Apresentar contestação | 15 dias úteis (CPC art. 335) |
+| Citação (contexto explícito: "cite-se", "citação", "citado para…") | Apresentar contestação | 15 dias úteis (CPC art. 335) |
 | Sentença | Analisar e avaliar recurso | 15 dias úteis |
 | Audiência designada | Preparar e comparecer | data da audiência |
-| Pedido de manifestação | Apresentar manifestação | 5 dias úteis (CPC art. 218 §3º) |
-| Arquivamento/trânsito em julgado | Tomar ciência | — (não cria item no Monday) |
+| Pedido de manifestação ou prazo explícito no texto | Apresentar manifestação | 5 dias úteis (CPC art. 218 §3º) |
+| Intimação publicada/carta entregue/publicação em diário **sem prazo no texto** | Revisar intimação e confirmar prazo | 3 dias úteis (revisão) |
+| Arquivamento/trânsito em julgado, "decorrido prazo", documento sigiloso | Tomar ciência | — (não cria item no Monday) |
+| Processo em segredo de justiça (nível de sigilo no DataJud) | Verificar (segredo de justiça) | prazo da triagem preliminar (conferir manual) |
+
+"Citado" solto não vira citação (falsos positivos reais: "recurso acima
+citado" do PROJUDI, listas "Intimado(s)/Citado(s)" de recortes). A linha de
+revisão cobre pushes que indicam prazo em curso sem dizer qual — PJe
+"Publicado(a) o(a) intimação", eproc "juntada de carta — comprovante de
+entrega", PROJUDI "Leitura Automática de Intimação" e publicações do
+Jusbrasil; o teor define o prazo real, então o item sai com data curta para
+revisão humana.
 
 Prazos em dias úteis excluem o dia do começo e prorrogam o termo final para o
 próximo dia útil (fins de semana; feriados forenses exigem calendário do
 tribunal e ficam fora do MVP — confira o termo final no sistema do tribunal).
+
+### Triagem ciente do estágio do processo
+
+Pushes chegam atrasados ou repetidos: um aviso de citação pode se referir a um
+processo que já teve contestação, acordo e sentença. Antes de fechar a
+providência, o agente cruza a triagem do e-mail com os andamentos do DataJud e
+detecta o **marco de estágio mais avançado** (contestação → sentença → acordo →
+encerramento). Se a providência do e-mail já foi superada, ela é **substituída
+pela providência específica do estágio atual**, com prazo — o andamento
+específico vai para o Monday em vez de virar "tomar ciência":
+
+| Marco no DataJud | Providência cadastrada | Prazo (dias úteis do push) |
+|------------------|------------------------|----------------------------|
+| Trânsito em julgado / arquivamento / baixa / extinção | Verificar encerramento e obrigações finais | 5 |
+| Acordo homologado (Homologação de Transação) | Acompanhar cumprimento do acordo homologado | 10 |
+| Sentença (procedência/improcedência) | Analisar sentença e avaliar recurso | 15 (prazo legal estimado) |
+| Contestação já apresentada | Acompanhar andamento do processo | 10 |
+
+O motivo e o andamento específico ficam em `stage_note` (entra na análise e,
+nos quadros sem coluna de análise, vira update no item). Os prazos de
+acompanhamento contam do recebimento do push — o de recurso é estimativa do
+prazo legal; confirme a data de intimação no tribunal.
+
+**Margem de segurança:** a data lançada nas colunas de prazo do Monday é
+sempre **2 dias úteis antes do prazo fatal real** (`MONDAY_SAFETY_BUSINESS_DAYS`
+em `juridico/monday.py`). O prazo fatal real fica registrado na análise e na
+anotação do item ("Prazo fatal real: … Lançado no quadro em …"). Datas de
+audiência não são antecipadas — audiência é evento, não prazo.
+
+Pushes de **mera ciência** também são cruzados: se o processo tem sentença,
+acordo ou encerramento nos últimos 30 dias, o agente cadastra a providência
+específica em vez de deixar passar (marcos mais antigos não reabrem casos).
+
+O `--dry-run` também consulta o DataJud/Comunica (somente leitura), então a
+triagem exibida já é a ciente do estágio. Sem `DATAJUD_API_KEY` (ou com
+`--no-datajud`), a reclassificação não acontece — revise a providência sugerida.
+
+### Segredo de justiça e múltiplos sistemas do tribunal
+
+O DataJud informa, além dos andamentos, o **nível de sigilo** e o **sistema**
+que indexa o processo (`fetch_case_dossier`, numa única chamada). Com isso:
+
+- **Segredo de justiça** (`nivelSigilo > 0`): o agente não tenta ler o teor
+  (exige advogado habilitado + 2FA no e-mail pessoal). Cria um item claro no
+  Monday — **"Verificar (segredo de justiça)"** — com a triagem preliminar do
+  e-mail e nota pedindo conferência manual do prazo no portal.
+- **Sistema do processo**: um mesmo tribunal usa vários sistemas (e-SAJ, PJe,
+  Projudi, eproc, processo eletrônico) e o número CNJ **não** diz qual. O
+  `juridico portal` lê o campo `sistema` do DataJud e roteia para o cliente
+  certo (`portais/router.py`). Estado de cada sistema:
+
+  | Sistema | Acesso | Situação no agente |
+  |---------|--------|--------------------|
+  | **e-SAJ** (SAJ) | consulta pública sem captcha | **funciona** (teor completo); segredo cai no login autenticado |
+  | **PJe** (Justiça do Trabalho etc.) | consulta pública com **captcha obrigatório** (Res. 139/2014 CSJT) | detecta o captcha e cai para o DataJud |
+  | **Projudi** | sem consulta pública; login com **captcha** (reCAPTCHA/Turing, varia por TJ) | detecta o captcha e cai para o DataJud; com login sem captcha + credencial, lê o teor |
+  | **eproc / próprios** | varia | ainda sem scraper; DataJud |
+
+  Ou seja: **o e-SAJ é o único com leitura pública automatizável hoje**. Os
+  demais tribunais protegem a consulta com captcha (política deles); nesses
+  casos o agente reporta e segue com os andamentos do DataJud, que cobre todos
+  os sistemas. Os clientes de PJe e Projudi já existem e passam a ler o teor
+  automaticamente caso o tribunal dispense o captcha (ou haja login sem
+  captcha com credencial no quadro Acessos).
+
+## Acesso autenticado aos portais (teor do processo)
+
+Quando o DataJud é genérico demais (só nomes de andamento, sem o teor), o
+agente pode entrar no portal do tribunal e ler a movimentação — inclusive em
+processos com visualização restrita a advogados habilitados (segredo de
+justiça). As credenciais vêm do quadro **Acessos** do Monday (grupo "TJ's"/
+"STF"), resolvidas por `juridico/acessos.py` (senhas nunca são logadas).
+
+```bash
+juridico portal --numero "1013709-36.2020.8.26.0309"   # infere o tribunal
+juridico portal --numero "…" --tribunal TJSP --headed   # navegador visível
+```
+
+O comando tenta primeiro a **consulta pública** (sem login, sem 2FA), que
+cobre a maioria dos processos e traz classe, situação e movimentação. Só cai
+para o modo **autenticado** quando o processo está em segredo de justiça (ou
+com `--autenticado`).
+
+```bash
+juridico portal --numero "1002605-16.2025.8.26.0198"   # público, sem login
+juridico portal --numero "…" --autenticado --token-code 123456
+```
+
+Cobertura atual: **e-SAJ** (TJSP, TJCE e outros TJs SAJ). No modo autenticado o
+login é por CPF/senha e a sessão é persistida em `credentials/esaj-session.json`
+(cookies), então o 2FA só é pedido de vez em quando, não a cada consulta.
+
+**2FA (código por e-mail):** o e-SAJ envia um código ao e-mail cadastrado.
+Três formas de fornecê-lo:
+
+- `--token-code 123456`: cola o código manualmente (login pontual);
+- `--token-email`: lê o código na caixa Gmail autorizada — **só funciona se o
+  código chegar em `ivo.alexandrino@b4a.com.br`** (a caixa que o agente lê). Se
+  o e-SAJ manda para o e-mail pessoal, crie uma regra encaminhando as mensagens
+  de código do TJSP para a caixa corporativa;
+- `--headed`: navegador visível para resolver na tela (captcha/2FA/certificado).
+
+Limitações reais, tratadas explicitamente (o comando sai com código 2 e
+mensagem `needs_interaction`, e o fluxo automático continua no DataJud):
+
+- **Segredo de justiça**: mesmo autenticado, o portal só mostra o processo se
+  o CPF logado for de advogado habilitado nos autos.
+- **Credenciais desatualizadas / coluna Senha vazia**: se o portal recusar
+  login/senha, o agente avisa e não insiste (evita bloqueio de conta). A senha
+  tem de estar na coluna **Senha** do item do tribunal no quadro Acessos.
+- **Certificado digital A1/A3**: não automatizável por login simples.
+- **PROJUDI/EPROC/sistemas próprios**: ainda não implementados — só e-SAJ.
 
 ## Entrar no processo: teor + andamentos
 
@@ -132,9 +254,37 @@ localizado por nome normalizado (aceita "Prazos", "prazos" etc.). Use
 `juridico boards --filter prazos` para inspecionar os quadros visíveis, seus
 grupos, colunas e o mapeamento que o agente detecta em cada coluna.
 
-Os quadros `processos judiciais`, `processos trabalhistas` e `kpi processos
-consumidores` fazem parte do roadmap (status do processo, contingências/
-depósitos e KPIs) e ainda não recebem escrita automática.
+### Engrenagem entre quadros (casos, KPIs)
+
+O quadro **Processos Judiciais** é o registro-mestre dos casos — citações
+inauguram casos lá, e automações do Monday alimentam o quadro de audiências a
+partir dele. A cada intimação processada, o agente gira as engrenagens
+(`juridico/casos.py`):
+
+1. **Localiza o caso** pelo número CNJ na coluna "Número" (Processos
+   Judiciais) ou "Nº.: de Processo" (Processos Trabalhista — segmento J=5 da
+   numeração CNJ decide o quadro).
+2. **Conecta os itens criados** em `prazos`/`audiências` ao caso pelas colunas
+   de conexão de quadros ("Processos Consumidores"/"Processos Judiciais").
+3. **Anota a movimentação** na timeline do caso (providência + análise).
+4. **Marcos inequívocos atualizam o caso**: acordo homologado → Decisão
+   Judicial "Acordo"; trânsito em julgado/arquivamento → Status "Encerrado".
+   Sentenças não definem sozinhas o resultado (procedente para quem?) e ficam
+   para revisão humana; o rótulo só é escrito se existir na coluna.
+5. **KPI - Processos Consumidores**: a linha do processo (localizada pelo CNJ)
+   recebe Resultado "Acordo" + Data da Decisão, ou Situação "Arquivado" no
+   encerramento. Linha inexistente **não** é criada e valores financeiros
+   (condenação, pago, provisão, saving) seguem manuais — não vêm no DataJud.
+6. **Citação de processo sem caso** cria o item no grupo "Processos
+   Consumidores Ativos" com o CNJ preenchido (trabalhistas não são criados
+   automaticamente — estrutura mais manual).
+
+O resultado de cada intimação traz `case_sync_note` com as ações executadas.
+Boards podem ser fixados por id com `MONDAY_PROCESSOS_BOARD_ID`,
+`MONDAY_TRABALHISTA_BOARD_ID` e `MONDAY_KPI_BOARD_ID` (senão, localizados por
+nome). Roadmap: preencher valores de condenação/pagamento a partir do teor
+das decisões (exige Comunica/PJe, bloqueado fora do Brasil) e criar linhas de
+KPI para anos novos.
 
 Colunas são mapeadas por título:
 
@@ -158,18 +308,42 @@ mesmo assim).
 A deduplicação tem três camadas:
 
 1. estado local `data/juridico-processed.json` (mesmo e-mail nunca reprocessa);
-2. coluna `ID Intimação`, quando o board tiver uma;
-3. **nome do item** (`processo — providência`): dois e-mails distintos sobre a
-   mesma intimação geram o mesmo nome e não duplicam; uma providência nova do
-   mesmo processo (ex.: sentença meses depois) gera nome diferente e cria item.
+2. coluna `ID Intimação`, quando o board tiver uma (mesmo e-mail reprocessado);
+3. **conteúdo, por processo** (board `prazos`): antes de criar, o agente busca
+   itens do mesmo processo. Se já existe item com a **mesma providência**, ou
+   com providência de **fase posterior** (ex.: "Analisar sentença" já no board
+   e chega um push atrasado de citação pedindo "Apresentar contestação"), o
+   item novo **não é criado** — o existente recebe uma anotação (update) com o
+   e-mail novo e o prazo sugerido. Providência de fase mais avançada que a do
+   item existente cria item novo normalmente. No board `audiências` a
+   deduplicação continua pelo nome do item (`processo — Audiência data`).
+
+A ordem de fases usada na camada 3 é: contestação → manifestação/audiência/
+acompanhamento → recurso → acordo → encerramento. Itens com nome fora do
+padrão `processo — providência` são ignorados pela deduplicação (nunca
+bloqueiam a criação).
+
+**Prazos já cumpridos não contam:** itens em grupos de concluídos (título com
+"cumprido", "concluído", "finalizado", "resolvido", "feito" ou "done") não
+cobrem intimações novas — um prazo cumprido no passado não pode fazer o agente
+descartar um prazo novo do mesmo processo como duplicado.
 
 Proteções do mapeamento (calibradas com os quadros reais):
 
 - A data da audiência só é escrita em colunas do tipo **data** — "Link
   Audiência" e "Orientações de Audiência" ficam para preenchimento manual.
+  No quadro de audiências, a coluna chamada só "Data" recebe a data/hora da
+  audiência; o horário é convertido de Brasília para UTC (o Monday exibe no
+  fuso da conta).
 - Colunas com "Responsável" no título nunca são preenchidas automaticamente.
 - "Processo Administrativo", "Processos Consumidores" e afins não recebem o
   número CNJ (pertencem ao domínio Procon/consumidores).
+- O número CNJ só é escrito em colunas de **texto** ("Número do Processo") —
+  "Processos Judiciais" (conexão entre quadros) exige id de item e fica para
+  vínculo manual.
+- Itens de audiência duplicados (mesmo processo + mesma data/hora) não são
+  recriados: o item existente recebe anotação, como no quadro de prazos. Sem
+  coluna de análise no quadro, o parecer vai como update no item.
 
 ## E-mails sem número CNJ (`needs_review`)
 
@@ -194,6 +368,18 @@ não implementados:
   do DataJud e a flag `affects_contingency` (depósitos, penhoras, alvarás,
   condenações, execução).
 
+## Execução horária (GitHub Actions)
+
+O workflow `juridico-hourly.yml` roda `juridico process --max-results 20
+--no-comunica` a cada hora (minuto 30, deslocado do `procon-hourly`), com os
+secrets `GMAIL_OAUTH_JSON`/`GMAIL_TOKEN_JSON`, `MONDAY_API_TOKEN`,
+`GEMINI_API_KEY` e `DATAJUD_API_KEY`. O estado `data/` (intimações já
+processadas + eventos de handoff) persiste entre execuções via cache do
+Actions com chave rolante (`juridico-pipeline-state-<run_id>`, restaurada por
+prefixo). O `workflow_dispatch` aceita `dry_run` para inspecionar a triagem
+sem efeitos colaterais. `--no-comunica` porque os runners ficam fora do Brasil
+e o CloudFront do CNJ responde 403.
+
 ## Variáveis de ambiente
 
 | Variável | Obrigatória para | Descrição |
@@ -208,6 +394,10 @@ não implementados:
 | `MONDAY_AUDIENCIAS_BOARD_NAME` | — (padrão `audiencias`) | Board de audiências |
 | `MONDAY_AUDIENCIAS_BOARD_ID` | — | Id do board de audiências (vence o nome) |
 | `MONDAY_AUDIENCIAS_GROUP_NAME` | — (padrão: primeiro grupo) | Grupo do board de audiências |
+| `MONDAY_PROCESSOS_BOARD_ID` | — (padrão: por nome) | Id do quadro-mestre Processos Judiciais |
+| `MONDAY_TRABALHISTA_BOARD_ID` | — (padrão: por nome) | Id do quadro Processos Trabalhista |
+| `MONDAY_KPI_BOARD_ID` | — (padrão: por nome) | Id do quadro KPI - Processos Consumidores |
+| `MONDAY_ACESSOS_BOARD_ID` | — (padrão: por nome) | Id do quadro Acessos (credenciais de portais) |
 | `JURIDICO_GMAIL_QUERY` | — | Sobrescreve o filtro Gmail padrão |
 
 ## Limitações do MVP
