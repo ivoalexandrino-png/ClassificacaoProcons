@@ -2,6 +2,7 @@
 
 import io
 import urllib.error
+from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,9 +17,11 @@ from classificacao_procons.gemini.client import (
     _ordered_model_candidates,
     apply_multa_replacement,
     enforce_portal_character_limit,
+    finalize_procon_response_text,
     get_model_from_env,
     reset_quota_cooldown,
     resolve_gemini_model,
+    strip_gemini_meta_preamble,
 )
 
 
@@ -40,7 +43,7 @@ class TestGeminiQuota:
         with (
             patch("urllib.request.urlopen", MagicMock(side_effect=error_429)),
             patch("classificacao_procons.gemini.client.time.sleep"),
-            pytest.raises(GeminiQuotaError, match="Limite gratuito"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
         ):
             _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
 
@@ -56,7 +59,7 @@ class TestGeminiQuota:
         with (
             patch("urllib.request.urlopen", urlopen_mock),
             patch("classificacao_procons.gemini.client.time.sleep"),
-            pytest.raises(GeminiQuotaError, match="Limite gratuito"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
         ):
             _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
 
@@ -80,7 +83,7 @@ class TestGeminiQuota:
         with (
             patch("urllib.request.urlopen", urlopen_mock),
             patch("classificacao_procons.gemini.client.time.sleep"),
-            pytest.raises(GeminiQuotaError, match="Limite gratuito"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
         ):
             _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
 
@@ -88,7 +91,7 @@ class TestGeminiQuota:
         with (
             patch("urllib.request.urlopen", urlopen_mock),
             patch("classificacao_procons.gemini.client.time.sleep"),
-            pytest.raises(GeminiQuotaError, match="Limite gratuito"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
         ):
             _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
 
@@ -113,6 +116,28 @@ class TestGeminiHelpers:
         text = "a" * 1100
         result = enforce_portal_character_limit(text, max_chars=1024)
         assert len(result) <= 1024
+
+    def test_should_strip_meta_preamble_before_formal_response(self) -> None:
+        text = (
+            "Aqui está uma versão reestruturada, com argumentação jurídica robusta.\n"
+            "---\n\n"
+            "**ILUSTRÍSSIMO(A) SENHOR(A) DIRETOR(A) DO PROCON-SP**\n"
+            "Conteúdo da resposta."
+        )
+        cleaned = strip_gemini_meta_preamble(text)
+        assert cleaned.startswith("**ILUSTRÍSSIMO")
+        assert "Aqui está uma versão" not in cleaned
+
+    def test_should_finalize_response_text(self) -> None:
+        text = (
+            "Aqui está uma versão reestruturada.\n---\n\n"
+            "**ILUSTRÍSSIMO(A) SENHOR(A)**\n"
+            "São Paulo, [Data Atual]."
+        )
+        final = finalize_procon_response_text(text, signed_date=date(2026, 7, 24))
+        assert final.startswith("ILUSTRÍSSIMO(A) SENHOR(A)")
+        assert "**" not in final
+        assert "24/07/2026" in final
 
 
 class TestResolveGeminiModel:

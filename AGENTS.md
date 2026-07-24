@@ -37,7 +37,7 @@ Nunca commitar `credentials/`. Usar Secret Manager em produção.
 
 Setup completo: `docs/cloud-agent-autonomia.md`.
 
-Secrets necessários no Cursor: `MONDAY_API_TOKEN`, `AUTENTIQUE_API_TOKEN`, `GEMINI_API_KEY`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`, `GITHUB_ACTIONS_PAT`.
+- `OPENAI_API_KEY` (fallback do `elaborate` quando Gemini atinge cota; recomendado em produção junto com `GEMINI_API_KEY`)
 
 Catch-up em lote (recomendado):
 

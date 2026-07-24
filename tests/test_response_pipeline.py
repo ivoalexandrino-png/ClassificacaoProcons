@@ -40,6 +40,7 @@ def _fake_download(*, file_id: str, destination, token_path=None):
     return destination
 
 
+@patch("classificacao_procons.response_pipeline.find_existing_response_outputs", return_value=None)
 @patch("classificacao_procons.response_pipeline.generate_procon_response")
 @patch("classificacao_procons.response_pipeline.download_drive_file")
 @patch("classificacao_procons.response_pipeline.resolve_sac_folder_context")
@@ -51,6 +52,7 @@ def test_should_defer_case_when_gemini_quota_exhausted(
     resolve_sac_mock,
     download_mock,
     generate_mock,
+    _find_existing_mock,
     tmp_path,
 ) -> None:
     """Cota do Gemini esgotada: caso adiado (não erro) e não marcado processado."""
@@ -76,6 +78,8 @@ def test_should_defer_case_when_gemini_quota_exhausted(
         assert "100" not in saved.get("item_ids", [])
 
 
+@patch("classificacao_procons.response_pipeline.find_existing_response_outputs", return_value=None)
+@patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
 @patch("classificacao_procons.response_pipeline.upload_pdf_file")
 @patch("classificacao_procons.response_pipeline.upload_text_file")
 @patch("classificacao_procons.response_pipeline.ensure_output_folder")
@@ -95,6 +99,8 @@ def test_should_elaborate_response_for_monday_case(
     ensure_folder_mock,
     upload_text_mock,
     upload_pdf_mock,
+    update_monday_mock,
+    _find_existing_mock,
     tmp_path,
 ) -> None:
     list_cases_mock.return_value = [
@@ -161,3 +167,62 @@ def test_should_elaborate_response_for_monday_case(
     build_pdf_mock.assert_called_once()
     assert upload_text_mock.call_count == 2
     upload_pdf_mock.assert_called_once()
+    update_monday_mock.assert_called_once()
+
+
+@patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
+@patch("classificacao_procons.response_pipeline.generate_procon_response")
+@patch("classificacao_procons.response_pipeline.find_existing_response_outputs")
+@patch("classificacao_procons.response_pipeline.resolve_sac_folder_context")
+@patch("classificacao_procons.response_pipeline.list_cases_ready_for_elaboration")
+@patch("classificacao_procons.response_pipeline.has_valid_token", return_value=True)
+def test_should_skip_when_response_files_already_exist_on_drive(
+    _token_mock,
+    list_cases_mock,
+    resolve_sac_mock,
+    find_existing_mock,
+    generate_mock,
+    update_monday_mock,
+    tmp_path,
+) -> None:
+    from classificacao_procons.drive.reader import ExistingResponseOutputs
+
+    list_cases_mock.return_value = [
+        MondayCaseReady(
+            item_id="100",
+            item_name="MARIA SILVA",
+            docs_sac_url="https://drive.google.com/drive/folders/abc",
+            protocol_number="1653213/2026",
+        ),
+    ]
+    resolve_sac_mock.return_value = SacFolderContext(
+        consumer_folder_id="folder-consumer",
+        sac_folder_id="folder-sac",
+        complaint_pdf=DriveFileInfo(
+            "pdf-1",
+            "Atendimento Procon - MARIA.pdf",
+            "application/pdf",
+            None,
+        ),
+        summary_txt=None,
+        supporting_files=[],
+    )
+    find_existing_mock.return_value = ExistingResponseOutputs(
+        full_response_url="https://drive/full",
+        summary_response_url="https://drive/summary",
+        unified_pdf_url="https://drive/unified",
+    )
+
+    results = elaborate_pending_responses(
+        ResponsePipelineOptions(
+            work_dir=tmp_path / "work",
+            state_path=tmp_path / "state.json",
+            monday_api_token="token-test",
+            gemini_api_key="gemini-test",
+        ),
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "skipped_existing"
+    generate_mock.assert_not_called()
+    update_monday_mock.assert_called_once()
