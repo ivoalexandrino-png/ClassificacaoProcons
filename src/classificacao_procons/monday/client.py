@@ -11,13 +11,16 @@ import urllib.error
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 from classificacao_procons.models import ProcessedComplaint
 from classificacao_procons.monday.mapping import (
+    FIELD_CPF,
     FIELD_PDF_URL,
     MondayColumn,
     MondayColumnDetails,
+    build_administrative_process_column_values,
     build_column_values,
     build_response_column_values,
     find_column_by_field,
@@ -35,8 +38,12 @@ ENV_API_TOKEN = "MONDAY_API_TOKEN"
 ENV_BOARD_NAME = "MONDAY_BOARD_NAME"
 ENV_BOARD_ID = "MONDAY_BOARD_ID"
 ENV_ORIGIN_LABEL = "MONDAY_ORIGIN_LABEL"
+ENV_PA_GENERATED_LABEL = "MONDAY_PA_GENERATED_LABEL"
+ENV_PA_RESPONDED_LABEL = "MONDAY_PA_RESPONDED_LABEL"
 ENV_TOKEN_PATH = "GMAIL_TOKEN_PATH"
 DEFAULT_ORIGIN_LABEL = 'Glam "Clube"'
+DEFAULT_PA_GENERATED_LABEL = "Sim"
+DEFAULT_PA_RESPONDED_LABEL = "Não"
 DEFAULT_TOKEN_PATH = "credentials/gmail-token.json"
 BOARD_PAGE_SIZE = 100
 MAX_BOARD_PAGES = 20
@@ -83,6 +90,22 @@ def get_board_id_from_env() -> str | None:
 def get_origin_label_from_env() -> str:
     origin = os.environ.get(ENV_ORIGIN_LABEL, DEFAULT_ORIGIN_LABEL).strip()
     return origin or DEFAULT_ORIGIN_LABEL
+
+
+def get_pa_generated_label_from_env() -> str:
+    label = os.environ.get(ENV_PA_GENERATED_LABEL, DEFAULT_PA_GENERATED_LABEL).strip()
+    return label or DEFAULT_PA_GENERATED_LABEL
+
+
+def get_pa_responded_label_from_env() -> str:
+    label = os.environ.get(ENV_PA_RESPONDED_LABEL, DEFAULT_PA_RESPONDED_LABEL).strip()
+    return label or DEFAULT_PA_RESPONDED_LABEL
+
+
+def calculate_pa_response_deadline(*, base_date: date | None = None) -> date:
+    """Prazo interno de resposta do Processo Administrativo: +5 dias corridos."""
+    start = base_date or date.today()
+    return start + timedelta(days=5)
 
 
 def get_token_path_from_env() -> str:
@@ -466,6 +489,75 @@ def _find_existing_item_id(
     return str(items[0]["id"])
 
 
+def _find_existing_item_id_by_cpf(
+    *,
+    api_token: str,
+    board_id: str,
+    cpf_column: MondayColumn,
+    consumer_cpf: str,
+) -> str | None:
+    normalized_cpf = re.sub(r"\D", "", consumer_cpf)
+    if not normalized_cpf:
+        return None
+
+    data = _graphql_request(
+        api_token=api_token,
+        query="""
+        query ($boardId: ID!, $columnId: String!, $value: String!) {
+          items_page_by_column_values(
+            board_id: $boardId
+            columns: [{column_id: $columnId, column_values: [$value]}]
+            limit: 1
+          ) {
+            items {
+              id
+            }
+          }
+        }
+        """,
+        variables={
+            "boardId": board_id,
+            "columnId": cpf_column.id,
+            "value": normalized_cpf,
+        },
+    )
+
+    items = data.get("items_page_by_column_values", {}).get("items", [])
+    if not items:
+        return None
+    return str(items[0]["id"])
+
+
+def _resolve_existing_item_id(
+    *,
+    api_token: str,
+    board_id: str,
+    columns: list[MondayColumn],
+    protocol_number: str,
+    consumer_cpf: str,
+) -> str | None:
+    protocol_column = find_protocol_column(columns)
+    if protocol_column is not None and protocol_number:
+        item_id = _find_existing_item_id(
+            api_token=api_token,
+            board_id=board_id,
+            protocol_column=protocol_column,
+            protocol_number=protocol_number,
+        )
+        if item_id is not None:
+            return item_id
+
+    cpf_column = find_column_by_field(columns, FIELD_CPF)
+    if cpf_column is not None:
+        return _find_existing_item_id_by_cpf(
+            api_token=api_token,
+            board_id=board_id,
+            cpf_column=cpf_column,
+            consumer_cpf=consumer_cpf,
+        )
+    return None
+
+
 def _build_item_url(
     *,
     account_slug: str | None,
@@ -665,6 +757,91 @@ def register_complaint(
             )
         except MondayClientError:
             pass
+    return MondayRegistrationResult(
+        item_id=item_id,
+        board_id=context.board_id,
+        item_url=_build_item_url(
+            account_slug=context.account_slug,
+            board_id=context.board_id,
+            item_id=item_id,
+        ),
+    )
+
+
+def update_administrative_process(
+    complaint: ProcessedComplaint,
+    *,
+    api_token: str | None = None,
+    board_name: str | None = None,
+) -> MondayRegistrationResult | None:
+    """Atualiza item existente no Monday quando abre Processo Administrativo."""
+    token = api_token or get_api_token_from_env()
+    if not token:
+        return None
+
+    if complaint.status != "success":
+        raise MondayClientError(
+            "Só é possível atualizar processos administrativos processados com sucesso.",
+        )
+    if not complaint.administrative_process_number:
+        raise MondayClientError("Número do processo administrativo ausente.")
+
+    context = load_board_metadata(
+        api_token=token,
+        board_name=board_name or get_board_name_from_env(),
+    )
+
+    item_id = _resolve_existing_item_id(
+        api_token=token,
+        board_id=context.board_id,
+        columns=context.columns,
+        protocol_number=complaint.protocol_number,
+        consumer_cpf=complaint.consumer_cpf,
+    )
+    if item_id is None:
+        raise MondayClientError(
+            "Caso não encontrado no Monday para atualizar Processo Administrativo. "
+            f"Protocolo: {complaint.protocol_number or 'n/d'}.",
+        )
+
+    pa_deadline = complaint.pa_response_deadline or calculate_pa_response_deadline()
+    column_values = sanitize_column_values(
+        context.column_details,
+        build_administrative_process_column_values(
+            context.columns,
+            administrative_process_number=complaint.administrative_process_number,
+            pa_response_deadline=pa_deadline,
+            pa_generated_label=get_pa_generated_label_from_env(),
+            pa_responded_label=get_pa_responded_label_from_env(),
+        ),
+    )
+    if column_values:
+        _apply_complaint_column_values(
+            api_token=token,
+            board_id=context.board_id,
+            item_id=item_id,
+            column_details=context.column_details,
+            column_values=column_values,
+        )
+
+    notification_pdf_column = find_column_by_field(context.columns, FIELD_PDF_URL)
+    if (
+        notification_pdf_column is not None
+        and notification_pdf_column.column_type == "file"
+        and complaint.pdf_url
+    ):
+        try:
+            _upload_notification_pdf_column(
+                api_token=token,
+                item_id=item_id,
+                column=notification_pdf_column,
+                pdf_url=complaint.pdf_url,
+                token_path=get_token_path_from_env(),
+                work_dir=Path("downloads/monday-uploads"),
+            )
+        except MondayClientError:
+            pass
+
     return MondayRegistrationResult(
         item_id=item_id,
         board_id=context.board_id,

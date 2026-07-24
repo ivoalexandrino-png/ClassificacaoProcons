@@ -4,10 +4,12 @@ from classificacao_procons.monday.client import (
     MondayClientError,
     MondayRegistrationResult,
     register_complaint,
+    update_administrative_process,
 )
 
 __all__ = [
     "MondayClientError",
     "MondayRegistrationResult",
     "register_complaint",
+    "update_administrative_process",
 ]
