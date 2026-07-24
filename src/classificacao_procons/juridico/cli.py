@@ -132,6 +132,120 @@ def _run_andamentos(args: argparse.Namespace) -> int:
     return 0
 
 
+def _portal_system(numero: str) -> str | None:
+    try:
+        from classificacao_procons.juridico.datajud import fetch_case_metadata
+
+        metadata = fetch_case_metadata(numero)
+        return metadata.sistema if metadata else None
+    except Exception:  # noqa: BLE001 — roteamento é otimização; nunca derruba o comando
+        return None
+
+
+def _run_portal(args: argparse.Namespace) -> int:
+    from classificacao_procons.juridico.acessos import AcessosError, get_tribunal_credential
+    from classificacao_procons.juridico.cnj import tribunal_acronym
+    from classificacao_procons.juridico.portais import esaj, router
+    from classificacao_procons.juridico.portais.base import (
+        PortalError,
+        PortalRequiresInteraction,
+        PortalUnsupported,
+    )
+    from classificacao_procons.juridico.portais.token_email import gmail_token_provider
+
+    acronym = args.tribunal or tribunal_acronym(args.numero)
+    if not acronym:
+        print(json.dumps({"error": "Tribunal não identificado pelo número CNJ."}), file=sys.stderr)
+        return 1
+
+    # O DataJud diz qual sistema (e-SAJ/PJe/Projudi/eproc) indexa o processo.
+    sistema = args.sistema or _portal_system(args.numero)
+
+    content = None
+    secrecy = False
+
+    if not args.autenticado:
+        try:
+            content = router.fetch_process_content(
+                args.numero,
+                sistema=sistema,
+                tribunal=acronym,
+                headless=not args.headed,
+            )
+        except PortalRequiresInteraction as exc:
+            secrecy = True
+            print(json.dumps({"info": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        except PortalUnsupported as exc:
+            print(json.dumps({"unsupported_system": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+        except PortalError as exc:
+            msg = json.dumps({"info": f"Consulta falhou: {exc}"}, ensure_ascii=False)
+            print(msg, file=sys.stderr)
+
+    # Fallback autenticado no e-SAJ (segredo de justiça / --autenticado).
+    if content is None and (secrecy or args.autenticado) and "SAJ" in (sistema or "TJ").upper():
+        try:
+            credential = get_tribunal_credential(acronym)
+        except AcessosError as exc:
+            print(json.dumps({"error": str(exc)}), file=sys.stderr)
+            return 1
+        if credential is None or "SAJ" not in credential.system:
+            print(
+                json.dumps(
+                    {"needs_interaction": f"Sem credencial e-SAJ válida para {acronym}."},
+                    ensure_ascii=False,
+                ),
+                file=sys.stderr,
+            )
+            return 2
+
+        token_provider = None
+        if args.token_email:
+            token_provider = lambda login: gmail_token_provider(  # noqa: E731
+                login,
+                token_path=args.token,
+            )
+        elif args.token_code:
+            token_provider = lambda _login: args.token_code  # noqa: E731
+
+        try:
+            content = esaj.fetch_process_content(
+                args.numero,
+                credential=credential,
+                headless=not args.headed,
+                token_provider=token_provider,
+            )
+        except PortalRequiresInteraction as exc:
+            print(json.dumps({"needs_interaction": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 2
+        except PortalError as exc:
+            print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+            return 1
+
+    if content is None:
+        print(
+            json.dumps({"needs_interaction": "Consulta pública sem dados."}, ensure_ascii=False),
+            file=sys.stderr,
+        )
+        return 2
+
+    print(
+        json.dumps(
+            {
+                "process_number": content.process_number,
+                "source": content.source,
+                "classe": content.classe,
+                "assunto": content.assunto,
+                "situacao": content.situacao,
+                "movements": content.movements,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    return 0
+
+
 def _run_boards(args: argparse.Namespace) -> int:
     try:
         boards = describe_boards(name_filter=args.filter)
@@ -185,7 +299,10 @@ def main(argv: list[str] | None = None) -> int:
     process_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Só mostra a triagem, sem Monday, eventos ou marcação de lido.",
+        help=(
+            "Só mostra a triagem (consultando DataJud/Comunica, somente leitura), "
+            "sem Monday, eventos ou marcação de lido."
+        ),
     )
     process_parser.add_argument(
         "--no-mark-read",
@@ -229,6 +346,39 @@ def main(argv: list[str] | None = None) -> int:
     )
     andamentos_parser.add_argument("--limit", type=int, default=20)
 
+    portal_parser = subparsers.add_parser(
+        "portal",
+        help="Consultar o teor do processo no portal do tribunal (e-SAJ, autenticado)",
+    )
+    portal_parser.add_argument("--numero", required=True, help="Número do processo (CNJ).")
+    portal_parser.add_argument(
+        "--tribunal",
+        help="Sigla do tribunal (ex.: TJSP); inferida do número se omitida.",
+    )
+    portal_parser.add_argument(
+        "--sistema",
+        help="Sistema do tribunal (e-SAJ, PJe, Projudi); inferido do DataJud se omitido.",
+    )
+    portal_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Abre o navegador com interface (para resolver captcha/2FA manualmente).",
+    )
+    portal_parser.add_argument(
+        "--autenticado",
+        action="store_true",
+        help="Pula a consulta pública e vai direto ao login (útil para segredo de justiça).",
+    )
+    portal_parser.add_argument(
+        "--token-email",
+        action="store_true",
+        help="Lê o código 2FA do e-SAJ na caixa Gmail autorizada (se o código chegar lá).",
+    )
+    portal_parser.add_argument(
+        "--token-code",
+        help="Informa manualmente o código 2FA enviado ao e-mail cadastrado.",
+    )
+
     boards_parser = subparsers.add_parser(
         "boards",
         help="Listar boards do Monday com grupos, colunas e mapeamento detectado",
@@ -263,6 +413,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_comunicacoes(args)
     if args.command == "andamentos":
         return _run_andamentos(args)
+    if args.command == "portal":
+        return _run_portal(args)
     if args.command == "boards":
         return _run_boards(args)
     if args.command == "events":

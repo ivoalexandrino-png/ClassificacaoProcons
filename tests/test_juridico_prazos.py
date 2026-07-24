@@ -10,6 +10,7 @@ from classificacao_procons.juridico.prazos import (
     compute_due_date,
     is_business_day,
     next_business_day,
+    subtract_business_days,
 )
 
 
@@ -45,6 +46,23 @@ class TestAddBusinessDays:
     def test_should_raise_when_days_negative(self) -> None:
         with pytest.raises(ValueError, match="não pode ser negativo"):
             add_business_days(date(2026, 7, 17), -1)
+
+
+class TestSubtractBusinessDays:
+    def test_should_subtract_two_business_days_within_week(self) -> None:
+        # sexta 07/08 - 2 dias úteis → quarta 05/08
+        assert subtract_business_days(date(2026, 8, 7), 2) == date(2026, 8, 5)
+
+    def test_should_skip_weekend_when_subtracting(self) -> None:
+        # segunda 20/07 - 2 dias úteis → quinta 16/07 (pula sáb/dom)
+        assert subtract_business_days(date(2026, 7, 20), 2) == date(2026, 7, 16)
+
+    def test_should_return_same_day_when_zero_days(self) -> None:
+        assert subtract_business_days(date(2026, 8, 7), 0) == date(2026, 8, 7)
+
+    def test_should_raise_when_days_negative(self) -> None:
+        with pytest.raises(ValueError, match="não pode ser negativo"):
+            subtract_business_days(date(2026, 8, 7), -1)
 
 
 class TestAddCalendarDays:

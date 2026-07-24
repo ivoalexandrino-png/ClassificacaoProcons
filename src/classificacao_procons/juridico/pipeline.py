@@ -13,10 +13,11 @@ from classificacao_procons.google_auth import (
     has_valid_token,
 )
 from classificacao_procons.juridico.analise import analyze_case
+from classificacao_procons.juridico.casos import sync_case_boards
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 from classificacao_procons.juridico.datajud import (
     DataJudError,
-    fetch_case_movements,
+    fetch_case_dossier,
     get_api_key_from_env,
 )
 from classificacao_procons.juridico.events import (
@@ -30,6 +31,7 @@ from classificacao_procons.juridico.gmail import GmailJuridicoFetcher
 from classificacao_procons.juridico.models import (
     CaseAnalysis,
     CaseCommunication,
+    CaseMetadata,
     CaseMovement,
     JudicialNotificationEmail,
     ParsedIntimacao,
@@ -38,14 +40,24 @@ from classificacao_procons.juridico.models import (
 )
 from classificacao_procons.juridico.monday import (
     MondayClientError,
+    MondayRegistrationResult,
     register_audiencia,
     register_providencia,
 )
 from classificacao_procons.juridico.parser import (
     IntimacaoParseError,
     parse_judicial_notification_body,
+    parse_judicial_notifications,
 )
-from classificacao_procons.juridico.providencias import affects_contingency, classify_providencia
+from classificacao_procons.juridico.providencias import (
+    STAGE_ACORDO,
+    STAGE_ENCERRAMENTO,
+    affects_contingency,
+    build_secrecy_providencia,
+    classify_providencia,
+    detect_process_stage,
+    reclassify_providencia_from_movements,
+)
 
 DEFAULT_STATE_PATH = Path("data/juridico-processed.json")
 
@@ -68,7 +80,9 @@ class JuridicoPipelineOptions:
     monday_group_name: str | None = None
     register_on_monday: bool = True
     consult_datajud: bool = True
-    datajud_limit: int = 5
+    # 20 andamentos: o suficiente para a detecção de estágio superado enxergar
+    # contestação/acordo/sentença mesmo com vários atos cartorários recentes.
+    datajud_limit: int = 20
     consult_comunica: bool = True
     comunica_limit: int = 5
 
@@ -89,22 +103,25 @@ def _save_processed_messages(state_path: Path, message_ids: set[str]) -> None:
     state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _fetch_movements_if_configured(
+def _fetch_dossier_if_configured(
     intimacao: ParsedIntimacao,
     *,
     options: JuridicoPipelineOptions,
-) -> tuple[list[CaseMovement], str | None]:
-    """Consulta o DataJud quando há chave; falha na consulta não bloqueia o fluxo."""
+) -> tuple[CaseMetadata | None, list[CaseMovement], str | None]:
+    """Metadados (sigilo/sistema) + andamentos do DataJud numa só chamada.
+
+    Falha na consulta não bloqueia o fluxo (o erro fica anotado no resultado).
+    """
     if not options.consult_datajud or not get_api_key_from_env():
-        return [], None
+        return None, [], None
     try:
-        movements = fetch_case_movements(
+        metadata, movements = fetch_case_dossier(
             intimacao.process_number,
             limit=options.datajud_limit,
         )
     except DataJudError as exc:
-        return [], str(exc)
-    return movements, None
+        return None, [], str(exc)
+    return metadata, movements, None
 
 
 def _fetch_communications_if_configured(
@@ -140,12 +157,16 @@ def _enrich_with_communications(
         for communication in communications
     )
     try:
-        return parse_judicial_notification_body(
-            text=f"{email_text}\n\n{teor_blocks}",
+        enriched = parse_judicial_notification_body(
+            # o número vem primeiro para e-mails-resumo não trocarem o processo
+            text=f"Processo {intimacao.process_number}\n{email_text}\n\n{teor_blocks}",
             subject=subject,
         )
     except IntimacaoParseError:
         return intimacao
+    if enriched.process_number != intimacao.process_number:
+        return intimacao
+    return enriched
 
 
 def _register_on_monday_if_configured(
@@ -155,21 +176,21 @@ def _register_on_monday_if_configured(
     analysis: CaseAnalysis,
     message_id: str,
     options: JuridicoPipelineOptions,
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[MondayRegistrationResult | None, MondayRegistrationResult | None, str | None]:
     """Registra o prazo no board "prazos" e, havendo audiência, no board "audiências".
 
-    Retorna (url do item de prazo, url do item de audiência, erros combinados).
+    Retorna (registro do prazo, registro da audiência, erros combinados).
     """
     if not options.register_on_monday:
         return None, None, None
 
-    prazo_url: str | None = None
-    audiencia_url: str | None = None
+    prazo_registration: MondayRegistrationResult | None = None
+    audiencia_registration: MondayRegistrationResult | None = None
     errors: list[str] = []
 
     if providencia.requires_action:
         try:
-            registration = register_providencia(
+            prazo_registration = register_providencia(
                 intimacao=intimacao,
                 providencia=providencia,
                 message_id=message_id,
@@ -178,24 +199,63 @@ def _register_on_monday_if_configured(
                 board_name=options.monday_board_name,
                 group_name=options.monday_group_name,
             )
-            prazo_url = registration.item_url if registration else None
         except MondayClientError as exc:
             errors.append(f"prazos: {exc}")
 
     if providencia.hearing_datetime is not None:
         try:
-            registration = register_audiencia(
+            audiencia_registration = register_audiencia(
                 intimacao=intimacao,
                 providencia=providencia,
                 message_id=message_id,
                 analysis=analysis.text,
                 api_token=options.monday_api_token,
             )
-            audiencia_url = registration.item_url if registration else None
         except MondayClientError as exc:
             errors.append(f"audiencias: {exc}")
 
-    return prazo_url, audiencia_url, "; ".join(errors) or None
+    return prazo_registration, audiencia_registration, "; ".join(errors) or None
+
+
+def _sync_case_boards_if_configured(
+    *,
+    intimacao: ParsedIntimacao,
+    providencia: Providencia,
+    analysis: CaseAnalysis,
+    movements: list[CaseMovement],
+    prazo_registration: MondayRegistrationResult | None,
+    audiencia_registration: MondayRegistrationResult | None,
+    options: JuridicoPipelineOptions,
+) -> str | None:
+    """Engrenagem dos quadros-mestre: caso, conexões, Status/Decisão e KPI."""
+    if not options.register_on_monday:
+        return None
+
+    detected = detect_process_stage(movements)
+    stage: str | None = None
+    stage_marker_date = None
+    if detected is not None and detected[0] in {STAGE_ACORDO, STAGE_ENCERRAMENTO}:
+        stage = detected[0]
+        marker = detected[1]
+        stage_marker_date = (
+            marker.movement_datetime.date() if marker.movement_datetime else None
+        )
+
+    result = sync_case_boards(
+        intimacao=intimacao,
+        providencia=providencia,
+        analysis=analysis.text,
+        stage=stage,
+        stage_marker_date=stage_marker_date,
+        prazo_board_id=prazo_registration.board_id if prazo_registration else None,
+        prazo_item_id=prazo_registration.item_id if prazo_registration else None,
+        audiencia_board_id=(
+            audiencia_registration.board_id if audiencia_registration else None
+        ),
+        audiencia_item_id=audiencia_registration.item_id if audiencia_registration else None,
+        api_token=options.monday_api_token,
+    )
+    return result.note()
 
 
 def _emit_handoff_events(
@@ -309,15 +369,62 @@ def _process_notification(
     options: JuridicoPipelineOptions,
     processed_messages: set[str],
     fetcher: GmailJuridicoFetcher,
-) -> ProcessedIntimacao:
-    # 1. E-mail (direto do tribunal, DJE ou encaminhado do e-mail pessoal)
-    intimacao = parse_judicial_notification_body(
+) -> list[ProcessedIntimacao]:
+    # 1. E-mail (direto do tribunal, DJE ou encaminhado do e-mail pessoal).
+    # Recortes/alertas de publicação agrupam vários processos num só e-mail —
+    # cada processo é triado isoladamente, com seu tipo e seu prazo.
+    intimacoes = parse_judicial_notifications(
         text=notification.body_text,
         subject=notification.subject,
     )
 
+    results = [
+        _process_intimacao(intimacao, notification=notification, options=options)
+        for intimacao in intimacoes
+    ]
+
+    if not options.dry_run:
+        processed_messages.add(notification.message_id)
+        _save_processed_messages(options.state_path, processed_messages)
+        if options.mark_read and has_gmail_modify_access(options.token_path):
+            fetcher.mark_as_read(notification.message_id)
+
+    return results
+
+
+def _process_intimacao(
+    intimacao: ParsedIntimacao,
+    *,
+    notification: JudicialNotificationEmail,
+    options: JuridicoPipelineOptions,
+) -> ProcessedIntimacao:
+    # 2. Entrar no processo: teor oficial (Domicílio Judicial) + andamentos (DataJud)
+    communications, comunica_error = _fetch_communications_if_configured(
+        intimacao,
+        options=options,
+    )
+    intimacao = _enrich_with_communications(
+        intimacao,
+        subject=notification.subject,
+        email_text=notification.body_text,
+        communications=communications,
+    )
+    metadata, movements, datajud_error = _fetch_dossier_if_configured(intimacao, options=options)
+
+    # 3. Triagem ciente do estágio: se o DataJud mostra que a providência do
+    # e-mail já foi superada (ou que há marco recente num push de ciência),
+    # cadastra a providência específica do estágio atual, com prazo.
+    providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
+    providencia = reclassify_providencia_from_movements(
+        providencia,
+        movements,
+        base_date=notification.received_at.date(),
+    )
+    # Segredo de justiça: o agente não lê o teor — vira item de verificação.
+    if metadata is not None and metadata.is_secret:
+        providencia = build_secrecy_providencia(providencia)
+
     if options.dry_run:
-        providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
         return ProcessedIntimacao(
             status="dry_run",
             message_id=notification.message_id,
@@ -330,23 +437,10 @@ def _process_notification(
             tribunal=intimacao.tribunal,
             court_unit=intimacao.court_unit,
             summary=intimacao.summary,
+            stage_note=providencia.stage_note,
+            error="; ".join(error for error in (comunica_error, datajud_error) if error) or None,
         )
 
-    # 2. Entrar no processo: teor oficial (Domicílio Judicial) + andamentos (DataJud)
-    communications, comunica_error = _fetch_communications_if_configured(
-        intimacao,
-        options=options,
-    )
-    intimacao = _enrich_with_communications(
-        intimacao,
-        subject=notification.subject,
-        email_text=notification.body_text,
-        communications=communications,
-    )
-    movements, datajud_error = _fetch_movements_if_configured(intimacao, options=options)
-
-    # 3. Triagem + entendimento caso a caso
-    providencia = classify_providencia(intimacao, base_date=notification.received_at.date())
     analysis = analyze_case(
         intimacao=intimacao,
         providencia=providencia,
@@ -355,11 +449,27 @@ def _process_notification(
     )
 
     # 4. Monday (caminho final) + eventos para os agentes futuros
-    monday_item_url, monday_audiencia_url, monday_error = _register_on_monday_if_configured(
+    prazo_registration, audiencia_registration, monday_error = _register_on_monday_if_configured(
         intimacao=intimacao,
         providencia=providencia,
         analysis=analysis,
         message_id=notification.message_id,
+        options=options,
+    )
+    monday_item_url = prazo_registration.item_url if prazo_registration else None
+    monday_audiencia_url = audiencia_registration.item_url if audiencia_registration else None
+    monday_prazo_skipped_duplicate = bool(
+        prazo_registration and prazo_registration.skipped_duplicate,
+    )
+
+    # 5. Engrenagem dos quadros-mestre: caso, conexões, Status/Decisão e KPI
+    case_sync_note = _sync_case_boards_if_configured(
+        intimacao=intimacao,
+        providencia=providencia,
+        analysis=analysis,
+        movements=movements,
+        prazo_registration=prazo_registration,
+        audiencia_registration=audiencia_registration,
         options=options,
     )
 
@@ -371,12 +481,6 @@ def _process_notification(
         monday_item_url=monday_item_url,
         options=options,
     )
-
-    processed_messages.add(notification.message_id)
-    _save_processed_messages(options.state_path, processed_messages)
-
-    if options.mark_read and has_gmail_modify_access(options.token_path):
-        fetcher.mark_as_read(notification.message_id)
 
     lookup_errors = "; ".join(error for error in (comunica_error, datajud_error) if error)
     return ProcessedIntimacao(
@@ -394,9 +498,12 @@ def _process_notification(
         analysis=analysis.text,
         analysis_source=analysis.source,
         communications_count=len(communications),
+        stage_note=providencia.stage_note,
         monday_item_url=monday_item_url,
         monday_audiencia_url=monday_audiencia_url,
+        monday_prazo_skipped_duplicate=monday_prazo_skipped_duplicate,
         monday_error=monday_error,
+        case_sync_note=case_sync_note,
         events_emitted=events_emitted,
         error=lookup_errors or None,
     )
@@ -439,17 +546,17 @@ def process_new_intimacoes(
             continue
 
         try:
-            result = _process_notification(
-                notification,
-                options=options,
-                processed_messages=processed_messages,
-                fetcher=fetcher,
+            results.extend(
+                _process_notification(
+                    notification,
+                    options=options,
+                    processed_messages=processed_messages,
+                    fetcher=fetcher,
+                ),
             )
         except IntimacaoParseError as exc:
-            result = _needs_review_result(notification, reason=str(exc))
+            results.append(_needs_review_result(notification, reason=str(exc)))
         except GmailClientError as exc:
-            result = _error_result(notification, error=str(exc))
-
-        results.append(result)
+            results.append(_error_result(notification, error=str(exc)))
 
     return results

@@ -1,0 +1,130 @@
+name: Juridico hourly processing
+
+on:
+  schedule:
+    # A cada hora, deslocado do procon-hourly (que roda no minuto 0)
+    - cron: "30 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só mostra a triagem, sem Monday, eventos ou marcação de lido"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # O cache do Actions é imutável por chave: salvamos com uma chave nova a
+      # cada execução e restauramos a mais recente pelo prefixo (rolling state).
+      - name: Restore pipeline state
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: juridico-pipeline-state-${{ github.run_id }}
+          restore-keys: |
+            juridico-pipeline-state-
+
+      - name: Prepare state directory
+        run: |
+          mkdir -p data
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          state = Path("data/juridico-processed.json")
+          if state.exists():
+              try:
+                  payload = json.loads(state.read_text(encoding="utf-8"))
+                  print(f"Estado: {len(payload.get('message_ids', []))} intimação(ões) processada(s)")
+              except json.JSONDecodeError:
+                  print("Estado: arquivo inválido, será recriado")
+          else:
+              print("Estado: vazio (primeira execução ou cache expirado)")
+
+          events = Path("data/juridico-events.jsonl")
+          if events.exists():
+              total = sum(1 for line in events.read_text(encoding="utf-8").splitlines() if line)
+              print(f"Eventos de handoff acumulados: {total}")
+          PY
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install .
+
+      - name: Configure Google credentials
+        env:
+          GMAIL_OAUTH_JSON: ${{ secrets.GMAIL_OAUTH_JSON }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+        run: |
+          mkdir -p credentials
+          printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
+          printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
+
+      - name: Validate Google credentials
+        run: |
+          python3 <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          required_scopes = {
+              "https://www.googleapis.com/auth/gmail.readonly",
+              "https://www.googleapis.com/auth/gmail.modify",
+          }
+
+          for filename in ("gmail-oauth.json", "gmail-token.json"):
+              path = Path("credentials") / filename
+              if not path.exists() or path.stat().st_size < 10:
+                  print(f"ERRO: {filename} vazio ou ausente. Verifique os secrets no GitHub.")
+                  sys.exit(1)
+              try:
+                  json.loads(path.read_text())
+              except json.JSONDecodeError:
+                  print(f"ERRO: {filename} não é um JSON válido.")
+                  sys.exit(1)
+
+          token = json.loads(Path("credentials/gmail-token.json").read_text())
+          scopes = set(token.get("scopes", []))
+          missing = required_scopes - scopes
+          if missing:
+              print("ERRO: token sem permissões necessárias. Rode Setup Google token de novo.")
+              sys.exit(1)
+
+          from classificacao_procons.google_auth import has_valid_token
+
+          if not has_valid_token():
+              print("ERRO: token inválido ou expirado. Rode Setup Google token de novo.")
+              sys.exit(1)
+          print("Credenciais Google OK.")
+          PY
+
+      # --no-comunica: o CloudFront do CNJ bloqueia IPs fora do Brasil (HTTP 403);
+      # dos runners do GitHub o teor nunca vem — evitamos as chamadas perdidas.
+      - name: Process juridico intimacoes
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATAJUD_API_KEY: ${{ secrets.DATAJUD_API_KEY }}
+        run: >
+          python -m classificacao_procons.juridico.cli process
+          --max-results 20
+          --no-comunica
+          ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Save pipeline state
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: juridico-pipeline-state-${{ github.run_id }}

@@ -9,7 +9,7 @@ import pytest
 
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 
-PROCESS_NUMBER = "1001234-56.2026.8.26.0100"
+PROCESS_NUMBER = "1001234-83.2026.8.26.0100"
 
 
 def _mock_urlopen(payload: object) -> MagicMock:
@@ -46,7 +46,7 @@ class TestFetchCaseCommunications:
         assert communication.available_date == "2026-07-15"
 
         request = urlopen.call_args.args[0]
-        assert "numeroProcesso=10012345620268260100" in request.full_url
+        assert "numeroProcesso=10012348320268260100" in request.full_url
 
     def test_should_support_snake_case_keys(self) -> None:
         payload = {

@@ -16,6 +16,7 @@ venv/
 credentials/
 *.json
 !pyproject.toml
+!.cursor/environment.json
 
 # Downloads locais
 downloads/

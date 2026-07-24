@@ -6,18 +6,24 @@ Enquanto o serviço 24h no Google Cloud não estiver no ar, dá para usar **bot�
 
 | O que você quer | Onde clicar no GitHub | Quando usar |
 |-----------------|----------------------|-------------|
-| Criar/atualizar itens no **Controle Assinaturas** | Actions → **Sync Controle Assinaturas** | Novos contratos ou status/grupo desatualizado |
+| **Tudo de uma vez** (Controle + assinados → Drive) | Actions → **Catch-up contratos** | Retomar atraso sem Cloud Run |
+| Criar/atualizar itens no **Controle Assinaturas** | Actions → **Sync Controle Assinaturas** | Só Controle, sem processar assinados |
 | Registrar **um** contrato específico | Actions → **Registrar contrato no Controle** | Só um documento novo (você tem o ID) |
 | Processar contrato **totalmente assinado** (Drive + Monday) | Actions → **Test contrato assinado** | Depois que Jan e Luciano assinaram |
 
 ## Passo a passo — sincronizar tudo (recomendado)
 
 1. Abra o repositório no GitHub → aba **Actions**
-2. Escolha **Sync Controle Assinaturas (Autentique)**
+2. Escolha **Catch-up contratos (Autentique → Monday/Drive)**
 3. Clique **Run workflow**
-4. Primeira vez: deixe **dry_run = true** (só simula, não cria nada)
-5. Veja o log — confira `created` (novos) e `updated` (status/grupo corrigidos)
+4. Primeira vez: deixe **dry_run = true** (só simula)
+5. Veja o log — confira `sync_created`, `sync_updated`, `processed`
 6. Se estiver ok, rode de novo com **dry_run = false**
+
+Alternativa (só Controle, sem Drive):
+
+1. Actions → **Sync Controle Assinaturas (Autentique)**
+2. **Run workflow** com dry_run true/false conforme acima
 
 **Resultado esperado:** itens novos no grupo **Jan** (com Tipo), sem duplicar os que já existem.
 

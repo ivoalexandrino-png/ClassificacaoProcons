@@ -42,7 +42,11 @@ CONTROLE_STATUS_AGUARDANDO_OUTROS = "Aguardando outros"
 SIGNER_EMAIL_JAN = "assinador@b4a.com.br"
 SIGNER_EMAIL_LUCIANO = "juridico@b4a.com.br"
 
-# Contratos — grupos (board 5385471914)
+# Controle Assinaturas — coluna Tipo (status) e grupo no quadro Contratos
+MONDAY_TIPO_RH = "RH"
+MONDAY_GROUP_RH = "RH"
+
+# Legado — grupos que ainda podem existir no quadro Contratos
 MONDAY_GROUP_CONTRATOS_TRABALHO_CLT = "Contratos de Trabalho (CLT)"
 MONDAY_GROUP_CONTRATOS_PJ = "Contratos PJ (Interno)"
 
@@ -59,13 +63,15 @@ CONTRATOS_GROUP_BY_TIPO: dict[str, str] = {
     "Contratos Influencers (Queens)": "novo_grupo67322",
     "Contratos Jan": "contratos_jan__1",
     "Pedidos Marcas Próprias": "topics",
-    MONDAY_GROUP_CONTRATOS_TRABALHO_CLT: MONDAY_GROUP_CONTRATOS_TRABALHO_CLT,
-    MONDAY_GROUP_CONTRATOS_PJ: MONDAY_GROUP_CONTRATOS_PJ,
+    MONDAY_TIPO_RH: MONDAY_GROUP_RH,
+    MONDAY_GROUP_CONTRATOS_TRABALHO_CLT: MONDAY_GROUP_RH,
+    MONDAY_GROUP_CONTRATOS_PJ: MONDAY_GROUP_RH,
 }
 
 # Grupos criados dinamicamente no Monday (título = chave de lookup)
 DYNAMIC_CONTRATOS_GROUP_TITLES = frozenset(
     {
+        MONDAY_GROUP_RH,
         MONDAY_GROUP_CONTRATOS_TRABALHO_CLT,
         MONDAY_GROUP_CONTRATOS_PJ,
     }

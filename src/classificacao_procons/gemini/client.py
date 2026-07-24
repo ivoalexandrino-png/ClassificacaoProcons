@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -22,15 +23,54 @@ MODEL_PREFERENCE_ORDER = (
 )
 ENV_GEMINI_API_KEY = "GEMINI_API_KEY"
 ENV_GEMINI_MODEL = "GEMINI_MODEL"
-MAX_GEMINI_RETRIES = 5
+MAX_GEMINI_RETRIES = 8
 RETRYABLE_GEMINI_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
 MAX_PORTAL_CHARACTERS = 1024
 MULTA_40_PATTERN = re.compile(r"multa de 40\s*%", re.IGNORECASE)
 MULTA_REPLACEMENT = "multa proporcional ao tempo restante"
+_META_PREAMBLE_PATTERN = re.compile(
+    r"^.*?(?:aqui está|segue (?:abaixo|a)|versão reestruturada|conforme solicitado).*?\n---\s*\n+",
+    re.IGNORECASE | re.DOTALL,
+)
+_FORMAL_RESPONSE_START = re.compile(
+    r"(?im)^(?:#{1,3}\s*)?\**(?:ilustríssim|prezado|ao\s+procon|excelentíssim)",
+)
+_DATE_PLACEHOLDER_PATTERN = re.compile(
+    r"\[(?:data\s*atual|data|DATA\s*ATUAL)\]",
+    re.IGNORECASE,
+)
+_HEADER_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
+_HORIZONTAL_RULE_PATTERN = re.compile(r"^[-*_]{3,}\s*$")
 
 
 class GeminiClientError(RuntimeError):
     """Erro ao gerar conteúdo com Gemini."""
+
+
+class GeminiQuotaError(GeminiClientError):
+    """Cota do Gemini esgotada (HTTP 429). Condição transitória — tentar depois."""
+
+
+# Circuit breaker de cota: depois de um 429 definitivo, as próximas chamadas
+# falham imediatamente (sem 80s de retries cada) até o cooldown expirar.
+# Evita que um lote grande passe dezenas de minutos re-tentando cota esgotada.
+QUOTA_COOLDOWN_SECONDS = 600
+_quota_cooldown_until = 0.0
+
+
+def _quota_cooldown_active() -> bool:
+    return time.monotonic() < _quota_cooldown_until
+
+
+def _start_quota_cooldown() -> None:
+    global _quota_cooldown_until
+    _quota_cooldown_until = time.monotonic() + QUOTA_COOLDOWN_SECONDS
+
+
+def reset_quota_cooldown() -> None:
+    """Zera o cooldown (para testes ou retomada manual)."""
+    global _quota_cooldown_until
+    _quota_cooldown_until = 0.0
 
 
 @dataclass(frozen=True)
@@ -67,6 +107,8 @@ def list_generate_content_models(*, api_key: str) -> list[str]:
         raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
         raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+    except OSError as exc:
+        raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise GeminiClientError("Gemini retornou lista de modelos inválida.") from exc
 
@@ -131,6 +173,105 @@ def enforce_portal_character_limit(text: str, *, max_chars: int = MAX_PORTAL_CHA
     return truncated
 
 
+def strip_gemini_meta_preamble(text: str) -> str:
+    cleaned = text.strip()
+    without_rule = _META_PREAMBLE_PATTERN.sub("", cleaned)
+    if without_rule != cleaned:
+        cleaned = without_rule
+
+    formal_match = _FORMAL_RESPONSE_START.search(cleaned)
+    if formal_match and formal_match.start() > 0:
+        prefix = cleaned[: formal_match.start()].strip()
+        if re.search(
+            r"(?i)(aqui está|versão reestruturada|argumentação jurídica|"
+            r"segue abaixo|conforme solicitado)",
+            prefix,
+        ):
+            cleaned = cleaned[formal_match.start() :].strip()
+
+    return cleaned.lstrip("-").strip()
+
+
+def _strip_inline_markdown(text: str) -> str:
+    current = text.strip()
+    for _ in range(4):
+        updated = re.sub(r"\*\*(.+?)\*\*", r"\1", current)
+        updated = re.sub(r"\*(.+?)\*", r"\1", updated)
+        updated = re.sub(r"__(.+?)__", r"\1", updated)
+        updated = re.sub(r"_(.+?)_", r"\1", updated)
+        if updated == current:
+            break
+        current = updated
+    return current
+
+
+def _collapse_blank_lines(text: str) -> str:
+    return re.sub(r"\n{3,}", "\n\n", text.strip())
+
+
+def strip_markdown_formatting(text: str) -> str:
+    """Converte markdown comum do Gemini em texto corrido para documento jurídico."""
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            lines.append("")
+            continue
+        if _HORIZONTAL_RULE_PATTERN.match(stripped):
+            lines.append("")
+            continue
+        if stripped.startswith(">"):
+            stripped = stripped.lstrip(">").strip()
+
+        header_match = _HEADER_PATTERN.match(stripped)
+        if header_match:
+            title = _strip_inline_markdown(header_match.group(2).strip())
+            if title:
+                lines.append(title.upper())
+                lines.append("")
+            continue
+
+        lines.append(_strip_inline_markdown(stripped))
+
+    return _collapse_blank_lines("\n".join(lines))
+
+
+def replace_response_date_placeholders(
+    text: str,
+    *,
+    signed_date: date | None = None,
+) -> str:
+    """Substitui placeholders de data por data real (padrão: hoje)."""
+    reference = signed_date or date.today()
+    formatted = reference.strftime("%d/%m/%Y")
+    updated = _DATE_PLACEHOLDER_PATTERN.sub(formatted, text)
+    updated = re.sub(
+        r"(São Paulo,)\s*\[Data Atual\]\.?",
+        rf"\1 {formatted}.",
+        updated,
+        flags=re.IGNORECASE,
+    )
+    updated = re.sub(
+        r"(São Paulo,)\s*\.(?=\s*\n)",
+        rf"\1 {formatted}.",
+        updated,
+        flags=re.IGNORECASE,
+    )
+    return updated
+
+
+def finalize_procon_response_text(
+    text: str,
+    *,
+    signed_date: date | None = None,
+) -> str:
+    """Aplica pós-processamento padrão ao texto da resposta ao Procon."""
+    normalized = strip_gemini_meta_preamble(text)
+    normalized = replace_response_date_placeholders(normalized, signed_date=signed_date)
+    normalized = strip_markdown_formatting(normalized)
+    return apply_multa_replacement(normalized)
+
+
 def _is_retryable_gemini_http_error(code: int) -> bool:
     return code in RETRYABLE_GEMINI_HTTP_CODES
 
@@ -147,6 +288,11 @@ def _gemini_request(
     model: str,
     parts: list[dict[str, object]],
 ) -> str:
+    if _quota_cooldown_active():
+        raise GeminiQuotaError(
+            "Cota do Gemini em cooldown após 429; pulando chamada até o limite renovar.",
+        )
+
     url = f"{GEMINI_API_BASE}/models/{model}:generateContent?key={api_key}"
     payload = {"contents": [{"parts": parts}]}
     request = urllib.request.Request(
@@ -167,9 +313,11 @@ def _gemini_request(
                 time.sleep(_gemini_retry_delay_seconds(code=exc.code, attempt=attempt))
                 continue
             if exc.code == 429:
-                raise GeminiClientError(
-                    "Limite gratuito do Gemini esgotado. Aguarde alguns minutos e tente "
-                    "de novo, ou ative cobrança em https://aistudio.google.com/apikey",
+                _start_quota_cooldown()
+                raise GeminiQuotaError(
+                    "Cota ou limite de requisições do Gemini atingido (HTTP 429). "
+                    "Verifique billing em https://aistudio.google.com/apikey "
+                    "ou configure OPENAI_API_KEY para fallback automático.",
                 ) from exc
             if exc.code == 404:
                 raise GeminiClientError(
@@ -181,6 +329,13 @@ def _gemini_request(
             raise last_error from exc
         except urllib.error.URLError as exc:
             raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+        except OSError as exc:
+            # Timeout no meio da leitura chega como TimeoutError (OSError),
+            # sem virar URLError — tratar como indisponibilidade retentável.
+            if attempt < MAX_GEMINI_RETRIES - 1:
+                time.sleep(_gemini_retry_delay_seconds(code=503, attempt=attempt))
+                continue
+            raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
         except json.JSONDecodeError as exc:
             raise GeminiClientError("Gemini retornou resposta inválida.") from exc
         else:
@@ -244,101 +399,16 @@ def generate_procon_response(
     model: str | None = None,
 ) -> GeneratedResponse:
     """Executa a cadeia de prompts para elaborar a resposta ao Procon."""
-    key = api_key or get_api_key_from_env()
-    if not key:
-        raise GeminiClientError("GEMINI_API_KEY não configurada.")
-
-    selected_model = model
-    available_models: list[str] = []
-    if not selected_model:
-        available_models = list_generate_content_models(api_key=key)
-        selected_model = resolve_gemini_model(
-            available_models=available_models,
-            preferred=get_model_from_env(),
-        )
-    model_candidates = (
-        [normalize_model_name(selected_model)]
-        if model
-        else _ordered_model_candidates(
-            available_models=available_models,
-            preferred=get_model_from_env(),
-        )
+    from classificacao_procons.llm.procon_response import (
+        generate_procon_response as generate_with_llm_providers,
     )
 
-    if not complaint_pdf_path.exists():
-        raise GeminiClientError(f"PDF da reclamação não encontrado: {complaint_pdf_path}")
-
-    supporting_list = "\n".join(f"- {name}" for name in supporting_file_names) or "- (nenhum)"
-
-    analysis_prompt = (
-        "Você é advogado(a) de defesa do consumidor em resposta ao Procon-SP.\n"
-        f"Consumidor: {consumer_name}\n"
-        f"Protocolo: {protocol_number}\n\n"
-        "Analise o PDF da reclamação anexo e produza:\n"
-        "1) resumo objetivo dos fatos alegados;\n"
-        "2) pontos jurídicos relevantes;\n"
-        "3) riscos e oportunidades de defesa.\n"
-        "Responda em português do Brasil."
-    )
-
-    last_error: GeminiClientError | None = None
-    for candidate_model in model_candidates:
-        try:
-            analysis = _gemini_request(
-                api_key=key,
-                model=candidate_model,
-                parts=[{"text": analysis_prompt}, _pdf_part(complaint_pdf_path)],
-            )
-            selected_model = candidate_model
-            break
-        except GeminiClientError as exc:
-            last_error = exc
-            message = str(exc)
-            if not any(code in message for code in ("HTTP 503", "HTTP 502", "HTTP 504")):
-                raise
-    else:
-        if last_error is not None:
-            raise last_error
-        raise GeminiClientError("Gemini indisponível para todos os modelos candidatos.")
-
-    draft_prompt = (
-        "Com base na análise abaixo e no relato do SAC, redija uma resposta inicial ao Procon.\n\n"
-        f"ANÁLISE:\n{analysis}\n\n"
-        f"RELATO DO SAC:\n{sac_summary}\n\n"
-        f"DOCUMENTOS ANEXADOS PELO SAC:\n{supporting_list}\n\n"
-        "A resposta deve ser formal, clara e fundamentada nos documentos."
-    )
-    draft = _gemini_request(api_key=key, model=selected_model, parts=[{"text": draft_prompt}])
-
-    rewrite_prompt = (
-        "Reescreva a resposta abaixo tornando-a mais detalhada, persuasiva e bem fundamentada, "
-        "sem inventar fatos que não estejam na análise ou no relato do SAC.\n\n"
-        f"RESPOSTA ATUAL:\n{draft}"
-    )
-    final_response = _gemini_request(
-        api_key=key,
-        model=selected_model,
-        parts=[{"text": rewrite_prompt}],
-    )
-    final_response = apply_multa_replacement(final_response)
-
-    summary_prompt = (
-        "Resuma a resposta abaixo para o campo de resposta do portal do Procon-SP, "
-        f"com no máximo {MAX_PORTAL_CHARACTERS} caracteres, mantendo os argumentos centrais.\n"
-        "Não use markdown. Retorne apenas o texto final.\n\n"
-        f"RESPOSTA COMPLETA:\n{final_response}"
-    )
-    portal_summary = _gemini_request(
-        api_key=key,
-        model=selected_model,
-        parts=[{"text": summary_prompt}],
-    )
-    portal_summary = apply_multa_replacement(portal_summary)
-    portal_summary = enforce_portal_character_limit(portal_summary)
-
-    return GeneratedResponse(
-        analysis=analysis,
-        draft=draft,
-        final_response=final_response,
-        portal_summary=portal_summary,
+    return generate_with_llm_providers(
+        complaint_pdf_path=complaint_pdf_path,
+        sac_summary=sac_summary,
+        supporting_file_names=supporting_file_names,
+        consumer_name=consumer_name,
+        protocol_number=protocol_number,
+        api_key=api_key,
+        model=model,
     )
