@@ -2,6 +2,7 @@
 
 from classificacao_procons.gemini.client import (
     GeminiClientError,
+    GeminiQuotaError,
     GeneratedResponse,
     apply_multa_replacement,
     enforce_portal_character_limit,
@@ -11,6 +12,7 @@ from classificacao_procons.gemini.client import (
 
 __all__ = [
     "GeminiClientError",
+    "GeminiQuotaError",
     "GeneratedResponse",
     "apply_multa_replacement",
     "enforce_portal_character_limit",

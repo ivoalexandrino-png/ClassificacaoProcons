@@ -18,6 +18,7 @@ jobs:
   prepare-and-automerge:
     if: startsWith(github.event.pull_request.head.ref, 'cursor/')
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: Prepare PR and enable auto-merge
         uses: actions/github-script@v7
@@ -26,6 +27,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pullNumber = context.payload.pull_request.number;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
             let { data: pr } = await github.rest.pulls.get({
               owner,
@@ -79,26 +81,111 @@ jobs:
                 { pullRequestId: pr.node_id },
               );
               core.info(`Enabled auto-merge for PR #${pullNumber}.`);
+              return;
             } catch (error) {
-              core.warning(
-                `Could not enable auto-merge for PR #${pullNumber}: ${error.message}`,
+              // Sem branch protection com checks obrigatórios, o GitHub recusa o
+              // auto-merge ("Pull request is in unstable/clean status"). Nesse caso
+              // esperamos os checks (ex.: Cursor Approval Agent) concluírem e
+              // mergeamos direto — nunca com check pendente ou reprovado.
+              core.info(
+                `Auto-merge unavailable for PR #${pullNumber} (${error.message}); ` +
+                "waiting for checks to complete before merging directly.",
               );
+            }
 
-              const { data: refreshed } = await github.rest.pulls.get({
+            const headSha = pr.head.sha;
+            const maxAttempts = 60;
+            const delayMs = 30000;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              ({ data: pr } = await github.rest.pulls.get({
                 owner,
                 repo,
                 pull_number: pullNumber,
-              });
+              }));
 
-              if (refreshed.mergeable && refreshed.mergeable_state === "clean") {
+              if (pr.merged || pr.state !== "open") {
+                core.info(`PR #${pullNumber} already merged or closed; done.`);
+                return;
+              }
+              if (pr.head.sha !== headSha) {
+                core.info(`PR #${pullNumber} received new commits; the next run takes over.`);
+                return;
+              }
+
+              // Checks (GitHub Apps, ex.: Cursor Approval Agent), excluindo este job.
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                owner,
+                repo,
+                ref: headSha,
+                per_page: 100,
+              });
+              const externalChecks = checkRuns.filter(
+                (run) =>
+                  run.name !== context.job &&
+                  !(run.html_url || "").includes(`/runs/${context.runId}/`),
+              );
+              const pendingChecks = externalChecks.filter((run) => run.status !== "completed");
+
+              // Statuses legados (API de commit status).
+              const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
+                owner,
+                repo,
+                ref: headSha,
+              });
+              const pendingStatuses = combined.statuses.filter(
+                (status) => status.state === "pending",
+              );
+
+              if (pendingChecks.length || pendingStatuses.length) {
+                const names = [
+                  ...pendingChecks.map((run) => run.name),
+                  ...pendingStatuses.map((status) => status.context),
+                ].join(", ");
+                core.info(
+                  `Attempt ${attempt}/${maxAttempts}: waiting for checks to finish (${names}).`,
+                );
+                await sleep(delayMs);
+                continue;
+              }
+
+              const failedChecks = externalChecks.filter(
+                (run) => !["success", "neutral", "skipped"].includes(run.conclusion),
+              );
+              const failedStatuses = combined.statuses.filter(
+                (status) => !["success"].includes(status.state),
+              );
+              if (failedChecks.length || failedStatuses.length) {
+                const names = [
+                  ...failedChecks.map((run) => `${run.name} (${run.conclusion})`),
+                  ...failedStatuses.map((status) => `${status.context} (${status.state})`),
+                ].join(", ");
+                core.setFailed(
+                  `Not merging PR #${pullNumber}: checks did not pass — ${names}.`,
+                );
+                return;
+              }
+
+              try {
                 await github.rest.pulls.merge({
                   owner,
                   repo,
                   pull_number: pullNumber,
                   merge_method: "merge",
                 });
-                core.info(`Merged PR #${pullNumber} directly (no pending requirements).`);
-              } else {
-                throw error;
+                core.info(`Merged PR #${pullNumber} after all checks passed.`);
+                return;
+              } catch (mergeError) {
+                // 405 "unstable status": o GitHub ainda está propagando o resultado
+                // dos checks; aguardar e tentar de novo.
+                core.info(
+                  `Attempt ${attempt}/${maxAttempts}: merge not ready yet ` +
+                  `(${mergeError.message}); retrying.`,
+                );
+                await sleep(delayMs);
               }
             }
+
+            core.setFailed(
+              `Timed out waiting for checks on PR #${pullNumber}; not merged.`,
+            );

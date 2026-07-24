@@ -1,12 +1,17 @@
 """Testes do cliente Gemini."""
 
+import io
+import urllib.error
 from datetime import date
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from classificacao_procons.gemini.client import (
     DEFAULT_GEMINI_MODEL,
     GeminiClientError,
+    GeminiQuotaError,
+    _gemini_request,
     _gemini_retry_delay_seconds,
     _is_retryable_gemini_http_error,
     _ordered_model_candidates,
@@ -14,9 +19,87 @@ from classificacao_procons.gemini.client import (
     enforce_portal_character_limit,
     finalize_procon_response_text,
     get_model_from_env,
+    reset_quota_cooldown,
     resolve_gemini_model,
     strip_gemini_meta_preamble,
 )
+
+
+class TestGeminiQuota:
+    def setup_method(self) -> None:
+        reset_quota_cooldown()
+
+    def teardown_method(self) -> None:
+        reset_quota_cooldown()
+
+    def test_should_raise_quota_error_on_429_after_retries(self) -> None:
+        error_429 = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=io.BytesIO(b"quota"),
+        )
+        with (
+            patch("urllib.request.urlopen", MagicMock(side_effect=error_429)),
+            patch("classificacao_procons.gemini.client.time.sleep"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
+        ):
+            _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
+
+    def test_should_skip_network_calls_while_quota_cooldown_is_active(self) -> None:
+        error_429 = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=io.BytesIO(b"quota"),
+        )
+        urlopen_mock = MagicMock(side_effect=error_429)
+        with (
+            patch("urllib.request.urlopen", urlopen_mock),
+            patch("classificacao_procons.gemini.client.time.sleep"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
+        ):
+            _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
+
+        first_calls = urlopen_mock.call_count
+        assert first_calls >= 1
+
+        with pytest.raises(GeminiQuotaError, match="cooldown"):
+            _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
+
+        assert urlopen_mock.call_count == first_calls
+
+    def test_should_allow_requests_again_after_quota_cooldown_reset(self) -> None:
+        error_429 = urllib.error.HTTPError(
+            url="https://generativelanguage.googleapis.com",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=io.BytesIO(b"quota"),
+        )
+        urlopen_mock = MagicMock(side_effect=error_429)
+        with (
+            patch("urllib.request.urlopen", urlopen_mock),
+            patch("classificacao_procons.gemini.client.time.sleep"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
+        ):
+            _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
+
+        reset_quota_cooldown()
+        with (
+            patch("urllib.request.urlopen", urlopen_mock),
+            patch("classificacao_procons.gemini.client.time.sleep"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
+        ):
+            _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
+
+        assert urlopen_mock.call_count >= 2
+
+    def test_quota_error_is_gemini_client_error(self) -> None:
+        # subclasse: quem captura GeminiClientError também trata a cota (fallback)
+        assert issubclass(GeminiQuotaError, GeminiClientError)
 
 
 class TestGeminiHelpers:

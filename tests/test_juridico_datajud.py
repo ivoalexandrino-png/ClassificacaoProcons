@@ -10,18 +10,27 @@ import pytest
 
 from classificacao_procons.juridico.datajud import (
     DataJudError,
+    fetch_case_dossier,
+    fetch_case_metadata,
     fetch_case_movements,
     get_api_key_from_env,
 )
 
-PROCESS_NUMBER = "1001234-56.2026.8.26.0100"
+PROCESS_NUMBER = "1001234-83.2026.8.26.0100"
+
+
+@pytest.fixture(autouse=True)
+def _no_throttle():
+    """Desliga o espaçamento entre chamadas para os testes não dormirem."""
+    with patch("classificacao_procons.juridico.datajud._throttle"):
+        yield
 
 
 def _datajud_response(movements: list[dict]) -> dict:
     return {
         "hits": {
             "hits": [
-                {"_source": {"numeroProcesso": "10012345620268260100", "movimentos": movements}},
+                {"_source": {"numeroProcesso": "10012348320268260100", "movimentos": movements}},
             ],
         },
     }
@@ -32,6 +41,54 @@ def _mock_urlopen(payload: dict) -> MagicMock:
     response.read.return_value = json.dumps(payload).encode("utf-8")
     response.__enter__.return_value = response
     return MagicMock(return_value=response)
+
+
+def _source_response(source: dict) -> dict:
+    return {"hits": {"hits": [{"_source": source}]}}
+
+
+class TestFetchCaseMetadataAndDossier:
+    def test_should_read_secrecy_and_system(self) -> None:
+        payload = _source_response(
+            {
+                "nivelSigilo": 1,
+                "sistema": {"nome": "SAJ"},
+                "grau": "G1",
+                "classe": {"nome": "Procedimento Comum Cível"},
+            },
+        )
+        with patch("urllib.request.urlopen", _mock_urlopen(payload)):
+            metadata = fetch_case_metadata(PROCESS_NUMBER, api_key="chave")
+        assert metadata is not None
+        assert metadata.is_secret is True
+        assert metadata.sistema == "SAJ"
+        assert metadata.classe == "Procedimento Comum Cível"
+
+    def test_should_treat_zero_secrecy_as_public(self) -> None:
+        payload = _source_response({"nivelSigilo": 0, "sistema": {"nome": "Projudi"}})
+        with patch("urllib.request.urlopen", _mock_urlopen(payload)):
+            metadata = fetch_case_metadata(PROCESS_NUMBER, api_key="chave")
+        assert metadata.is_secret is False
+        assert metadata.sistema == "Projudi"
+
+    def test_should_return_none_when_process_not_indexed(self) -> None:
+        with patch("urllib.request.urlopen", _mock_urlopen({"hits": {"hits": []}})):
+            assert fetch_case_metadata(PROCESS_NUMBER, api_key="chave") is None
+
+    def test_dossier_should_return_metadata_and_movements_in_one_call(self) -> None:
+        payload = _source_response(
+            {
+                "nivelSigilo": 0,
+                "sistema": {"nome": "SAJ"},
+                "movimentos": [{"nome": "Conclusão", "dataHora": "2026-07-01T00:00:00Z"}],
+            },
+        )
+        urlopen = _mock_urlopen(payload)
+        with patch("urllib.request.urlopen", urlopen):
+            metadata, movements = fetch_case_dossier(PROCESS_NUMBER, api_key="chave")
+        assert metadata.sistema == "SAJ"
+        assert [m.movement_name for m in movements] == ["Conclusão"]
+        assert urlopen.call_count == 1  # uma só chamada ao DataJud
 
 
 class TestFetchCaseMovements:
@@ -90,14 +147,66 @@ class TestFetchCaseMovements:
 
     def test_should_raise_when_tribunal_is_not_supported(self) -> None:
         with pytest.raises(DataJudError, match="Tribunal não suportado"):
-            fetch_case_movements("1001234-56.2026.1.00.0000", api_key="chave")
+            fetch_case_movements("1001234-03.2026.1.00.0000", api_key="chave")
 
     def test_should_use_explicit_alias_when_provided(self) -> None:
         payload = _datajud_response([])
         with patch("urllib.request.urlopen", _mock_urlopen(payload)) as urlopen:
-            fetch_case_movements("1001234-56.2026.1.00.0000", api_key="chave", alias="stf")
+            fetch_case_movements("1001234-03.2026.1.00.0000", api_key="chave", alias="stf")
         request = urlopen.call_args.args[0]
         assert "api_publica_stf" in request.full_url
+
+    def test_should_wrap_read_timeout_as_datajud_error(self) -> None:
+        """Timeout no meio da leitura (TimeoutError) não pode derrubar o batch."""
+        with (
+            patch("urllib.request.urlopen", MagicMock(side_effect=TimeoutError("read timed out"))),
+            patch("classificacao_procons.juridico.datajud.time.sleep"),
+            pytest.raises(DataJudError, match="DataJud indisponível"),
+        ):
+            fetch_case_movements(PROCESS_NUMBER, api_key="chave")
+
+    def test_should_retry_on_http_429_and_succeed(self) -> None:
+        """Rate limit do DataJud (429) é retentado com backoff."""
+        payload = _datajud_response([{"nome": "Conclusão"}])
+        response = MagicMock()
+        response.read.return_value = json.dumps(payload).encode("utf-8")
+        response.__enter__ = MagicMock(return_value=response)
+        response.__exit__ = MagicMock(return_value=False)
+        error_429 = urllib.error.HTTPError(
+            url="https://api-publica.datajud.cnj.jus.br",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=io.BytesIO(b"rejected"),
+        )
+        urlopen = MagicMock(side_effect=[error_429, response])
+        with (
+            patch("urllib.request.urlopen", urlopen),
+            patch("classificacao_procons.juridico.datajud.time.sleep") as sleep,
+        ):
+            movements = fetch_case_movements(PROCESS_NUMBER, api_key="chave")
+
+        assert [item.movement_name for item in movements] == ["Conclusão"]
+        assert urlopen.call_count == 2
+        sleep.assert_called_once()
+
+    def test_should_not_retry_on_http_401(self) -> None:
+        error_401 = urllib.error.HTTPError(
+            url="https://api-publica.datajud.cnj.jus.br",
+            code=401,
+            msg="Unauthorized",
+            hdrs=None,
+            fp=io.BytesIO(b"unauthorized"),
+        )
+        urlopen = MagicMock(side_effect=error_401)
+        with (
+            patch("urllib.request.urlopen", urlopen),
+            patch("classificacao_procons.juridico.datajud.time.sleep") as sleep,
+            pytest.raises(DataJudError, match="HTTP 401"),
+        ):
+            fetch_case_movements(PROCESS_NUMBER, api_key="chave")
+        assert urlopen.call_count == 1
+        sleep.assert_not_called()
 
     def test_should_raise_on_http_error(self) -> None:
         error = urllib.error.HTTPError(

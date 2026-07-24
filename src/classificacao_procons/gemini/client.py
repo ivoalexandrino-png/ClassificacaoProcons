@@ -47,6 +47,32 @@ class GeminiClientError(RuntimeError):
     """Erro ao gerar conteúdo com Gemini."""
 
 
+class GeminiQuotaError(GeminiClientError):
+    """Cota do Gemini esgotada (HTTP 429). Condição transitória — tentar depois."""
+
+
+# Circuit breaker de cota: depois de um 429 definitivo, as próximas chamadas
+# falham imediatamente (sem 80s de retries cada) até o cooldown expirar.
+# Evita que um lote grande passe dezenas de minutos re-tentando cota esgotada.
+QUOTA_COOLDOWN_SECONDS = 600
+_quota_cooldown_until = 0.0
+
+
+def _quota_cooldown_active() -> bool:
+    return time.monotonic() < _quota_cooldown_until
+
+
+def _start_quota_cooldown() -> None:
+    global _quota_cooldown_until
+    _quota_cooldown_until = time.monotonic() + QUOTA_COOLDOWN_SECONDS
+
+
+def reset_quota_cooldown() -> None:
+    """Zera o cooldown (para testes ou retomada manual)."""
+    global _quota_cooldown_until
+    _quota_cooldown_until = 0.0
+
+
 @dataclass(frozen=True)
 class GeneratedResponse:
     analysis: str
@@ -81,6 +107,8 @@ def list_generate_content_models(*, api_key: str) -> list[str]:
         raise GeminiClientError(f"Gemini HTTP {exc.code}: {error_body}") from exc
     except urllib.error.URLError as exc:
         raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+    except OSError as exc:
+        raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise GeminiClientError("Gemini retornou lista de modelos inválida.") from exc
 
@@ -260,6 +288,11 @@ def _gemini_request(
     model: str,
     parts: list[dict[str, object]],
 ) -> str:
+    if _quota_cooldown_active():
+        raise GeminiQuotaError(
+            "Cota do Gemini em cooldown após 429; pulando chamada até o limite renovar.",
+        )
+
     url = f"{GEMINI_API_BASE}/models/{model}:generateContent?key={api_key}"
     payload = {"contents": [{"parts": parts}]}
     request = urllib.request.Request(
@@ -280,7 +313,8 @@ def _gemini_request(
                 time.sleep(_gemini_retry_delay_seconds(code=exc.code, attempt=attempt))
                 continue
             if exc.code == 429:
-                raise GeminiClientError(
+                _start_quota_cooldown()
+                raise GeminiQuotaError(
                     "Cota ou limite de requisições do Gemini atingido (HTTP 429). "
                     "Verifique billing em https://aistudio.google.com/apikey "
                     "ou configure OPENAI_API_KEY para fallback automático.",
@@ -295,6 +329,13 @@ def _gemini_request(
             raise last_error from exc
         except urllib.error.URLError as exc:
             raise GeminiClientError(f"Gemini indisponível: {exc.reason}") from exc
+        except OSError as exc:
+            # Timeout no meio da leitura chega como TimeoutError (OSError),
+            # sem virar URLError — tratar como indisponibilidade retentável.
+            if attempt < MAX_GEMINI_RETRIES - 1:
+                time.sleep(_gemini_retry_delay_seconds(code=503, attempt=attempt))
+                continue
+            raise GeminiClientError(f"Gemini indisponível: {exc}") from exc
         except json.JSONDecodeError as exc:
             raise GeminiClientError("Gemini retornou resposta inválida.") from exc
         else:
