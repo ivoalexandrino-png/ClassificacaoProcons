@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta"
@@ -27,6 +28,25 @@ RETRYABLE_GEMINI_HTTP_CODES = frozenset({429, 500, 502, 503, 504})
 MAX_PORTAL_CHARACTERS = 1024
 MULTA_40_PATTERN = re.compile(r"multa de 40\s*%", re.IGNORECASE)
 MULTA_REPLACEMENT = "multa proporcional ao tempo restante"
+_META_PREAMBLE_PATTERN = re.compile(
+    r"^.*?(?:aqui está|segue (?:abaixo|a)|versão reestruturada|conforme solicitado).*?\n---\s*\n+",
+    re.IGNORECASE | re.DOTALL,
+)
+_FORMAL_RESPONSE_START = re.compile(
+    r"(?im)^(?:#{1,3}\s*)?\**(?:ilustríssim|prezado|ao\s+procon|excelentíssim)",
+)
+_DATE_PLACEHOLDER_PATTERN = re.compile(
+    r"\[(?:data\s*atual|data|DATA\s*ATUAL)\]",
+    re.IGNORECASE,
+)
+_HEADER_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
+_HORIZONTAL_RULE_PATTERN = re.compile(r"^[-*_]{3,}\s*$")
+_PLAIN_TEXT_RULES = (
+    "- Formato: texto corrido em português, sem markdown.\n"
+    "- Proibido usar *, **, #, ###, ---, > ou outros marcadores de formatação.\n"
+    "- Use títulos de seção em MAIÚSCULAS (ex.: I. BREVE SÍNTESE DA RECLAMAÇÃO).\n"
+    "- Separe parágrafos com uma linha em branco.\n"
+)
 
 
 class GeminiClientError(RuntimeError):
@@ -118,6 +138,109 @@ def resolve_gemini_model(
 
 def apply_multa_replacement(text: str) -> str:
     return MULTA_40_PATTERN.sub(MULTA_REPLACEMENT, text)
+
+
+def strip_gemini_meta_preamble(text: str) -> str:
+    """Remove prefácios conversacionais que o modelo insere antes da petição."""
+    cleaned = text.strip()
+    if not cleaned:
+        return cleaned
+
+    without_rule = _META_PREAMBLE_PATTERN.sub("", cleaned, count=1).strip()
+    if without_rule != cleaned:
+        cleaned = without_rule
+
+    formal_match = _FORMAL_RESPONSE_START.search(cleaned)
+    if formal_match and formal_match.start() > 0:
+        prefix = cleaned[: formal_match.start()].strip()
+        if re.search(
+            r"(?i)(aqui está|versão reestruturada|argumentação jurídica|"
+            r"segue abaixo|conforme solicitado)",
+            prefix,
+        ):
+            cleaned = cleaned[formal_match.start() :].strip()
+
+    return cleaned.lstrip("-").strip()
+
+
+def _strip_inline_markdown(text: str) -> str:
+    current = text.strip()
+    for _ in range(4):
+        updated = re.sub(r"\*\*(.+?)\*\*", r"\1", current)
+        updated = re.sub(r"\*(.+?)\*", r"\1", updated)
+        updated = re.sub(r"__(.+?)__", r"\1", updated)
+        updated = re.sub(r"_(.+?)_", r"\1", updated)
+        if updated == current:
+            break
+        current = updated
+    return current
+
+
+def _collapse_blank_lines(text: str) -> str:
+    return re.sub(r"\n{3,}", "\n\n", text.strip())
+
+
+def strip_markdown_formatting(text: str) -> str:
+    """Converte markdown comum do Gemini em texto corrido para documento jurídico."""
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            lines.append("")
+            continue
+        if _HORIZONTAL_RULE_PATTERN.match(stripped):
+            lines.append("")
+            continue
+        if stripped.startswith(">"):
+            stripped = stripped.lstrip(">").strip()
+
+        header_match = _HEADER_PATTERN.match(stripped)
+        if header_match:
+            title = _strip_inline_markdown(header_match.group(2).strip())
+            if title:
+                lines.append(title.upper())
+                lines.append("")
+            continue
+
+        lines.append(_strip_inline_markdown(stripped))
+
+    return _collapse_blank_lines("\n".join(lines))
+
+
+def replace_response_date_placeholders(
+    text: str,
+    *,
+    signed_date: date | None = None,
+) -> str:
+    """Substitui placeholders de data por data real (padrão: hoje)."""
+    reference = signed_date or date.today()
+    formatted = reference.strftime("%d/%m/%Y")
+    updated = _DATE_PLACEHOLDER_PATTERN.sub(formatted, text)
+    updated = re.sub(
+        r"(São Paulo,)\s*\[Data Atual\]\.?",
+        rf"\1 {formatted}.",
+        updated,
+        flags=re.IGNORECASE,
+    )
+    updated = re.sub(
+        r"(São Paulo,)\s*\.(?=\s*\n)",
+        rf"\1 {formatted}.",
+        updated,
+        flags=re.IGNORECASE,
+    )
+    return updated
+
+
+def finalize_procon_response_text(
+    text: str,
+    *,
+    signed_date: date | None = None,
+) -> str:
+    """Aplica pós-processamento padrão ao texto da resposta ao Procon."""
+    normalized = strip_gemini_meta_preamble(text)
+    normalized = replace_response_date_placeholders(normalized, signed_date=signed_date)
+    normalized = strip_markdown_formatting(normalized)
+    return apply_multa_replacement(normalized)
 
 
 def enforce_portal_character_limit(text: str, *, max_chars: int = MAX_PORTAL_CHARACTERS) -> str:
@@ -269,6 +392,7 @@ def generate_procon_response(
         raise GeminiClientError(f"PDF da reclamação não encontrado: {complaint_pdf_path}")
 
     supporting_list = "\n".join(f"- {name}" for name in supporting_file_names) or "- (nenhum)"
+    signed_date = date.today().strftime("%d/%m/%Y")
 
     analysis_prompt = (
         "Você é advogado(a) de defesa do consumidor em resposta ao Procon-SP.\n"
@@ -306,21 +430,38 @@ def generate_procon_response(
         f"ANÁLISE:\n{analysis}\n\n"
         f"RELATO DO SAC:\n{sac_summary}\n\n"
         f"DOCUMENTOS ANEXADOS PELO SAC:\n{supporting_list}\n\n"
+        "Regras obrigatórias:\n"
+        "- Retorne SOMENTE o texto da resposta oficial ao Procon.\n"
+        "- Não inclua prefácios, comentários meta ou explicações sobre o texto.\n"
+        "- Inicie diretamente com o endereçamento formal (ex.: ILUSTRÍSSIMO...).\n"
+        f"- No fecho, use a data real: São Paulo, {signed_date}.\n"
+        "- Não use placeholders como [Data Atual].\n"
+        f"{_PLAIN_TEXT_RULES}"
         "A resposta deve ser formal, clara e fundamentada nos documentos."
     )
-    draft = _gemini_request(api_key=key, model=selected_model, parts=[{"text": draft_prompt}])
+    draft = finalize_procon_response_text(
+        _gemini_request(api_key=key, model=selected_model, parts=[{"text": draft_prompt}]),
+    )
 
     rewrite_prompt = (
         "Reescreva a resposta abaixo tornando-a mais detalhada, persuasiva e bem fundamentada, "
         "sem inventar fatos que não estejam na análise ou no relato do SAC.\n\n"
+        "Regras obrigatórias:\n"
+        "- Retorne SOMENTE o texto final da resposta ao Procon.\n"
+        "- Proibido prefácios como 'Aqui está uma versão reestruturada' ou separadores '---'.\n"
+        "- Inicie diretamente com o endereçamento formal.\n"
+        f"- No fecho, use a data real: São Paulo, {signed_date}.\n"
+        "- Não use placeholders como [Data Atual].\n"
+        f"{_PLAIN_TEXT_RULES}\n"
         f"RESPOSTA ATUAL:\n{draft}"
     )
-    final_response = _gemini_request(
-        api_key=key,
-        model=selected_model,
-        parts=[{"text": rewrite_prompt}],
+    final_response = finalize_procon_response_text(
+        _gemini_request(
+            api_key=key,
+            model=selected_model,
+            parts=[{"text": rewrite_prompt}],
+        ),
     )
-    final_response = apply_multa_replacement(final_response)
 
     summary_prompt = (
         "Resuma a resposta abaixo para o campo de resposta do portal do Procon-SP, "
@@ -333,7 +474,7 @@ def generate_procon_response(
         model=selected_model,
         parts=[{"text": summary_prompt}],
     )
-    portal_summary = apply_multa_replacement(portal_summary)
+    portal_summary = finalize_procon_response_text(portal_summary)
     portal_summary = enforce_portal_character_limit(portal_summary)
 
     return GeneratedResponse(
