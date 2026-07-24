@@ -13,6 +13,8 @@ from classificacao_procons.monday.client import (
 from classificacao_procons.monday.mapping import (
     FIELD_DOCS_SAC,
     FIELD_PROTOCOL,
+    FIELD_RESPONSE_FULL,
+    FIELD_RESPONSE_UNIFIED_PDF,
     FIELD_STATUS,
     MondayColumn,
     parse_link_column_value,
@@ -36,15 +38,17 @@ def _extract_case_from_item(
         FIELD_DOCS_SAC: None,
         FIELD_PROTOCOL: None,
         FIELD_STATUS: None,
+        FIELD_RESPONSE_FULL: None,
+        FIELD_RESPONSE_UNIFIED_PDF: None,
     }
 
     for column_value in item.get("column_values", []):
         field = column_lookup.get(column_value.get("id", ""), "")
         if not field:
             continue
-        if field == FIELD_DOCS_SAC:
+        if field in {FIELD_DOCS_SAC, FIELD_RESPONSE_FULL, FIELD_RESPONSE_UNIFIED_PDF}:
             link = parse_link_column_value(column_value.get("value"))
-            values[field] = link or column_value.get("text")
+            values[field] = link or (column_value.get("text") or "").strip() or None
         elif field == FIELD_STATUS:
             values[field] = parse_status_text(column_value.get("text"))
         else:
@@ -52,6 +56,9 @@ def _extract_case_from_item(
 
     docs_sac_url = values.get(FIELD_DOCS_SAC)
     if not docs_sac_url:
+        return None
+
+    if values.get(FIELD_RESPONSE_FULL) or values.get(FIELD_RESPONSE_UNIFIED_PDF):
         return None
 
     status = values.get(FIELD_STATUS)

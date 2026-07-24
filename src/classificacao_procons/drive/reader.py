@@ -23,6 +23,7 @@ DRIVE_TEXT_MIME = "text/plain"
 PROCON_PDF_PREFIX = "atendimento procon"
 RESPONSE_OUTPUT_FOLDER = "Resposta Automatica"
 RESPONSE_FULL_TEXT_NAME = "resposta-completa.txt"
+RESPONSE_SUMMARY_FILE = "resposta-resumo-1024.txt"
 RESPONSE_UNIFIED_PDF_NAME = "resposta-unificada.pdf"
 SAC_FOLDER_KEYWORDS = ("informacoes", "sac", "anexos", "documentos")
 
@@ -43,6 +44,13 @@ class SacFolderContext:
     complaint_pdf: DriveFileInfo
     summary_txt: DriveFileInfo | None
     supporting_files: list[DriveFileInfo]
+
+
+@dataclass(frozen=True)
+class ExistingResponseOutputs:
+    full_response_url: str | None
+    summary_response_url: str | None
+    unified_pdf_url: str | None
 
 
 def extract_drive_resource_id(url: str) -> str:
@@ -308,12 +316,23 @@ def ensure_output_folder(
     return created["id"]
 
 
+def _find_newest_file_by_name(
+    files: list[DriveFileInfo],
+    file_name: str,
+) -> DriveFileInfo | None:
+    target = file_name.casefold()
+    matches = [item for item in files if item.name.casefold() == target]
+    if not matches:
+        return None
+    return max(matches, key=lambda item: item.created_time or datetime.min)
+
+
 def find_existing_response_outputs(
     *,
     consumer_folder_id: str,
     token_path: str | None = None,
-) -> tuple[str | None, str | None, str | None]:
-    """Retorna URLs dos arquivos de resposta se a pasta de saída já existir."""
+) -> ExistingResponseOutputs | None:
+    """Retorna links da resposta automática já gerada na pasta do consumidor."""
     service = _build_drive_service(token_path)
     children = _list_children(service, folder_id=consumer_folder_id)
     output_folder_id: str | None = None
@@ -322,24 +341,20 @@ def find_existing_response_outputs(
             output_folder_id = child.file_id
             break
     if output_folder_id is None:
-        return None, None, None
+        return None
 
-    outputs = _list_children(service, folder_id=output_folder_id)
-    full_url: str | None = None
-    summary_url: str | None = None
-    unified_url: str | None = None
-    for item in outputs:
-        name = item.name.casefold()
-        link = item.web_view_link
-        if name == RESPONSE_FULL_TEXT_NAME.casefold():
-            full_url = link
-        elif name == "resposta-resumo-1024.txt":
-            summary_url = link
-        elif name == RESPONSE_UNIFIED_PDF_NAME.casefold():
-            unified_url = link
-    if not any((full_url, summary_url, unified_url)):
-        return None, None, None
-    return full_url, summary_url, unified_url
+    output_children = _list_children(service, folder_id=output_folder_id)
+    complete = _find_newest_file_by_name(output_children, RESPONSE_FULL_TEXT_NAME)
+    summary = _find_newest_file_by_name(output_children, RESPONSE_SUMMARY_FILE)
+    unified = _find_newest_file_by_name(output_children, RESPONSE_UNIFIED_PDF_NAME)
+    if complete is None and unified is None:
+        return None
+
+    return ExistingResponseOutputs(
+        full_response_url=complete.web_view_link if complete else None,
+        summary_response_url=summary.web_view_link if summary else None,
+        unified_pdf_url=unified.web_view_link if unified else None,
+    )
 
 
 def upload_text_file(
