@@ -2,6 +2,10 @@
 
 from dataclasses import dataclass
 from datetime import date, datetime
+from typing import Literal
+
+NotificationType = Literal["cip", "processo_administrativo"]
+ComplaintKind = Literal["reclamacao", "processo_administrativo"]
 
 
 @dataclass(frozen=True)
@@ -15,7 +19,9 @@ class ProconNotificationEmail:
     portal_url: str
     source_id: str = "sp"
     access_code: str = ""
+    notification_type: NotificationType = "cip"
     protocol_number: str | None = None
+    administrative_process_number: str | None = None
     regional_org: str | None = None
     state: str | None = None
     consumer_name: str | None = None
@@ -60,6 +66,9 @@ class ProcessedComplaint:
     state: str
     pdf_url: str | None
     drive_folder_url: str | None
+    notification_type: NotificationType = "cip"
+    administrative_process_number: str | None = None
+    pa_response_deadline: date | None = None
     monday_item_url: str | None = None
     monday_error: str | None = None
     error: str | None = None

@@ -13,6 +13,11 @@ from classificacao_procons.email.parser import normalize_email_address
 
 PROCONSUMIDOR_SENDER: Final = "admin@proconsumidor.mj.gov.br"
 PROCONSUMIDOR_SUBJECT: Final = "Proconsumidor - Notificação"
+PROCONSUMIDOR_CARTA_SUBJECT: Final = "Notificação de Carta"
+PROCONSUMIDOR_SUBJECTS: Final = (
+    PROCONSUMIDOR_SUBJECT,
+    PROCONSUMIDOR_CARTA_SUBJECT,
+)
 PROCONSUMIDOR_PORTAL_URL: Final = "https://proconsumidor.mj.gov.br/#/login"
 
 _COMPLAINT_NUMBER_PATTERN = re.compile(
@@ -20,7 +25,7 @@ _COMPLAINT_NUMBER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _REGIONAL_ORG_PATTERN = re.compile(
-    r"reclama[cç][aã]o\s+[\d.\-]+\s+do\s+(.+?)(?:\.|$)",
+    r"reclama[cç][aã]o\s+[\d.\-]+\s+(?:do|pelo)\s+(.+?)(?:\.|$)",
     re.IGNORECASE | re.DOTALL,
 )
 _STATE_SUFFIX_PATTERN = re.compile(
@@ -42,10 +47,9 @@ class ProconsumidorEmailParseError(ValueError):
 def is_proconsumidor_notification(*, subject: str, sender: str) -> bool:
     normalized_subject = " ".join(subject.split())
     normalized_sender = normalize_email_address(sender)
-    return (
-        normalized_sender == PROCONSUMIDOR_SENDER
-        and normalized_subject == PROCONSUMIDOR_SUBJECT
-    )
+    if normalized_sender != PROCONSUMIDOR_SENDER:
+        return False
+    return normalized_subject in PROCONSUMIDOR_SUBJECTS
 
 
 def _html_to_text(html: str) -> str:

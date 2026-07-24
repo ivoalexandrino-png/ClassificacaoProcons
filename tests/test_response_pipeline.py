@@ -2,7 +2,11 @@
 
 from unittest.mock import patch
 
-from classificacao_procons.drive.reader import DriveFileInfo, ExistingResponseOutputs, SacFolderContext
+from classificacao_procons.drive.reader import (
+    DriveFileInfo,
+    ExistingResponseOutputs,
+    SacFolderContext,
+)
 from classificacao_procons.gemini.client import GeneratedResponse
 from classificacao_procons.models import MondayCaseReady
 from classificacao_procons.response_pipeline import (
