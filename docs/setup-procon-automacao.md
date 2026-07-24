@@ -22,7 +22,7 @@ Workflow **Proconsumidor local processing** (runner **self-hosted** — portal b
 | Origem | `source_id` | Automático em Actions |
 |--------|-------------|------------------------|
 | Procon-SP CIP | `sp` | Sim (hourly) |
-| Procon-SP Processo Administrativo | `sp` (PA) | **Pendente** — merge PR #51 |
+| Procon-SP Processo Administrativo | `sp` (PA) | Sim (hourly, mesmo job que CIP) |
 | Proconsumidor (MJ) | `proconsumidor` | Sim, com runner self-hosted |
 | Campinas | `campinas` | Sim (hourly) |
 | SC / SSP (e-mail + PDF) | `sc` | Sim (hourly) |

@@ -811,6 +811,7 @@ def _process_sp_notification(
         state=_resolve_state(notification, complaint.state),
         pdf_url=drive_result.pdf_url,
         drive_folder_url=drive_result.consumer_folder_url,
+        notification_type="cip",
     )
     return _register_on_monday_if_configured(result, options=options)
 
