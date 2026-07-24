@@ -49,6 +49,7 @@ class TestGmailProconFetcher:
             sender="procon.naoresponder@procon.sp.gov.br",
             received_at=datetime(2025, 7, 14, 10, 0, tzinfo=UTC),
             portal_url="https://fornecedor2.procon.sp.gov.br/login",
+            source_id="sp",
             access_code="ABC123-XYZ789",
             raw_snippet="Notificação de emissão de CIP",
         )
@@ -96,3 +97,42 @@ class TestGmailProconFetcher:
             id="msg-001",
             body={"removeLabelIds": ["UNREAD"]},
         )
+
+    def test_should_fetch_and_parse_campinas_notification(self) -> None:
+        import base64
+
+        html = (
+            "<html><body>"
+            "<p>CIP nº 12345/2026/CIP</p>"
+            "<p>Nome: JOAO SANTOS</p>"
+            "<p>CPF: 987.654.321-00</p>"
+            "<p>Data: 01/07/2026</p>"
+            "</body></html>"
+        )
+        encoded = base64.urlsafe_b64encode(html.encode()).decode()
+        message = {
+            "id": "msg-campinas",
+            "snippet": "Notificação CIP",
+            "payload": {
+                "headers": [
+                    {"name": "Subject", "value": "Notificação CIP"},
+                    {"name": "From", "value": "procon.adm@campinas.sp.gov.br"},
+                    {"name": "Date", "value": "Thu, 10 Jul 2026 12:00:00 +0000"},
+                ],
+                "mimeType": "text/html",
+                "body": {"data": encoded},
+            },
+        }
+        service = MagicMock()
+        service.users.return_value.messages.return_value.get.return_value.execute.return_value = (
+            message
+        )
+
+        fetcher = GmailProconFetcher(service)
+        result = fetcher.fetch_notification("msg-campinas")
+
+        assert result is not None
+        assert result.source_id == "campinas"
+        assert result.protocol_number == "12345/2026"
+        assert result.consumer_name == "JOAO SANTOS"
+        assert result.state == "Campinas"
