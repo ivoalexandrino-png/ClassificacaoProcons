@@ -1,0 +1,96 @@
+name: Catch-up contratos (Autentique → Monday/Drive)
+
+# Sincroniza Controle Assinaturas e processa contratos totalmente assinados.
+# Não requer Cloud Run — usa secrets do GitHub.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Somente simular (não grava Monday/Drive)"
+        required: false
+        type: boolean
+        default: true
+      max_pages:
+        description: "Páginas do Autentique (60 docs por página)"
+        required: false
+        type: string
+        default: "50"
+      skip_gemini:
+        description: "Pular extração Gemini nos assinados"
+        required: false
+        type: boolean
+        default: false
+      sync_controle_only:
+        description: "Somente Controle Assinaturas (não processa assinados)"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  catch-up:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Set workflow parameters
+        id: params
+        run: |
+          echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          echo "max_pages=${{ inputs.max_pages }}" >> "$GITHUB_OUTPUT"
+          echo "skip_gemini=${{ inputs.skip_gemini }}" >> "$GITHUB_OUTPUT"
+          echo "sync_controle_only=${{ inputs.sync_controle_only }}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install .
+
+      - name: Prepare Google credentials
+        env:
+          GMAIL_OAUTH_JSON: ${{ secrets.GMAIL_OAUTH_JSON }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+        run: |
+          mkdir -p credentials
+          printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
+          printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
+
+      - name: Validate secrets
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          for name in MONDAY_API_TOKEN AUTENTIQUE_API_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "Secret ausente: $name"
+              exit 1
+            fi
+          done
+          if [ -z "$GEMINI_API_KEY" ] && [ "${{ steps.params.outputs.skip_gemini }}" != "true" ] && [ "${{ steps.params.outputs.sync_controle_only }}" != "true" ]; then
+            echo "GEMINI_API_KEY ausente (ou marque skip_gemini=true)"
+            exit 1
+          fi
+
+      - name: Catch-up contratos
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
+          if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          if [ "${{ steps.params.outputs.skip_gemini }}" = "true" ]; then
+            ARGS="$ARGS --skip-gemini"
+          fi
+          if [ "${{ steps.params.outputs.sync_controle_only }}" = "true" ]; then
+            ARGS="$ARGS --sync-controle-only"
+          fi
+          contratos-webhook sync-all $ARGS

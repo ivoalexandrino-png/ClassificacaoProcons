@@ -18,6 +18,7 @@ credentials/
 !src/classificacao_procons/credentials/*.py
 *.json
 !pyproject.toml
+!.cursor/environment.json
 
 # Downloads locais
 downloads/
