@@ -141,19 +141,19 @@ def _elaborate_case(
             error=str(exc),
         )
 
-    existing_full, existing_summary, existing_unified = find_existing_response_outputs(
+    existing_outputs = find_existing_response_outputs(
         consumer_folder_id=sac_context.consumer_folder_id,
         token_path=options.token_path,
     )
-    if existing_full or existing_unified:
+    if existing_outputs is not None:
         monday_token = _resolve_monday_token(options)
-        if monday_token and (existing_full or existing_summary or existing_unified):
+        if monday_token:
             try:
                 update_elaborated_response_links(
                     item_id=case.item_id,
-                    full_response_url=existing_full or "",
-                    summary_response_url=existing_summary or "",
-                    unified_pdf_url=existing_unified,
+                    full_response_url=existing_outputs.full_response_url or "",
+                    summary_response_url=existing_outputs.summary_response_url or "",
+                    unified_pdf_url=existing_outputs.unified_pdf_url,
                     api_token=monday_token,
                 )
             except MondayClientError:
@@ -165,9 +165,9 @@ def _elaborate_case(
             monday_item_id=case.item_id,
             consumer_name=case.item_name,
             protocol_number=case.protocol_number,
-            full_response_file_url=existing_full,
-            summary_response_file_url=existing_summary,
-            unified_pdf_file_url=existing_unified,
+            full_response_file_url=existing_outputs.full_response_url,
+            summary_response_file_url=existing_outputs.summary_response_url,
+            unified_pdf_file_url=existing_outputs.unified_pdf_url,
         )
 
     case_dir = options.work_dir / case.item_id
