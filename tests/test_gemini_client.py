@@ -1,5 +1,7 @@
 """Testes do cliente Gemini."""
 
+from datetime import date
+
 import pytest
 
 from classificacao_procons.gemini.client import (
@@ -10,8 +12,11 @@ from classificacao_procons.gemini.client import (
     _ordered_model_candidates,
     apply_multa_replacement,
     enforce_portal_character_limit,
+    finalize_procon_response_text,
     get_model_from_env,
+    replace_response_date_placeholders,
     resolve_gemini_model,
+    strip_gemini_meta_preamble,
 )
 
 
@@ -29,6 +34,36 @@ class TestGeminiHelpers:
         text = "a" * 1100
         result = enforce_portal_character_limit(text, max_chars=1024)
         assert len(result) <= 1024
+
+    def test_should_strip_meta_preamble_before_formal_response(self) -> None:
+        text = (
+            "Aqui está uma versão reestruturada, com argumentação jurídica robusta.\n"
+            "---\n\n"
+            "**ILUSTRÍSSIMO(A) SENHOR(A) DIRETOR(A) DO PROCON-SP**\n"
+            "Conteúdo da resposta."
+        )
+        cleaned = strip_gemini_meta_preamble(text)
+        assert cleaned.startswith("**ILUSTRÍSSIMO")
+        assert "Aqui está uma versão" not in cleaned
+
+    def test_should_replace_date_placeholder(self) -> None:
+        text = "São Paulo, [Data Atual].\n\nRepresentante Legal"
+        updated = replace_response_date_placeholders(
+            text,
+            signed_date=date(2026, 7, 24),
+        )
+        assert "São Paulo, 24/07/2026." in updated
+        assert "[Data Atual]" not in updated
+
+    def test_should_finalize_response_text(self) -> None:
+        text = (
+            "Aqui está uma versão reestruturada.\n---\n\n"
+            "**ILUSTRÍSSIMO(A) SENHOR(A)**\n"
+            "São Paulo, [Data Atual]."
+        )
+        final = finalize_procon_response_text(text, signed_date=date(2026, 7, 24))
+        assert final.startswith("**ILUSTRÍSSIMO")
+        assert "24/07/2026" in final
 
 
 class TestResolveGeminiModel:
