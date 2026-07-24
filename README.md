@@ -76,6 +76,8 @@ pip install -e ".[dev]"
 | `GMAIL_TOKEN_PATH` | — (padrão `credentials/gmail-token.json`) | Token autorizado |
 | `MONDAY_API_TOKEN` | Cadastro/atualização no Monday | Token da API do Monday |
 | `GEMINI_API_KEY` | `elaborate` e extração de contratos | Chave da API do Gemini |
+| `OPENAI_API_KEY` | `elaborate` (fallback) | Usada automaticamente se o Gemini atingir cota/limite |
+| `OPENAI_MODEL` | `elaborate` (opcional) | Padrão: `gpt-4o-mini` |
 | `AUTENTIQUE_API_TOKEN` | Pipeline de contratos | Token da API do Autentique |
 | `AUTENTIQUE_WEBHOOK_SECRET` | Webhook de contratos (recomendado) | Valida assinatura dos webhooks |
 | `DATAJUD_API_KEY` | Agente jurídico: andamentos | Chave pública da API DataJud/CNJ |

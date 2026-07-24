@@ -15,6 +15,7 @@ from classificacao_procons.drive.pdf_builder import (
 from classificacao_procons.drive.reader import (
     download_drive_file,
     ensure_output_folder,
+    find_existing_response_outputs,
     resolve_sac_folder_context,
     upload_pdf_file,
     upload_text_file,
@@ -25,11 +26,15 @@ from classificacao_procons.gemini import (
     get_api_key_from_env,
 )
 from classificacao_procons.google_auth import has_valid_token
+from classificacao_procons.llm.openai_client import (
+    get_api_key_from_env as get_openai_api_key_from_env,
+)
 from classificacao_procons.models import ElaboratedResponseResult, MondayCaseReady
 from classificacao_procons.monday.cases import list_cases_ready_for_elaboration
 from classificacao_procons.monday.client import (
     MondayClientError,
     get_api_token_from_env,
+    update_elaborated_response_links,
 )
 
 DEFAULT_WORK_DIR = Path("downloads/elaboration")
@@ -48,6 +53,7 @@ class ResponsePipelineOptions:
     token_path: str = "credentials/gmail-token.json"
     monday_api_token: str | None = None
     gemini_api_key: str | None = None
+    openai_api_key: str | None = None
     max_cases: int = 20
     dry_run: bool = False
 
@@ -135,6 +141,35 @@ def _elaborate_case(
             error=str(exc),
         )
 
+    existing_full, existing_summary, existing_unified = find_existing_response_outputs(
+        consumer_folder_id=sac_context.consumer_folder_id,
+        token_path=options.token_path,
+    )
+    if existing_full or existing_unified:
+        monday_token = _resolve_monday_token(options)
+        if monday_token and (existing_full or existing_summary or existing_unified):
+            try:
+                update_elaborated_response_links(
+                    item_id=case.item_id,
+                    full_response_url=existing_full or "",
+                    summary_response_url=existing_summary or "",
+                    unified_pdf_url=existing_unified,
+                    api_token=monday_token,
+                )
+            except MondayClientError:
+                pass
+        elaborated_item_ids.add(case.item_id)
+        _save_elaborated_item_ids(options.state_path, elaborated_item_ids)
+        return ElaboratedResponseResult(
+            status="skipped_existing",
+            monday_item_id=case.item_id,
+            consumer_name=case.item_name,
+            protocol_number=case.protocol_number,
+            full_response_file_url=existing_full,
+            summary_response_file_url=existing_summary,
+            unified_pdf_file_url=existing_unified,
+        )
+
     case_dir = options.work_dir / case.item_id
     complaint_pdf_path = case_dir / "reclamacao-original.pdf"
     try:
@@ -181,13 +216,14 @@ def _elaborate_case(
         )
 
     gemini_key = _resolve_gemini_key(options)
-    if not gemini_key:
+    openai_key = options.openai_api_key or get_openai_api_key_from_env()
+    if not gemini_key and not openai_key:
         return ElaboratedResponseResult(
             status="error",
             monday_item_id=case.item_id,
             consumer_name=case.item_name,
             protocol_number=case.protocol_number,
-            error="GEMINI_API_KEY não configurada.",
+            error="Nenhum provedor de IA configurado (GEMINI_API_KEY e/ou OPENAI_API_KEY).",
         )
 
     try:
@@ -253,6 +289,19 @@ def _elaborate_case(
             protocol_number=case.protocol_number,
             error=str(exc),
         )
+
+    monday_token = _resolve_monday_token(options)
+    if monday_token:
+        try:
+            update_elaborated_response_links(
+                item_id=case.item_id,
+                full_response_url=full_url,
+                summary_response_url=summary_url,
+                unified_pdf_url=unified_pdf_url,
+                api_token=monday_token,
+            )
+        except MondayClientError:
+            pass
 
     elaborated_item_ids.add(case.item_id)
     _save_elaborated_item_ids(options.state_path, elaborated_item_ids)
