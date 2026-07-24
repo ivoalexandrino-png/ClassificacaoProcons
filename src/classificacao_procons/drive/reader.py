@@ -22,6 +22,8 @@ from classificacao_procons.drive.client import (
 DRIVE_TEXT_MIME = "text/plain"
 PROCON_PDF_PREFIX = "atendimento procon"
 RESPONSE_OUTPUT_FOLDER = "Resposta Automatica"
+RESPONSE_FULL_TEXT_NAME = "resposta-completa.txt"
+RESPONSE_UNIFIED_PDF_NAME = "resposta-unificada.pdf"
 SAC_FOLDER_KEYWORDS = ("informacoes", "sac", "anexos", "documentos")
 
 
@@ -304,6 +306,40 @@ def ensure_output_folder(
     except HttpError as exc:
         raise DriveClientError(f"Falha ao criar pasta de resposta no Drive: {exc}") from exc
     return created["id"]
+
+
+def find_existing_response_outputs(
+    *,
+    consumer_folder_id: str,
+    token_path: str | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    """Retorna URLs dos arquivos de resposta se a pasta de saída já existir."""
+    service = _build_drive_service(token_path)
+    children = _list_children(service, folder_id=consumer_folder_id)
+    output_folder_id: str | None = None
+    for child in children:
+        if child.mime_type == DRIVE_FOLDER_MIME and child.name == RESPONSE_OUTPUT_FOLDER:
+            output_folder_id = child.file_id
+            break
+    if output_folder_id is None:
+        return None, None, None
+
+    outputs = _list_children(service, folder_id=output_folder_id)
+    full_url: str | None = None
+    summary_url: str | None = None
+    unified_url: str | None = None
+    for item in outputs:
+        name = item.name.casefold()
+        link = item.web_view_link
+        if name == RESPONSE_FULL_TEXT_NAME.casefold():
+            full_url = link
+        elif name == "resposta-resumo-1024.txt":
+            summary_url = link
+        elif name == RESPONSE_UNIFIED_PDF_NAME.casefold():
+            unified_url = link
+    if not any((full_url, summary_url, unified_url)):
+        return None, None, None
+    return full_url, summary_url, unified_url
 
 
 def upload_text_file(
