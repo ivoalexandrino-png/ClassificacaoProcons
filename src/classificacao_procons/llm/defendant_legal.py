@@ -8,7 +8,6 @@ from dataclasses import dataclass
 
 _CNPJ_PATTERN = re.compile(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}")
 
-# CNPJs do grupo B4A Serviços de Tecnologia e Comércio S.A. (matriz e filiais).
 # Atualize apenas com confirmação jurídica/contábil.
 B4A_SERVICOS_CNPJS: frozenset[str] = frozenset(
     {
@@ -18,12 +17,67 @@ B4A_SERVICOS_CNPJS: frozenset[str] = frozenset(
     },
 )
 
-DEFAULT_LEGAL_NAME = "B4A SERVIÇOS DE TECNOLOGIA E COMÉRCIO S.A."
-DEFAULT_CNPJ = "13.475.001/0001-34"
-DEFAULT_HEADQUARTERS = (
-    "com sede na Avenida Caio Cotrim, nº 400, Galpão A2, Itaqui, Itapevi/SP, "
-    "CEP 06.696-060"
+MMKT_CNPJS: frozenset[str] = frozenset(
+    {
+        "15.481.147/0001-18",
+    },
 )
+
+B4A_COSMETICS_LEGAL_NAME = "B4A COMÉRCIO DE COSMÉTICOS E SERVIÇOS S.A."
+
+
+@dataclass(frozen=True)
+class _LegalEntityDef:
+    entity_id: str
+    legal_name: str
+    default_cnpj: str
+    allowed_cnpjs: frozenset[str]
+    headquarters_summary: str
+    cnpj_root: str
+    name_keywords: tuple[str, ...]
+
+
+_B4A_SERVICOS = _LegalEntityDef(
+    entity_id="b4a",
+    legal_name="B4A SERVIÇOS DE TECNOLOGIA E COMÉRCIO S.A.",
+    default_cnpj="13.475.001/0001-34",
+    allowed_cnpjs=B4A_SERVICOS_CNPJS,
+    headquarters_summary=(
+        "com sede na Avenida Caio Cotrim, nº 400, Galpão A2, Itaqui, Itapevi/SP, "
+        "CEP 06.696-060"
+    ),
+    cnpj_root="13475001",
+    name_keywords=(
+        "b4a servicos",
+        "b4a serviços",
+        "glam clube",
+        "glambox",
+        "glam ",
+    ),
+)
+
+_MMKT = _LegalEntityDef(
+    entity_id="mmkt",
+    legal_name=(
+        "MMKT COMÉRCIO DE PRODUTOS DE BELEZA E SERVIÇOS DE CABELEIREIRO LTDA."
+    ),
+    default_cnpj="15.481.147/0001-18",
+    allowed_cnpjs=MMKT_CNPJS,
+    headquarters_summary=(
+        "com sede na Avenida Portugal, nº 400, Galpão A1, Itaqui, Itapevi/SP, "
+        "CEP 06.696-060"
+    ),
+    cnpj_root="15481147",
+    name_keywords=(
+        "mmkt",
+        "men s market",
+        "mens market",
+        "men's market",
+        "mensmarket",
+    ),
+)
+
+_ENTITIES: tuple[_LegalEntityDef, ...] = (_B4A_SERVICOS, _MMKT)
 
 
 @dataclass(frozen=True)
@@ -32,6 +86,7 @@ class DefendantLegalProfile:
     cnpj: str
     headquarters_summary: str
     allowed_cnpjs: frozenset[str]
+    entity_id: str = "b4a"
 
 
 def _normalize_cnpj(value: str) -> str:
@@ -58,10 +113,53 @@ def extract_cnpjs_from_text(text: str) -> list[str]:
     return found
 
 
-def _pick_cnpj_from_complaint(complaint_text: str) -> str | None:
+def _entity_for_cnpj(cnpj: str) -> _LegalEntityDef | None:
+    root = _normalize_cnpj(cnpj)[:8]
+    for entity in _ENTITIES:
+        if root == entity.cnpj_root:
+            return entity
+    return None
+
+
+def _pick_cnpj_from_complaint(complaint_text: str) -> tuple[_LegalEntityDef, str] | None:
     for cnpj in extract_cnpjs_from_text(complaint_text):
-        if _normalize_cnpj(cnpj)[:8] == _normalize_cnpj(DEFAULT_CNPJ)[:8]:
-            return cnpj
+        entity = _entity_for_cnpj(cnpj)
+        if entity is not None:
+            return entity, cnpj
+    return None
+
+
+def _b4a_legal_name_variant(normalized_complaint: str) -> str:
+    if (
+        "comercio de cosmeticos" in normalized_complaint
+        or "cosmeticos e servicos" in normalized_complaint
+    ):
+        return B4A_COSMETICS_LEGAL_NAME
+    return _B4A_SERVICOS.legal_name
+
+
+def _profile_from_entity(
+    entity: _LegalEntityDef,
+    *,
+    cnpj: str,
+    normalized_complaint: str,
+) -> DefendantLegalProfile:
+    legal_name = entity.legal_name
+    if entity.entity_id == "b4a":
+        legal_name = _b4a_legal_name_variant(normalized_complaint)
+    return DefendantLegalProfile(
+        legal_name=legal_name,
+        cnpj=cnpj,
+        headquarters_summary=entity.headquarters_summary,
+        allowed_cnpjs=entity.allowed_cnpjs,
+        entity_id=entity.entity_id,
+    )
+
+
+def _entity_from_keywords(normalized_complaint: str) -> _LegalEntityDef | None:
+    for entity in _ENTITIES:
+        if any(keyword in normalized_complaint for keyword in entity.name_keywords):
+            return entity
     return None
 
 
@@ -69,20 +167,27 @@ def resolve_defendant_legal_profile(*, complaint_text: str = "") -> DefendantLeg
     """
     Define razão social e CNPJ da reclamada com base no texto da reclamação.
 
-    Prioridade: CNPJ do grupo B4A citado no processo; senão matriz padrão.
+    Prioridade: CNPJ citado no processo (B4A ou MMKT); depois palavras-chave; senão B4A matriz.
     """
-    cnpj = _pick_cnpj_from_complaint(complaint_text) or DEFAULT_CNPJ
-    legal_name = DEFAULT_LEGAL_NAME
-
     normalized = _normalize_text(complaint_text)
-    if "comercio de cosmeticos" in normalized or "cosmeticos e servicos" in normalized:
-        legal_name = "B4A COMÉRCIO DE COSMÉTICOS E SERVIÇOS S.A."
 
-    return DefendantLegalProfile(
-        legal_name=legal_name,
-        cnpj=cnpj,
-        headquarters_summary=DEFAULT_HEADQUARTERS,
-        allowed_cnpjs=B4A_SERVICOS_CNPJS,
+    from_cnpj = _pick_cnpj_from_complaint(complaint_text)
+    if from_cnpj is not None:
+        entity, cnpj = from_cnpj
+        return _profile_from_entity(entity, cnpj=cnpj, normalized_complaint=normalized)
+
+    from_keywords = _entity_from_keywords(normalized)
+    if from_keywords is not None:
+        return _profile_from_entity(
+            from_keywords,
+            cnpj=from_keywords.default_cnpj,
+            normalized_complaint=normalized,
+        )
+
+    return _profile_from_entity(
+        _B4A_SERVICOS,
+        cnpj=_B4A_SERVICOS.default_cnpj,
+        normalized_complaint=normalized,
     )
 
 
@@ -94,7 +199,7 @@ def defendant_legal_prompt_block(profile: DefendantLegalProfile) -> str:
         f"- Razão social: {profile.legal_name}\n"
         f"- CNPJ: {profile.cnpj}\n"
         f"- Sede: {profile.headquarters_summary}\n"
-        f"- CNPJs válidos do grupo (se precisar citar filial): {allowed}\n"
+        f"- CNPJs válidos desta reclamada (se precisar citar filial): {allowed}\n"
     )
 
 
