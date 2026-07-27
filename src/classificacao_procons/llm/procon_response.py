@@ -20,6 +20,11 @@ from classificacao_procons.gemini.client import (
     resolve_gemini_model,
 )
 from classificacao_procons.llm import prompts
+from classificacao_procons.llm.defendant_legal import (
+    defendant_legal_prompt_block,
+    replace_unauthorized_cnpjs,
+    resolve_defendant_legal_profile,
+)
 from classificacao_procons.llm.openai_client import (
     chat_completion,
     resolve_openai_model,
@@ -75,6 +80,11 @@ def _gemini_text_with_model_fallback(
     raise GeminiClientError("Gemini indisponível para todos os modelos candidatos.")
 
 
+def _apply_defendant_legal_guards(text: str, *, complaint_text: str) -> str:
+    profile = resolve_defendant_legal_profile(complaint_text=complaint_text)
+    return replace_unauthorized_cnpjs(text, profile=profile)
+
+
 def _generate_with_gemini(
     *,
     complaint_pdf_path: Path,
@@ -104,6 +114,9 @@ def _generate_with_gemini(
 
     signed = prompts.signed_date_label()
     supporting_list = "\n".join(f"- {name}" for name in supporting_file_names) or "- (nenhum)"
+    complaint_text = extract_pdf_text(complaint_pdf_path)
+    legal_profile = resolve_defendant_legal_profile(complaint_text=complaint_text)
+    defendant_block = defendant_legal_prompt_block(legal_profile)
 
     analysis_prompt = prompts.analysis_prompt(
         consumer_name=consumer_name,
@@ -127,23 +140,30 @@ def _generate_with_gemini(
                     sac_summary=sac_summary,
                     supporting_list=supporting_list,
                     signed_date=signed,
+                    defendant_legal_block=defendant_block,
                 ),
             },
         ],
     )
     draft = finalize_procon_response_text(draft)
+    draft = _apply_defendant_legal_guards(draft, complaint_text=complaint_text)
 
     final_response, _ = _gemini_text_with_model_fallback(
         api_key=api_key,
         model_candidates=[selected_model, *model_candidates],
         parts=[
             {
-                "text": prompts.rewrite_prompt(draft=draft, signed_date=signed),
+                "text": prompts.rewrite_prompt(
+                    draft=draft,
+                    signed_date=signed,
+                    defendant_legal_block=defendant_block,
+                ),
             },
         ],
     )
     final_response = finalize_procon_response_text(final_response)
     final_response = apply_multa_replacement(final_response)
+    final_response = _apply_defendant_legal_guards(final_response, complaint_text=complaint_text)
 
     portal_summary, _ = _gemini_text_with_model_fallback(
         api_key=api_key,
@@ -152,6 +172,7 @@ def _generate_with_gemini(
     )
     portal_summary = finalize_procon_response_text(portal_summary)
     portal_summary = enforce_portal_character_limit(portal_summary)
+    portal_summary = _apply_defendant_legal_guards(portal_summary, complaint_text=complaint_text)
 
     return GeneratedResponse(
         analysis=analysis,
@@ -175,6 +196,8 @@ def _generate_with_openai(
     complaint_text = extract_pdf_text(complaint_pdf_path)
     signed = prompts.signed_date_label()
     supporting_list = "\n".join(f"- {name}" for name in supporting_file_names) or "- (nenhum)"
+    legal_profile = resolve_defendant_legal_profile(complaint_text=complaint_text)
+    defendant_block = defendant_legal_prompt_block(legal_profile)
 
     analysis = chat_completion(
         api_key=api_key,
@@ -197,18 +220,25 @@ def _generate_with_openai(
             sac_summary=sac_summary,
             supporting_list=supporting_list,
             signed_date=signed,
+            defendant_legal_block=defendant_block,
         ),
     )
     draft = finalize_procon_response_text(draft)
+    draft = _apply_defendant_legal_guards(draft, complaint_text=complaint_text)
 
     final_response = chat_completion(
         api_key=api_key,
         model=selected_model,
         system_prompt=_OPENAI_SYSTEM,
-        user_prompt=prompts.rewrite_prompt(draft=draft, signed_date=signed),
+        user_prompt=prompts.rewrite_prompt(
+            draft=draft,
+            signed_date=signed,
+            defendant_legal_block=defendant_block,
+        ),
     )
     final_response = finalize_procon_response_text(final_response)
     final_response = apply_multa_replacement(final_response)
+    final_response = _apply_defendant_legal_guards(final_response, complaint_text=complaint_text)
 
     portal_summary = chat_completion(
         api_key=api_key,
@@ -218,6 +248,7 @@ def _generate_with_openai(
     )
     portal_summary = finalize_procon_response_text(portal_summary)
     portal_summary = enforce_portal_character_limit(portal_summary)
+    portal_summary = _apply_defendant_legal_guards(portal_summary, complaint_text=complaint_text)
 
     return GeneratedResponse(
         analysis=analysis,
