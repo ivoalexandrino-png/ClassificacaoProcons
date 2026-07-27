@@ -1,15 +1,20 @@
 # Automação Procon (produção)
 
-Checklist para o job **Procon hourly processing** rodar sem intervenção manual.
+Checklist para o workflow **Procon automation (every 30 min)** rodar sem intervenção manual.
 
-## O que roda sozinho (a cada hora)
+## O que roda sozinho
 
-Workflow **Procon hourly processing** (`main`):
+Workflow **Procon automation (every 30 min)** (arquivo `.github/workflows/procon-hourly.yml`):
 
-| Etapa | Comando | Fontes (`--sources`) |
-|-------|---------|----------------------|
-| `process` | `procon-email process` | `sp`, `sc`, `alerj`, `campinas`, `uberlandia` |
-| `elaborate` | `procon-email elaborate` | Todos os casos Monday com Docs SAC |
+| Agenda (UTC) | Agenda (Brasília, UTC−3) | Etapas |
+|--------------|---------------------------|--------|
+| `:00` e `:30` de cada hora | `:00` e `:30` (ex.: 22:00 e 22:30) | `process` — Gmail → portal → Drive → Monday |
+| `:00` de cada hora | `:00` | `elaborate` — respostas (Gemini/OpenAI) |
+
+| Comando | Fontes (`--sources`) no `process` |
+|---------|-------------------------------------|
+| `procon-email process` | `sp`, `sc`, `alerj`, `campinas`, `uberlandia` |
+| `procon-email elaborate` | Casos Monday com Docs SAC (só na run do `:00` UTC) |
 
 Workflow **Proconsumidor local processing** (runner **self-hosted** — portal bloqueia datacenter):
 
@@ -21,13 +26,13 @@ Workflow **Proconsumidor local processing** (runner **self-hosted** — portal b
 
 | Origem | `source_id` | Automático em Actions |
 |--------|-------------|------------------------|
-| Procon-SP CIP | `sp` | Sim (hourly) |
-| Procon-SP Processo Administrativo | `sp` (PA) | Sim (hourly, mesmo job que CIP) |
+| Procon-SP CIP | `sp` | Sim (a cada 30 min) |
+| Procon-SP Processo Administrativo | `sp` (PA) | Sim (a cada 30 min) |
 | Proconsumidor (MJ) | `proconsumidor` | Sim, com runner self-hosted |
-| Campinas | `campinas` | Sim (hourly) |
-| SC / SSP (e-mail + PDF) | `sc` | Sim (hourly) |
-| ALERJ (RJ) | `alerj` | Sim (hourly) |
-| Uberlândia | `uberlandia` | Sim (hourly) |
+| Campinas | `campinas` | Sim (a cada 30 min) |
+| SC / SSP (e-mail + PDF) | `sc` | Sim (a cada 30 min) |
+| ALERJ (RJ) | `alerj` | Sim (a cada 30 min) |
+| Uberlândia | `uberlandia` | Sim (a cada 30 min) |
 
 Credenciais de portal (quando necessário): board Monday **Acessos** (`credentials` no código).
 
@@ -35,7 +40,7 @@ Local Proconsumidor: `bash scripts/run-proconsumidor-process.sh` (Mac/PC no Bras
 
 ## SLA (e-mail → Monday)
 
-O cadastro no Monday ocorre no passo `process` do workflow **Procon hourly processing**. O e-mail de aviso ao SAC (“novo caso no Monday”) é automação do próprio Monday, disparada **quando o item é criado** — não é enviado pelo repositório.
+O cadastro no Monday ocorre no passo `process` do workflow **Procon automation (every 30 min)**. O e-mail de aviso ao SAC (“novo caso no Monday”) é automação do próprio Monday, disparada **quando o item é criado** — não é enviado pelo repositório.
 
 ### Por que pode demorar horas (ex.: Camila — e-mail 27/07 22:51, Monday ~28/07 04:49)
 
@@ -45,13 +50,21 @@ O cadastro no Monday ocorre no passo `process` do workflow **Procon hourly proce
 
 ### Mitigações no repositório
 
-- Dois crons por hora (`:00` e `:30` UTC).
-- `process` roda **antes** da validação Gemini (cadastro no Monday não depende da API de elaboração).
-- `concurrency` sem cancelar run em andamento (evita perder processamento se duas runs se sobrepuserem).
+- **Checagem a cada 30 minutos** (`:00` e `:30` UTC) — só `process`; elaboração 1×/hora no `:00` UTC.
+- `process` roda **antes** da validação Gemini (Monday não depende da API de elaboração).
+- `concurrency` sem cancelar run em andamento.
 
-### Recomendado para SLA &lt; 1 h
+### Disparo manual
 
-Disparo externo confiável (Cloud Scheduler / cron) chamando `workflow_dispatch` a cada 30–60 min, com `GITHUB_ACTIONS_PAT` — ver `docs/cloud-agent-autonomia.md`.
+```bash
+gh workflow run "Procon automation (every 30 min)"
+# Só cadastrar casos, sem elaborar:
+gh workflow run "Procon automation (every 30 min)" -f skip_elaborate=true
+```
+
+### Recomendado se o GitHub pular janelas
+
+Disparo externo (Cloud Scheduler) chamando `workflow_dispatch` a cada 30 min com `skip_elaborate=true` e, 1×/hora, sem esse flag — ver `docs/cloud-agent-autonomia.md`.
 
 ## Secrets no GitHub (Settings → Secrets and variables → Actions)
 
@@ -96,8 +109,8 @@ Sem essas colunas, os arquivos ainda vão para o Drive; só os links no Monday p
 ## Disparar manualmente
 
 ```bash
-gh workflow run "Procon hourly processing"
-gh run list --workflow="Procon hourly processing" --limit 3
+gh workflow run "Procon automation (every 30 min)"
+gh run list --workflow="Procon automation (every 30 min)" --limit 3
 ```
 
 ## Validar após configurar secrets

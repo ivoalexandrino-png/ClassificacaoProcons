@@ -1,8 +1,8 @@
-name: Procon hourly processing
+name: Procon automation (every 30 min)
 
 on:
   schedule:
-    # GitHub agenda em UTC e pode atrasar/falhar janelas inteiras; use 2 disparos/hora.
+    # Checagem Gmail → Monday a cada 30 min (UTC). Elaboração só no :00.
     - cron: "0 * * * *"
     - cron: "30 * * * *"
   workflow_dispatch:
@@ -11,13 +11,18 @@ on:
         description: "Opcional — cadastrar caso no Monday pelo código do portal"
         required: false
         type: string
+      skip_elaborate:
+        description: "Só processar e-mails (sem elaborar respostas)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   process:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
-      group: procon-hourly-${{ github.workflow }}
+      group: procon-automation-${{ github.workflow }}
       cancel-in-progress: false
 
     steps:
@@ -127,6 +132,9 @@ jobs:
         run: python -m classificacao_procons.cli process --max-results 30 --sources sp,sc,alerj,campinas,uberlandia
 
       - name: Validate Gemini model
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.skip_elaborate != true)
+          || (github.event_name == 'schedule' && github.event.schedule == '0 * * * *')
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
@@ -162,6 +170,9 @@ jobs:
           PY
 
       - name: Elaborate Procon responses
+        if: >-
+          (github.event_name == 'workflow_dispatch' && inputs.skip_elaborate != true)
+          || (github.event_name == 'schedule' && github.event.schedule == '0 * * * *')
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
