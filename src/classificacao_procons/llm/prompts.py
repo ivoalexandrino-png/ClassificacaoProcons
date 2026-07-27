@@ -52,9 +52,12 @@ def draft_prompt(
     sac_summary: str,
     supporting_list: str,
     signed_date: str,
+    defendant_legal_block: str = "",
 ) -> str:
+    legal_section = f"{defendant_legal_block}\n\n" if defendant_legal_block else ""
     return (
         "Com base na análise abaixo e no relato do SAC, redija uma resposta inicial ao Procon.\n\n"
+        f"{legal_section}"
         f"ANÁLISE:\n{analysis}\n\n"
         f"RELATO DO SAC:\n{sac_summary}\n\n"
         f"DOCUMENTOS ANEXADOS PELO SAC:\n{supporting_list}\n\n"
@@ -64,21 +67,30 @@ def draft_prompt(
         "- Inicie diretamente com o endereçamento formal (ex.: ILUSTRÍSSIMO...).\n"
         f"- No fecho, use a data real: São Paulo, {signed_date}.\n"
         "- Não use placeholders como [Data Atual].\n"
+        "- Nunca invente CNPJ, razão social ou endereço da reclamada.\n"
         f"{PLAIN_TEXT_RULES}"
         "A resposta deve ser formal, clara e fundamentada nos documentos."
     )
 
 
-def rewrite_prompt(*, draft: str, signed_date: str) -> str:
+def rewrite_prompt(
+    *,
+    draft: str,
+    signed_date: str,
+    defendant_legal_block: str = "",
+) -> str:
+    legal_section = f"{defendant_legal_block}\n\n" if defendant_legal_block else ""
     return (
         "Reescreva a resposta abaixo tornando-a mais detalhada, persuasiva e bem fundamentada, "
         "sem inventar fatos que não estejam na análise ou no relato do SAC.\n\n"
+        f"{legal_section}"
         "Regras obrigatórias:\n"
         "- Retorne SOMENTE o texto final da resposta ao Procon.\n"
         "- Proibido prefácios como 'Aqui está uma versão reestruturada' ou separadores '---'.\n"
         "- Inicie diretamente com o endereçamento formal.\n"
         f"- No fecho, use a data real: São Paulo, {signed_date}.\n"
         "- Não use placeholders como [Data Atual].\n"
+        "- Nunca invente CNPJ, razão social ou endereço da reclamada.\n"
         f"{PLAIN_TEXT_RULES}\n"
         f"RESPOSTA ATUAL:\n{draft}"
     )
