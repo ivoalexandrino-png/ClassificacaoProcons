@@ -21,6 +21,7 @@ from classificacao_procons.contratos.contratos_enrichment import (
 )
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
+    compare_autentique_with_controle,
     process_document_created_webhook_event,
     process_signature_accepted_webhook_event,
     register_document_in_controle,
@@ -88,6 +89,7 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
             dry_run=args.dry_run,
             max_pages=args.max_pages,
             update_existing=not args.create_only,
+            skip_signed_documents=args.skip_signed_documents,
         )
     except ControleSyncError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
@@ -99,16 +101,53 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
         "created": result.created,
         "updated": result.updated,
         "skipped": result.skipped,
+        "deferred_signed": result.deferred_signed,
         "failed": result.failed,
         "dry_run": result.dry_run,
         "items": [
             item.__dict__
             for item in result.items
-            if item.action not in ("already_exists", "unchanged")
+            if item.action
+            not in ("already_exists", "unchanged")
         ],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if result.failed == 0 else 1
+
+
+def _run_compare_controle(args: argparse.Namespace) -> int:
+    try:
+        result = compare_autentique_with_controle(max_pages=args.max_pages)
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    summary = {
+        "autentique_total": result.autentique_total,
+        "monday_items_total": result.monday_items_total,
+        "pending_missing_in_monday_count": len(result.pending_missing_in_monday),
+        "signed_missing_in_monday_count": len(result.signed_missing_in_monday),
+        "monday_without_autentique_link_count": len(result.monday_without_autentique_link),
+        "monday_autentique_id_not_in_feed_count": len(result.monday_autentique_id_not_in_feed),
+        "pending_missing_in_monday": [
+            {"document_id": doc_id, "document_name": name}
+            for doc_id, name in result.pending_missing_in_monday[:200]
+        ],
+        "signed_missing_in_monday": [
+            {"document_id": doc_id, "document_name": name}
+            for doc_id, name in result.signed_missing_in_monday[:50]
+        ],
+        "monday_without_autentique_link": [
+            {"item_id": item_id, "name": name, "status": status}
+            for item_id, name, status in result.monday_without_autentique_link[:100]
+        ],
+        "monday_autentique_id_not_in_feed": [
+            {"item_id": item_id, "name": name, "autentique_id": doc_id}
+            for item_id, name, doc_id in result.monday_autentique_id_not_in_feed[:100]
+        ],
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
 
 
 def _run_sync_all(args: argparse.Namespace) -> int:
@@ -342,7 +381,19 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Não atualiza itens existentes (somente cria faltantes)",
     )
+    sync_parser.add_argument(
+        "--skip-signed-documents",
+        action="store_true",
+        help="Não cria itens já totalmente assinados no Autentique (próxima fase)",
+    )
     sync_parser.set_defaults(func=_run_sync_controle)
+
+    compare_parser = subparsers.add_parser(
+        "compare-controle",
+        help="Compara Autentique e Controle Assinaturas sem alterar Monday",
+    )
+    compare_parser.add_argument("--max-pages", type=int, default=50)
+    compare_parser.set_defaults(func=_run_compare_controle)
 
     sync_all_parser = subparsers.add_parser(
         "sync-all",
