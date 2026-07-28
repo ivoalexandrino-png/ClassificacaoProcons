@@ -11,7 +11,9 @@ from classificacao_procons.email.parser import (
     is_procon_cip_notification,
     is_procon_notification,
     is_procon_pa_notification,
+    is_procon_reclamacao_notification,
     parse_procon_notification_body,
+    protocol_from_pa_admin_segment,
 )
 
 REAL_PROCON_HTML = """
@@ -113,3 +115,28 @@ class TestParseProconNotificationBody:
         result = parse_procon_notification_body(html=REAL_PA_HTML)
         assert result.access_code == "2*26kjPZ4gVR#7!3"
         assert "fornecedor2.procon.sp.gov.br" in result.portal_url
+
+    def test_should_allow_missing_access_code_when_not_required(self) -> None:
+        html = "<p>Protocolo: 1681159/2026</p>"
+        result = parse_procon_notification_body(html=html, require_access_code=False)
+        assert result.protocol_number == "1681159/2026"
+        assert result.access_code == ""
+
+
+class TestReclamacaoNotification:
+    def test_should_match_reclamacao_subject(self) -> None:
+        assert is_procon_reclamacao_notification(
+            subject="Fundação Procon-SP - Notificação de emissão de Reclamação",
+            sender=PROCON_SP_SENDER,
+        )
+
+
+class TestProtocolFromPaAdminSegment:
+    def test_should_match_silvia_pa(self) -> None:
+        assert (
+            protocol_from_pa_admin_segment(
+                admin_number="35.001.003.26.1681159",
+                year=2026,
+            )
+            == "1681159/2026"
+        )

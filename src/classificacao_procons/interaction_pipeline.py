@@ -292,21 +292,56 @@ def _process_single_interaction(
         )
     except MondayClientError as exc:
         if "não encontrado" in str(exc).lower():
-            pending_entry = PendingConsumerInteraction(
-                message_id=notification.message_id,
-                protocol_number=protocol,
-                access_code=notification.access_code or None,
-                received_at=notification.received_at.isoformat(),
-                subject=notification.subject,
-                email_snippet=notification.raw_snippet,
+            from classificacao_procons.pa_standalone_registry import (
+                ensure_pa_monday_item_for_protocol,
             )
-            new_pending = _enqueue_pending(pending, pending_entry)
-            return (
-                ProcessedConsumerInteraction(
-                    status="pending_monday_item",
+
+            try:
+                ensure_pa_monday_item_for_protocol(
+                    pa_protocol=protocol,
+                    api_token=api_token,
+                    board_name=options.monday_board_name,
+                    fetcher=fetcher,
+                    pa_opened_on=notification.received_at.date(),
+                )
+                item_id = _post_monday_interaction(
+                    api_token=api_token,
+                    board_name=options.monday_board_name,
+                    protocol_number=protocol,
+                    body=body,
+                )
+            except MondayClientError as register_exc:
+                pending_entry = PendingConsumerInteraction(
                     message_id=notification.message_id,
                     protocol_number=protocol,
-                    error=str(exc),
+                    access_code=notification.access_code or None,
+                    received_at=notification.received_at.isoformat(),
+                    subject=notification.subject,
+                    email_snippet=notification.raw_snippet,
+                )
+                new_pending = _enqueue_pending(pending, pending_entry)
+                return (
+                    ProcessedConsumerInteraction(
+                        status="pending_monday_item",
+                        message_id=notification.message_id,
+                        protocol_number=protocol,
+                        error=str(register_exc),
+                    ),
+                    processed_message_ids,
+                    new_pending,
+                )
+
+            processed_message_ids = set(processed_message_ids)
+            processed_message_ids.add(notification.message_id)
+            new_pending = [item for item in pending if item.message_id != notification.message_id]
+            if options.mark_read and has_gmail_modify_access(options.token_path):
+                fetcher.mark_as_read(notification.message_id)
+            return (
+                ProcessedConsumerInteraction(
+                    status="success",
+                    message_id=notification.message_id,
+                    protocol_number=protocol,
+                    monday_item_id=item_id,
                 ),
                 processed_message_ids,
                 new_pending,

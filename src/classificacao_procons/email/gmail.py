@@ -28,12 +28,15 @@ from classificacao_procons.email.interaction_parser import (
     parse_procon_consumer_interaction_body,
 )
 from classificacao_procons.email.parser import (
+    PROCON_PORTAL_LOGIN_URL,
     ProconEmailParseError,
     _html_to_text,
     extract_administrative_process_number,
     is_procon_notification,
     is_procon_pa_notification,
+    is_procon_reclamacao_notification,
     parse_procon_notification_body,
+    protocol_from_pa_admin_segment,
 )
 from classificacao_procons.google_auth import load_credentials
 from classificacao_procons.models import ProconNotificationEmail
@@ -61,6 +64,7 @@ DEFAULT_GMAIL_QUERY = (
     "("
     "from:procon.sp.gov.br "
     '(subject:"Fundação Procon-SP - Notificação de emissão de CIP" '
+    'OR subject:"Notificação de emissão de Reclamação" '
     'OR subject:"Processo Administrativo Aberto:" '
     'OR subject:"Interação do Consumidor")'
     ") OR ("
@@ -336,6 +340,67 @@ class GmailProconFetcher:
                 source_id="sp",
                 access_code=parsed.access_code or "",
                 notification_type="interacao_consumidor",
+                protocol_number=parsed.protocol_number,
+                raw_snippet=snippet,
+            )
+
+        if is_procon_pa_notification(subject=subject, sender=sender):
+            pa_number = extract_administrative_process_number(subject)
+            protocol_number: str | None = None
+            if pa_number:
+                try:
+                    protocol_number = protocol_from_pa_admin_segment(
+                        admin_number=pa_number,
+                        year=received_at.year,
+                    )
+                except ValueError:
+                    protocol_number = None
+            access_code = ""
+            if text_html or text_plain:
+                try:
+                    parsed_pa = parse_procon_notification_body(
+                        html=text_html,
+                        text=text_plain,
+                        require_access_code=False,
+                    )
+                    access_code = parsed_pa.access_code or ""
+                    protocol_number = protocol_number or parsed_pa.protocol_number
+                except ProconEmailParseError:
+                    pass
+            if not protocol_number:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url=PROCON_PORTAL_LOGIN_URL,
+                source_id="sp",
+                access_code=access_code,
+                notification_type="processo_administrativo",
+                protocol_number=protocol_number,
+                administrative_process_number=pa_number,
+                raw_snippet=snippet,
+            )
+
+        if is_procon_reclamacao_notification(subject=subject, sender=sender):
+            try:
+                parsed = parse_procon_notification_body(
+                    html=text_html,
+                    text=text_plain,
+                    require_access_code=False,
+                )
+            except ProconEmailParseError:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url=parsed.portal_url,
+                source_id="sp",
+                access_code="",
+                notification_type="cip",
                 protocol_number=parsed.protocol_number,
                 raw_snippet=snippet,
             )
