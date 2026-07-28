@@ -2,8 +2,9 @@ name: Procon hourly processing
 
 on:
   schedule:
-    # A cada hora (UTC)
+    # GitHub agenda em UTC e pode atrasar/falhar janelas inteiras; use 2 disparos/hora.
     - cron: "0 * * * *"
+    - cron: "30 * * * *"
   workflow_dispatch:
     inputs:
       register_monday_access_code:
@@ -15,6 +16,9 @@ jobs:
   process:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: procon-hourly-${{ github.workflow }}
+      cancel-in-progress: false
 
     steps:
       - name: Checkout
@@ -117,6 +121,11 @@ jobs:
           print("Credenciais Google OK.")
           PY
 
+      - name: Process Procon complaints
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+        run: python -m classificacao_procons.cli process --max-results 30 --sources sp,sc,alerj,campinas,uberlandia
+
       - name: Validate Gemini model
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -151,11 +160,6 @@ jobs:
                   f"usando {selected}."
               )
           PY
-
-      - name: Process Procon complaints
-        env:
-          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
-        run: python -m classificacao_procons.cli process --max-results 30 --sources sp,sc,alerj,campinas,uberlandia
 
       - name: Elaborate Procon responses
         env:

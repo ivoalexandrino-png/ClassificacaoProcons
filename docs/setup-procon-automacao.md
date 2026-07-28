@@ -33,6 +33,26 @@ Credenciais de portal (quando necessário): board Monday **Acessos** (`credentia
 
 Local Proconsumidor: `bash scripts/run-proconsumidor-process.sh` (Mac/PC no Brasil).
 
+## SLA (e-mail → Monday)
+
+O cadastro no Monday ocorre no passo `process` do workflow **Procon hourly processing**. O e-mail de aviso ao SAC (“novo caso no Monday”) é automação do próprio Monday, disparada **quando o item é criado** — não é enviado pelo repositório.
+
+### Por que pode demorar horas (ex.: Camila — e-mail 27/07 22:51, Monday ~28/07 04:49)
+
+1. **Agenda do GitHub Actions** — o cron roda em **UTC** e o GitHub **não garante** execução em todo `:00`; é comum pular várias horas em repositórios privados/inativos. No dia 28/07/2026, entre **21:49 UTC (27/07)** e **07:47 UTC (28/07)** não houve execução agendada; o CIP chegou às **01:51 UTC** nesse intervalo e só foi processado na run das **07:47 UTC** (~**04:47** em São Paulo).
+2. **Fila na hora cheia** — antes só havia um disparo por hora (`:00` UTC); agora há também `:30` UTC.
+3. **Falha no `process`** — portal Playwright, Monday ou Drive: o e-mail permanece **não lido** até uma run seguinte ter sucesso.
+
+### Mitigações no repositório
+
+- Dois crons por hora (`:00` e `:30` UTC).
+- `process` roda **antes** da validação Gemini (cadastro no Monday não depende da API de elaboração).
+- `concurrency` sem cancelar run em andamento (evita perder processamento se duas runs se sobrepuserem).
+
+### Recomendado para SLA &lt; 1 h
+
+Disparo externo confiável (Cloud Scheduler / cron) chamando `workflow_dispatch` a cada 30–60 min, com `GITHUB_ACTIONS_PAT` — ver `docs/cloud-agent-autonomia.md`.
+
 ## Secrets no GitHub (Settings → Secrets and variables → Actions)
 
 | Secret | Obrigatório | Uso |
