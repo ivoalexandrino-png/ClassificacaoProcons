@@ -107,11 +107,30 @@ ORIGIN_LABEL_MENS_LOJA = 'Men\'s "Loja"'
 
 MENS_BRAND_KEYWORDS: tuple[str, ...] = (
     "men's",
-    "mens ",
-    " mens",
     "men s",
     "mensclub",
     "men's club",
+    "mens club",
+)
+GLAM_BRAND_KEYWORDS: tuple[str, ...] = (
+    "glambox",
+    "glamcombo",
+    "glampass",
+    "glam box",
+    "glam ",
+    "glamclub",
+    "glam club",
+)
+STRONG_SUBSCRIPTION_SIGNALS: tuple[str, ...] = (
+    "assinatura",
+    "glamcombo",
+    "glampass",
+    "glambox",
+    "plano premium",
+    "plano anual",
+    "renovacao automatica",
+    "cancelamento da assinatura",
+    "direito de arrependimento",
 )
 SUBSCRIPTION_KEYWORDS: tuple[str, ...] = (
     "assinatura",
@@ -159,24 +178,38 @@ def map_procon_cause_to_monday_status_label(cause: str) -> str | None:
     return None
 
 
-def _detect_origin_brand(normalized_cause: str) -> str:
-    if any(keyword in normalized_cause for keyword in MENS_BRAND_KEYWORDS):
-        return "mens"
-    return "glam"
-
-
 def _score_keywords(normalized_cause: str, keywords: tuple[str, ...]) -> int:
     return sum(1 for keyword in keywords if keyword in normalized_cause)
 
 
+def _contains_mens_brand(normalized_cause: str) -> bool:
+    if any(keyword in normalized_cause for keyword in MENS_BRAND_KEYWORDS):
+        return True
+    return re.search(r"\bmen'?s\b", normalized_cause) is not None
+
+
+def _detect_origin_brand(normalized_cause: str) -> str:
+    if _contains_mens_brand(normalized_cause):
+        return "mens"
+    if any(keyword in normalized_cause for keyword in GLAM_BRAND_KEYWORDS):
+        return "glam"
+    return "glam"
+
+
 def _detect_origin_channel(normalized_cause: str) -> str | None:
-    if "demais produtos" in normalized_cause or "entrega do produto" in normalized_cause:
-        return "loja"
+    subscription_score = _score_keywords(normalized_cause, SUBSCRIPTION_KEYWORDS)
+    purchase_score = _score_keywords(normalized_cause, PURCHASE_KEYWORDS)
+
+    if any(signal in normalized_cause for signal in STRONG_SUBSCRIPTION_SIGNALS):
+        return "clube"
+
     if "demais servicos" in normalized_cause or "servicos de beleza" in normalized_cause:
         return "clube"
 
-    subscription_score = _score_keywords(normalized_cause, SUBSCRIPTION_KEYWORDS)
-    purchase_score = _score_keywords(normalized_cause, PURCHASE_KEYWORDS)
+    if "demais produtos" in normalized_cause or "entrega do produto" in normalized_cause:
+        if subscription_score > purchase_score:
+            return "clube"
+        return "loja"
 
     if subscription_score > purchase_score:
         return "clube"

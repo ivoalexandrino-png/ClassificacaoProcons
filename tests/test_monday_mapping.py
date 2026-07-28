@@ -127,6 +127,19 @@ class TestMondayColumnMapping:
         cause = "Men's loja compra pedido entrega produto"
         assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_MENS_LOJA
 
+    def test_should_map_glaucia_glamcombo_cause_to_glam_clube_despite_demais_produtos(self) -> None:
+        cause = (
+            "Demais ProdutosVestuário e Artigos de Uso Pessoal Cobrança / Contestação"
+            "Dificuldade na devolução de valores pagos Em 17/07 adquiri a assinatura anual "
+            "do plano glamcombo premium. print da mensagem da propria glambox confirmando "
+            "o estorno integral"
+        )
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_GLAM_CLUBE
+
+    def test_should_not_match_mens_brand_inside_mensagem(self) -> None:
+        cause = "Demais Produtos entrega atrasada mensagem do consumidor sobre pedido"
+        assert map_complaint_to_origin_label(cause) == ORIGIN_LABEL_GLAM_LOJA
+
     def test_should_use_fallback_when_origin_cannot_be_inferred(self) -> None:
         assert (
             map_complaint_to_origin_label("", fallback=ORIGIN_LABEL_GLAM_CLUBE)
