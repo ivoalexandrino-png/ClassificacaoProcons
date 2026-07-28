@@ -61,6 +61,15 @@ def normalize_email_address(value: str) -> str:
     return value.strip().lower()
 
 
+def is_procon_naoresponder_sender(sender: str) -> bool:
+    """Remetentes oficiais procon.naoresponder*@procon.sp.gov.br."""
+    address = normalize_email_address(sender)
+    if not address.endswith("@procon.sp.gov.br"):
+        return False
+    local_part = address.split("@", 1)[0]
+    return local_part == "procon.naoresponder" or local_part.startswith("procon.naoresponder")
+
+
 def is_procon_cip_notification(*, subject: str, sender: str) -> bool:
     """Retorna True se o e-mail corresponde a uma notificação de CIP do Procon-SP."""
     normalized_subject = " ".join(subject.split())

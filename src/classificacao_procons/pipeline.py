@@ -30,6 +30,10 @@ from classificacao_procons.google_auth import (
     has_gmail_modify_access,
     has_valid_token,
 )
+from classificacao_procons.interaction_pipeline import (
+    ConsumerInteractionPipelineOptions,
+    flush_pending_interactions_for_protocol,
+)
 from classificacao_procons.models import ProcessedComplaint, ProconNotificationEmail
 from classificacao_procons.monday import MondayClientError, register_complaint
 from classificacao_procons.monday.client import (
@@ -178,7 +182,20 @@ def _register_on_monday_if_configured(
     if monday_result is None:
         return result
 
-    return replace(result, monday_item_url=monday_result.item_url)
+    updated = replace(result, monday_item_url=monday_result.item_url)
+    if not monday_result.skipped_duplicate and result.protocol_number:
+        flush_pending_interactions_for_protocol(
+            result.protocol_number,
+            options=ConsumerInteractionPipelineOptions(
+                token_path=options.token_path,
+                credentials_path=options.credentials_path,
+                monday_api_token=api_token,
+                monday_board_name=options.monday_board_name,
+                download_dir=options.download_dir,
+                mark_read=options.mark_read,
+            ),
+        )
+    return updated
 
 
 def _update_pa_on_monday_if_configured(
@@ -932,6 +949,8 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
     results: list[ProcessedComplaint] = []
 
     for notification in notifications:
+        if notification.notification_type == "interacao_consumidor":
+            continue
         try:
             result = _process_notification(
                 notification,

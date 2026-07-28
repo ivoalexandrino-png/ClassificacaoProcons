@@ -15,6 +15,11 @@ from classificacao_procons.email.auth import (
     save_token_from_code,
 )
 from classificacao_procons.email.gmail import GmailClientError, GmailProconFetcher
+from classificacao_procons.interaction_pipeline import (
+    ConsumerInteractionPipelineError,
+    ConsumerInteractionPipelineOptions,
+    process_consumer_interactions,
+)
 from classificacao_procons.pipeline import (
     PipelineError,
     PipelineOptions,
@@ -219,6 +224,39 @@ def _run_elaborate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _serialize_interaction(item: object) -> dict[str, object]:
+    return asdict(item)
+
+
+def _run_process_interactions(args: argparse.Namespace) -> int:
+    if not args.dry_run and not has_valid_token(args.token):
+        print("Google não conectado. Rode: procon-email auth", file=sys.stderr)
+        return 1
+
+    options = ConsumerInteractionPipelineOptions(
+        max_results=args.max_results,
+        mark_read=not args.no_mark_read,
+        dry_run=args.dry_run,
+        credentials_path=args.credentials,
+        token_path=args.token,
+        fetch_portal=not args.skip_portal,
+        download_dir=Path(args.download_dir),
+    )
+
+    try:
+        results = process_consumer_interactions(options)
+    except ConsumerInteractionPipelineError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    output = [_serialize_interaction(item) for item in results]
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+
+    if any(item.status == "error" for item in results):
+        return 1
+    return 0
+
+
 def _run_list(args: argparse.Namespace) -> int:
     if not has_valid_token(args.token):
         print(
@@ -327,6 +365,28 @@ def main(argv: list[str] | None = None) -> int:
     )
     register_monday_parser.add_argument("--download-dir", default="downloads")
 
+    interactions_parser = subparsers.add_parser(
+        "process-interactions",
+        help="Interação do consumidor (Procon-SP): update no Monday, sem novo item",
+    )
+    interactions_parser.add_argument("--max-results", type=int, default=20)
+    interactions_parser.add_argument("--download-dir", default="downloads")
+    interactions_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Só lista os e-mails que seriam processados.",
+    )
+    interactions_parser.add_argument(
+        "--no-mark-read",
+        action="store_true",
+        help="Não marca os e-mails como lidos após sucesso.",
+    )
+    interactions_parser.add_argument(
+        "--skip-portal",
+        action="store_true",
+        help="Não abre o portal (só e-mail + anexos no update).",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "auth":
@@ -339,6 +399,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_elaborate(args)
     if args.command == "register-monday":
         return _run_register_monday(args)
+    if args.command == "process-interactions":
+        return _run_process_interactions(args)
 
     parser.print_help()
     return 0
