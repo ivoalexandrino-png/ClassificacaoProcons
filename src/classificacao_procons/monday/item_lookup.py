@@ -42,6 +42,7 @@ from classificacao_procons.monday.mapping import (
     FIELD_PROTOCOL,
     FIELD_STATE,
 )
+from classificacao_procons.pa_cip_links import normalize_board_protocol
 
 
 @dataclass(frozen=True)
@@ -284,6 +285,7 @@ def find_related_cip_by_pa_conversion_heuristic(
     matches: list[tuple[str, str]] = []
 
     for item_id, protocol, cpf, pa_flag, complaint_raw in rows:
+        protocol = normalize_board_protocol(protocol) or protocol
         if not cpf or cpf_counts[cpf] != 1:
             continue
         if pa_flag not in {"sim", "yes"}:
@@ -307,6 +309,7 @@ def find_related_cip_by_pa_conversion_heuristic(
     if pa_opened_on is not None:
         relaxed: list[tuple[str, str]] = []
         for item_id, protocol, cpf, pa_flag, complaint_raw in rows:
+            protocol = normalize_board_protocol(protocol) or protocol
             if not cpf:
                 continue
             if pa_flag not in {"sim", "yes"}:
