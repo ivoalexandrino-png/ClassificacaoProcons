@@ -25,6 +25,7 @@ from classificacao_procons.credentials import CredentialsError, resolve_portal_c
 from classificacao_procons.drive import DriveClientError, save_complaint_pdf
 from classificacao_procons.drive.client import build_drive_pa_pdf_filename
 from classificacao_procons.email.gmail import GmailClientError, GmailProconFetcher
+from classificacao_procons.email.parser import is_procon_pa_notification
 from classificacao_procons.google_auth import (
     DEFAULT_DRIVE_PARENT_FOLDER_ID,
     has_gmail_modify_access,
@@ -223,6 +224,125 @@ def _update_pa_on_monday_if_configured(
         return result
 
     return replace(result, monday_item_url=monday_result.item_url)
+
+
+def _interaction_options_from_pipeline(
+    options: PipelineOptions,
+) -> ConsumerInteractionPipelineOptions:
+    return ConsumerInteractionPipelineOptions(
+        token_path=options.token_path,
+        credentials_path=options.credentials_path,
+        monday_api_token=_resolve_monday_api_token(options),
+        monday_board_name=options.monday_board_name,
+        download_dir=options.download_dir,
+        mark_read=options.mark_read,
+        fetch_portal=False,
+    )
+
+
+def _process_standalone_pa_without_portal(
+    notification: ProconNotificationEmail,
+    *,
+    options: PipelineOptions,
+    processed_protocols: set[str],
+    fetcher: GmailProconFetcher,
+) -> ProcessedComplaint:
+    """Cadastra PA no Monday (grupo Processos Administrativos) sem código de acesso."""
+    from classificacao_procons.pa_standalone_registry import ensure_pa_monday_item_for_protocol
+
+    protocol = notification.protocol_number or ""
+    if not protocol:
+        raise ProconPortalError("Protocolo do PA não encontrado no e-mail.")
+
+    pa_number = notification.administrative_process_number or ""
+    if pa_number and _is_pa_processed(processed_protocols, pa_number):
+        return ProcessedComplaint(
+            status="skipped_duplicate",
+            message_id=notification.message_id,
+            access_code="",
+            protocol_number=protocol,
+            consumer_name="",
+            consumer_cpf="",
+            complaint_date=None,
+            procon_response_deadline=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            state=_resolve_state(notification, ""),
+            pdf_url=None,
+            drive_folder_url=None,
+            notification_type="processo_administrativo",
+            administrative_process_number=pa_number or None,
+            error="Processo administrativo já processado anteriormente.",
+        )
+
+    if options.dry_run:
+        return ProcessedComplaint(
+            status="dry_run",
+            message_id=notification.message_id,
+            access_code="",
+            protocol_number=protocol,
+            consumer_name="",
+            consumer_cpf="",
+            complaint_date=None,
+            procon_response_deadline=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            state=_resolve_state(notification, ""),
+            pdf_url=None,
+            drive_folder_url=None,
+            notification_type="processo_administrativo",
+            administrative_process_number=pa_number or None,
+        )
+
+    api_token = _resolve_monday_api_token(options)
+    if not api_token:
+        raise PipelineError("MONDAY_API_TOKEN não configurado para cadastro de PA standalone.")
+
+    monday_result = ensure_pa_monday_item_for_protocol(
+        pa_protocol=protocol,
+        api_token=api_token,
+        board_name=options.monday_board_name,
+        fetcher=fetcher,
+        pa_opened_on=notification.received_at.date(),
+    )
+
+    if pa_number:
+        _mark_pa_processed(processed_protocols, pa_number)
+    processed_protocols.add(protocol)
+    _save_processed_protocols(options.state_path, processed_protocols)
+
+    if options.mark_read and has_gmail_modify_access(options.token_path):
+        fetcher.mark_as_read(notification.message_id)
+
+    if not monday_result.skipped_duplicate:
+        flush_pending_interactions_for_protocol(
+            protocol,
+            options=_interaction_options_from_pipeline(options),
+            fetcher=fetcher,
+        )
+
+    return ProcessedComplaint(
+        status="success",
+        message_id=notification.message_id,
+        access_code="",
+        protocol_number=protocol,
+        consumer_name="",
+        consumer_cpf="",
+        complaint_date=None,
+        procon_response_deadline=None,
+        sac_deadline=None,
+        legal_deadline=None,
+        cause="",
+        state=_resolve_state(notification, ""),
+        pdf_url=None,
+        drive_folder_url=None,
+        notification_type="processo_administrativo",
+        administrative_process_number=pa_number or None,
+        pa_response_deadline=calculate_pa_response_deadline(),
+        monday_item_url=monday_result.item_url,
+    )
 
 
 def _resolve_administrative_process_number(
@@ -677,6 +797,14 @@ def _process_administrative_process_notification(
     processed_protocols: set[str],
     fetcher: GmailProconFetcher,
 ) -> ProcessedComplaint:
+    if not notification.access_code.strip():
+        return _process_standalone_pa_without_portal(
+            notification,
+            options=options,
+            processed_protocols=processed_protocols,
+            fetcher=fetcher,
+        )
+
     complaint = fetch_complaint(
         PortalFetchOptions(
             access_code=notification.access_code,
@@ -765,6 +893,14 @@ def _process_sp_notification(
     processed_protocols: set[str],
     fetcher: GmailProconFetcher,
 ) -> ProcessedComplaint:
+    if is_procon_pa_notification(subject=notification.subject, sender=notification.sender):
+        return _process_administrative_process_notification(
+            notification,
+            options=options,
+            processed_protocols=processed_protocols,
+            fetcher=fetcher,
+        )
+
     complaint = fetch_complaint(
         PortalFetchOptions(
             access_code=notification.access_code,
