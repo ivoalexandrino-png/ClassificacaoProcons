@@ -37,6 +37,8 @@ Nunca commitar `credentials/`. Usar Secret Manager em produção.
 
 Setup completo: `docs/cloud-agent-autonomia.md`.
 
+**Signatários internos no Autentique:** Jan = `assinador@b4a.com.br`. Luciano = `juridico@b4a.com.br` **ou** nome exibido **Beauty For All** (mesma pessoa; o código trata os dois como Luciano no Controle).
+
 - `OPENAI_API_KEY` (fallback do `elaborate` quando Gemini atinge cota; recomendado em produção junto com `GEMINI_API_KEY`)
 
 Catch-up em lote (recomendado):

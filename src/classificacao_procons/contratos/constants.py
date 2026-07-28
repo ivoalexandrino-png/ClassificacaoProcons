@@ -40,7 +40,9 @@ CONTROLE_STATUS_AGUARDANDO_OUTROS = "Aguardando outros"
 
 # Signatários internos (Autentique)
 SIGNER_EMAIL_JAN = "assinador@b4a.com.br"
+# Luciano assina como juridico@b4a.com.br ou com o nome exibido "Beauty For All" no Autentique.
 SIGNER_EMAIL_LUCIANO = "juridico@b4a.com.br"
+SIGNER_DISPLAY_NAME_LUCIANO = "Beauty For All"
 
 # Controle Assinaturas — coluna Tipo (status) e grupo no quadro Contratos
 MONDAY_TIPO_RH = "RH"
