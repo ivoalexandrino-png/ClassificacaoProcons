@@ -10,6 +10,7 @@ from classificacao_procons.contratos.controle_sync import (
     compare_autentique_with_controle,
     sync_controle_from_autentique,
 )
+from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import ControleAssinaturasIndex
 
 
@@ -50,6 +51,52 @@ class TestControleCompare:
 
         assert result.pending_missing_in_monday == (("pending-1", "Contrato pendente"),)
         assert result.signed_missing_in_monday == ()
+
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.controle_sync.list_documents")
+    def test_should_include_legacy_link_suggestions_in_compare(
+        self,
+        list_documents_mock,
+        build_index_mock,
+    ) -> None:
+        title = "Contrato B2B - Legado Match"
+        legacy = ControleAssinaturasItem(
+            item_id="legacy-1",
+            name=title,
+            status="Aguardando Assinatura",
+            tipo=None,
+            signature_link="https://assina.ae/old",
+        )
+        pending = AutentiqueDocumentSummary(
+            document_id="pending-link",
+            name=title,
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(
+                AutentiqueSigner(
+                    public_id="s1",
+                    name="Jan",
+                    email="jan@example.com",
+                    short_link="https://assina.ae/x",
+                    signed_at=None,
+                ),
+            ),
+        )
+        list_documents_mock.return_value = [pending]
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset({title.casefold()}),
+            all_items=(legacy,),
+        )
+
+        result = compare_autentique_with_controle(
+            monday_api_token="token",
+            autentique_api_token="token",
+        )
+
+        assert len(result.legacy_link_suggestions) == 1
+        assert result.legacy_link_suggestions[0].monday_item_id == "legacy-1"
+        assert result.legacy_link_suggestions[0].autentique_document_id == "pending-link"
 
 
 class TestControleSyncSkipSigned:

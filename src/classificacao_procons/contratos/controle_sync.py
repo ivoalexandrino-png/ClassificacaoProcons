@@ -31,6 +31,10 @@ from classificacao_procons.contratos.contratos_routing import (
     is_supplemental_document,
 )
 from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
+from classificacao_procons.contratos.controle_link_suggestions import (
+    ControleLinkSuggestion,
+    suggest_legacy_controle_links,
+)
 from classificacao_procons.contratos.controle_reconcile import (
     find_duplicate_autentique_ids,
     find_duplicate_normalized_names,
@@ -91,6 +95,7 @@ class ControleAutentiqueCompareResult:
     duplicate_autentique_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
     duplicate_normalized_names: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
     monday_status_behind_autentique: tuple[tuple[str, str, str, str | None, str], ...] = ()
+    legacy_link_suggestions: tuple[ControleLinkSuggestion, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -416,6 +421,16 @@ def compare_autentique_with_controle(
             if doc_id not in autentique_ids:
                 id_not_in_feed.append((item.item_id, item.name, doc_id))
 
+    pending_for_suggestions = tuple(
+        document
+        for document in documents
+        if not document.is_fully_signed and index.get_item(document.document_id) is None
+    )
+    link_suggestions = suggest_legacy_controle_links(
+        index=index,
+        pending_documents=pending_for_suggestions,
+    )
+
     return ControleAutentiqueCompareResult(
         autentique_total=len(documents),
         monday_items_total=len(index.all_items),
@@ -429,6 +444,7 @@ def compare_autentique_with_controle(
             index=index,
             documents_by_id=documents_by_id,
         ),
+        legacy_link_suggestions=link_suggestions,
     )
 
 

@@ -37,7 +37,7 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 - Item no Controle com link para documento **já totalmente assinado** no Autentique mas status ainda “Aguardando…” → **desatualizado**.
 - Item **sem** `Autentique ID` e sem correspondência no feed → legado ou lixo; revisar manualmente.
 - **Como medir:** `compare-controle` → `monday_status_behind_autentique`, `monday_without_autentique_link`, `monday_autentique_id_not_in_feed`.
-- **Como corrigir:** `sync-controle` com `update_existing` + webhooks; para legado, colar `Autentique ID` ou alinhar título.
+- **Como corrigir:** `sync-controle` com `update_existing` + webhooks; para legado, usar `link-controle` após revisar `legacy_link_suggestions` no compare (ou colar `Autentique ID` manualmente).
 
 ## Comandos
 
@@ -47,6 +47,10 @@ contratos-webhook compare-controle --max-pages 50
 
 # Corrigir pendentes faltando (política do workflow)
 contratos-webhook sync-controle --create-only --skip-signed-documents --max-pages 50
+
+# Legado: em legacy_link_suggestions no JSON do compare; aplicar após revisão humana:
+contratos-webhook link-controle --monday-item-id <ID> --document-id <UUID>
+contratos-webhook link-controle --monday-item-id <ID> --document-id <UUID> --dry-run
 ```
 
 Workflow GitHub: **Sync Controle Assinaturas (Autentique)** — modo `compare` ou `sync`.
@@ -57,6 +61,6 @@ Ver `AGENTS.md`. Não fundir vários contratos do mesmo fornecedor (ex. `202505_
 
 ## Roadmap técnico
 
-1. **Hoje:** compare estendido + sync com ID + duas filas Jan/Luciano.
-2. **Próximo:** sugestões de vínculo legado (compare lista candidatos; humano confirma antes de gravar ID).
-3. **Depois:** assinados → Contratos + colunas Monday; opcional hash de PDF para match legado.
+1. **Hoje:** compare estendido + sync com ID + duas filas Jan/Luciano + sugestões `legacy_link_suggestions` e comando `link-controle`.
+2. **Próximo:** rodar compare em produção, aplicar vínculos legados confirmados; reduzir `monday_without_autentique_link`.
+3. **Depois:** assinados → Contratos + colunas Monday; opcional hash de PDF para match legado ambíguo.
