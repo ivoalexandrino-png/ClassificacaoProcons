@@ -30,11 +30,13 @@ from classificacao_procons.contratos.constants import (
 from classificacao_procons.contratos.contratos_routing import (
     is_supplemental_document,
 )
+from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     build_controle_assinaturas_index,
     create_controle_assinatura_item,
+    ensure_autentique_id_on_controle_items,
     find_controle_items_by_autentique_id,
     infer_controle_signer_track,
     is_controle_contratos_trigger_item,
@@ -133,6 +135,26 @@ def register_document_in_controle(
         document = fetch_document_summary(document_id=document_id, api_token=autentique_api_token)
     except AutentiqueClientError as exc:
         raise ControleSyncError(str(exc)) from exc
+
+    index = build_controle_assinaturas_index(api_token=monday_token)
+    if index.matches_document(document):
+        likely = find_likely_name_matches(
+            document_name=document.name,
+            items=index.all_items,
+        )
+        if likely and document.document_id.casefold().strip() not in index.document_ids:
+            ensure_autentique_id_on_controle_items(
+                api_token=monday_token,
+                document_id=document.document_id,
+                items=likely,
+            )
+        return ControleRegistrationResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=likely[0].item_id if likely else None,
+            monday_item_url=None,
+            skipped_duplicate=True,
+        )
 
     groups = load_controle_board_groups(api_token=monday_token)
     tipo_label = _resolve_tipo_label(document_name=document.name)
@@ -538,6 +560,34 @@ def sync_controle_from_autentique(
             continue
 
         if index.matches_document(document):
+            likely = find_likely_name_matches(
+                document_name=document.name,
+                items=index.all_items,
+            )
+            missing_autentique_link = (
+                document.document_id.casefold().strip() not in index.document_ids
+            )
+            if likely and missing_autentique_link:
+                if not dry_run:
+                    ensure_autentique_id_on_controle_items(
+                        api_token=monday_token,
+                        document_id=document.document_id,
+                        items=likely,
+                    )
+                already += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="linked_existing_by_name"
+                        if not dry_run
+                        else "would_link_existing_by_name",
+                        monday_item_id=likely[0].item_id,
+                        detail=likely[0].name,
+                    ),
+                )
+                continue
+
             already += 1
             results.append(
                 ControleSyncItemResult(

@@ -19,9 +19,11 @@ from classificacao_procons.contratos.controle_sync import (
     register_document_in_controle,
 )
 from classificacao_procons.contratos.models import ControleAssinaturasItem
+from classificacao_procons.contratos.monday_contracts import ControleAssinaturasIndex
 
 
 class TestControleRegistration:
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
     @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
     @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
@@ -32,8 +34,13 @@ class TestControleRegistration:
         create_item_mock,
         load_groups_mock,
         fetch_mock,
+        build_index_mock,
     ) -> None:
         find_items_mock.return_value = ()
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset(),
+        )
         fetch_mock.return_value = AutentiqueDocumentSummary(
             document_id="doc-new",
             name="Contrato B2B - Empresa X",

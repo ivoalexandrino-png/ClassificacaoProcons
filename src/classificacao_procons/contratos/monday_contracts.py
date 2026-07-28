@@ -26,6 +26,7 @@ from classificacao_procons.contratos.constants import (
     MONDAY_CONTRATOS_BOARD_ID,
     MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
 )
+from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.contratos.models import ControleAssinaturasItem
@@ -278,12 +279,21 @@ class ControleAssinaturasIndex:
         return None
 
     def matches_document(self, document: object) -> bool:
-        """Verifica duplicata somente pelo ID do Autentique (evita falso positivo por nome)."""
+        """Verifica se o documento já está representado no Controle (ID ou nome)."""
         document_id = str(getattr(document, "document_id", "")).casefold().strip()
         if document_id and document_id in self.document_ids:
             return True
         signature_link = str(getattr(document, "primary_signature_link", lambda: None)() or "")
-        return bool(document_id) and document_id in signature_link.casefold()
+        if document_id and document_id in signature_link.casefold():
+            return True
+
+        document_name = str(getattr(document, "name", "")).strip()
+        if not document_name:
+            return False
+        normalized_name = document_name.casefold().strip()
+        if normalized_name in self.exact_names:
+            return True
+        return bool(find_likely_name_matches(document_name=document_name, items=self.all_items))
 
     def with_item(
         self,
@@ -713,6 +723,49 @@ def _to_controle_item(
         related_contract_item_ids=related_ids,
         group_id=str(item.get("group", {}).get("id")) if item.get("group", {}).get("id") else None,
     )
+
+
+def ensure_autentique_id_on_controle_items(
+    *,
+    api_token: str,
+    document_id: str,
+    items: tuple[ControleAssinaturasItem, ...] | list[ControleAssinaturasItem],
+) -> None:
+    """Grava o ID do Autentique no link de assinatura de itens legados (sem duplicar)."""
+    normalized_id = document_id.casefold().strip()
+    if not normalized_id:
+        return
+
+    column_details = _load_controle_column_details(api_token=api_token)
+    column_by_title = {detail.column.title.casefold(): detail.column for detail in column_details}
+    link_col = columns_by_id_or_title(
+        column_by_title,
+        CONTROLE_COL_LINK_ASSINATURA,
+        ("link autentique", "assinatura", "link"),
+    )
+    if link_col is None:
+        return
+
+    for item in items:
+        current = (item.signature_link or "").strip()
+        if normalized_id in current.casefold():
+            continue
+        if current:
+            updated_text = f"{current}\nAutentique ID: {document_id}"
+        else:
+            updated_text = f"Autentique ID: {document_id}"
+        column_values = _sanitize_column_values(
+            column_details,
+            {link_col.id: format_column_value(link_col.column_type, updated_text)},
+        )
+        if not column_values:
+            continue
+        _apply_controle_column_values(
+            api_token=api_token,
+            item_id=item.item_id,
+            column_details=column_details,
+            column_values=column_values,
+        )
 
 
 def update_controle_item_progress(
