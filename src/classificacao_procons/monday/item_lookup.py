@@ -294,9 +294,8 @@ def find_related_cip_by_pa_conversion_heuristic(
             continue
         if not complaint_raw:
             continue
-        try:
-            complaint_date = date.fromisoformat(complaint_raw[:10])
-        except ValueError:
+        complaint_date = _parse_date_column(complaint_raw)
+        if complaint_date is None:
             continue
         if complaint_date >= opened:
             continue
@@ -304,6 +303,25 @@ def find_related_cip_by_pa_conversion_heuristic(
 
     if len(matches) == 1:
         return matches[0]
+
+    if pa_opened_on is not None:
+        relaxed: list[tuple[str, str]] = []
+        for item_id, protocol, cpf, pa_flag, complaint_raw in rows:
+            if not cpf:
+                continue
+            if pa_flag not in {"sim", "yes"}:
+                continue
+            if protocol == pa_protocol:
+                continue
+            if not re.match(r"^\d+/\d{4}$", protocol):
+                continue
+            complaint_date = _parse_date_column(complaint_raw)
+            if complaint_date is None or complaint_date >= opened:
+                continue
+            relaxed.append((item_id, protocol))
+        if len(relaxed) == 1:
+            return relaxed[0]
+
     return None
 
 

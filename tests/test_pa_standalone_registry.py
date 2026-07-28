@@ -94,7 +94,7 @@ class TestPaConversionHeuristic:
                                       {"id": "proto", "text": "1624924/2026"},
                                       {"id": "cpf", "text": "44668552852"},
                                       {"id": "pa", "text": "Sim"},
-                                      {"id": "dt", "text": "2026-07-10"},
+                                      {"id": "dt", "text": "10/07/2026"},
                                   ],
                               },
                               {
