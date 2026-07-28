@@ -10,6 +10,11 @@ from pathlib import Path
 DEFAULT_LINKS_PATH = Path("data/procon-pa-cip-links.json")
 ENV_PA_CIP_PROTOCOL_MAP = "PROCON_PA_CIP_PROTOCOL_MAP"
 
+# Casos validados (mesmos fatos); arquivo local / env sobrescrevem.
+BUILTIN_PA_CIP_LINKS: dict[str, str] = {
+    "1681159/2026": "1624924/2026",
+}
+
 
 def _parse_map_line(raw: str) -> dict[str, str]:
     result: dict[str, str] = {}
@@ -47,6 +52,9 @@ def load_pa_cip_protocol_links(
     env_raw = os.environ.get(ENV_PA_CIP_PROTOCOL_MAP, "").strip()
     if env_raw:
         merged.update(_parse_map_line(env_raw))
+
+    for key, value in BUILTIN_PA_CIP_LINKS.items():
+        merged.setdefault(key, value)
     return merged
 
 
