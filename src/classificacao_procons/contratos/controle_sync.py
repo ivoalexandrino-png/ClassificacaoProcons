@@ -31,6 +31,15 @@ from classificacao_procons.contratos.contratos_routing import (
     is_supplemental_document,
 )
 from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
+from classificacao_procons.contratos.controle_link_suggestions import (
+    ControleLinkSuggestion,
+    suggest_legacy_controle_links,
+)
+from classificacao_procons.contratos.controle_reconcile import (
+    find_duplicate_autentique_ids,
+    find_duplicate_normalized_names,
+    find_monday_status_behind_autentique,
+)
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
@@ -83,6 +92,10 @@ class ControleAutentiqueCompareResult:
     signed_missing_in_monday: tuple[tuple[str, str], ...]
     monday_without_autentique_link: tuple[tuple[str, str, str | None], ...]
     monday_autentique_id_not_in_feed: tuple[tuple[str, str, str], ...]
+    duplicate_autentique_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    duplicate_normalized_names: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
+    monday_status_behind_autentique: tuple[tuple[str, str, str, str | None, str], ...] = ()
+    legacy_link_suggestions: tuple[ControleLinkSuggestion, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -377,7 +390,10 @@ def compare_autentique_with_controle(
         raise ControleSyncError(str(exc)) from exc
 
     index = build_controle_assinaturas_index(api_token=monday_token)
-    autentique_ids = {document.document_id.casefold().strip() for document in documents}
+    documents_by_id = {
+        document.document_id.casefold().strip(): document for document in documents
+    }
+    autentique_ids = set(documents_by_id.keys())
 
     pending_missing: list[tuple[str, str]] = []
     signed_missing: list[tuple[str, str]] = []
@@ -405,6 +421,16 @@ def compare_autentique_with_controle(
             if doc_id not in autentique_ids:
                 id_not_in_feed.append((item.item_id, item.name, doc_id))
 
+    pending_for_suggestions = tuple(
+        document
+        for document in documents
+        if not document.is_fully_signed and index.get_item(document.document_id) is None
+    )
+    link_suggestions = suggest_legacy_controle_links(
+        index=index,
+        pending_documents=pending_for_suggestions,
+    )
+
     return ControleAutentiqueCompareResult(
         autentique_total=len(documents),
         monday_items_total=len(index.all_items),
@@ -412,6 +438,13 @@ def compare_autentique_with_controle(
         signed_missing_in_monday=tuple(signed_missing),
         monday_without_autentique_link=tuple(without_link),
         monday_autentique_id_not_in_feed=tuple(id_not_in_feed),
+        duplicate_autentique_ids=find_duplicate_autentique_ids(index),
+        duplicate_normalized_names=find_duplicate_normalized_names(index),
+        monday_status_behind_autentique=find_monday_status_behind_autentique(
+            index=index,
+            documents_by_id=documents_by_id,
+        ),
+        legacy_link_suggestions=link_suggestions,
     )
 
 

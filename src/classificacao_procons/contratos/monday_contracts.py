@@ -293,6 +293,11 @@ class ControleAssinaturasIndex:
         normalized_name = document_name.casefold().strip()
         if normalized_name in self.exact_names:
             return True
+        from classificacao_procons.contratos.controle_dedup import normalized_controle_titles_equal
+
+        for item in self.all_items:
+            if normalized_controle_titles_equal(document_name, item.name):
+                return True
         return bool(find_likely_name_matches(document_name=document_name, items=self.all_items))
 
     def with_item(
