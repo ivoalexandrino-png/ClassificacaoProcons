@@ -102,3 +102,20 @@ jobs:
             echo "\`${URL}/webhooks/monday\`"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "SERVICE_URL=${URL}" >> "$GITHUB_ENV"
+
+      - name: Allow public webhook invocations
+        if: ${{ inputs.skip_deploy != true }}
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          REGION: ${{ inputs.region }}
+        run: bash scripts/allow-contratos-webhook-public.sh
+
+      - name: Register Autentique webhooks + HMAC secret
+        if: ${{ inputs.skip_deploy != true }}
+        continue-on-error: true
+        env:
+          PROJECT_ID: ${{ inputs.project_id }}
+          REGION: ${{ inputs.region }}
+          SERVICE_URL: ${{ env.SERVICE_URL }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: bash scripts/register-contratos-autentique-webhook.sh

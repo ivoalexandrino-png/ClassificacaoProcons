@@ -9,10 +9,14 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from classificacao_procons.contratos.autentique.client import AutentiqueClientError
 from classificacao_procons.contratos.autentique.webhook import (
     AutentiqueWebhookError,
     parse_webhook_event,
     verify_webhook_signature,
+)
+from classificacao_procons.contratos.autentique.webhook_endpoints import (
+    ensure_contratos_autentique_webhooks,
 )
 from classificacao_procons.contratos.catch_up import CatchUpError, catch_up_contratos
 from classificacao_procons.contratos.contratos_enrichment import (
@@ -229,6 +233,28 @@ def _run_link_controle(args: argparse.Namespace) -> int:
         return 1
 
     print(json.dumps({"linked_item_ids": list(linked)}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_register_autentique_webhook(args: argparse.Namespace) -> int:
+    try:
+        result = ensure_contratos_autentique_webhooks(base_service_url=args.base_url)
+    except AutentiqueClientError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "webhook_url": result.webhook_url,
+        "organization_id": result.organization_id,
+        "webhook_secret": result.webhook_secret,
+        "document_endpoint": (
+            result.document_endpoint.__dict__ if result.document_endpoint else None
+        ),
+        "signature_endpoint": (
+            result.signature_endpoint.__dict__ if result.signature_endpoint else None
+        ),
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -516,6 +542,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     register_parser.add_argument("--document-id", required=True)
     register_parser.set_defaults(func=_run_register_controle)
+
+    autentique_wh_parser = subparsers.add_parser(
+        "register-autentique-webhook",
+        help="Registra endpoints de webhook no Autentique (API) para o Cloud Run",
+    )
+    autentique_wh_parser.add_argument(
+        "--base-url",
+        required=True,
+        help="URL base do Cloud Run (sem /webhooks/autentique)",
+    )
+    autentique_wh_parser.set_defaults(func=_run_register_autentique_webhook)
 
     monday_parser = subparsers.add_parser(
         "serve-monday",
