@@ -117,7 +117,7 @@ Sem essas colunas, os arquivos ainda vão para o Drive; só os links no Monday p
 ## Drive (por caso)
 
 - Raiz: PDF `Atendimento Procon...` + pasta `Informações` com **.txt** do SAC  
-- Saída: `Resposta Automatica` → `resposta-completa.txt`, `resposta-resumo-1024.txt`, `resposta-unificada.pdf`
+- Saída: `Resposta Automatica` → `resposta-completa.txt`, `resposta-resumo-1024.txt`, `resposta-unificada.pdf` (resposta + anexos SAC; **sem** o PDF da CIP do Procon)
 
 ## Disparar manualmente
 

@@ -154,8 +154,13 @@ def _is_txt(file_info: DriveFileInfo) -> bool:
     return file_info.mime_type.startswith("text/") or file_info.name.lower().endswith(".txt")
 
 
-def _is_complaint_pdf(file_info: DriveFileInfo) -> bool:
+def is_procon_complaint_pdf(file_info: DriveFileInfo) -> bool:
+    """CIP/reclamação do órgão (prefixo Atendimento Procon). Fora do PDF unificado."""
     return _is_pdf(file_info) and file_info.name.casefold().startswith(PROCON_PDF_PREFIX)
+
+
+def _is_complaint_pdf(file_info: DriveFileInfo) -> bool:
+    return is_procon_complaint_pdf(file_info)
 
 
 def _normalize_folder_name(name: str) -> str:
@@ -244,7 +249,9 @@ def resolve_sac_folder_context(
                 supporting_files=[
                     item
                     for item in sac_children
-                    if summary_txt is None or item.file_id != summary_txt.file_id
+                    if (summary_txt is None or item.file_id != summary_txt.file_id)
+                    and not is_procon_complaint_pdf(item)
+                    and item.file_id != complaint_pdf.file_id
                 ],
             )
 
@@ -263,7 +270,10 @@ def resolve_sac_folder_context(
                 complaint_pdf=complaint_pdf,
                 summary_txt=summary_txt,
                 supporting_files=[
-                    item for item in linked_children if item.file_id != summary_txt.file_id
+                    item
+                    for item in linked_children
+                    if item.file_id != summary_txt.file_id
+                    and not is_procon_complaint_pdf(item)
                 ],
             )
 

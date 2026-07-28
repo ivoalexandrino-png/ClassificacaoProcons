@@ -179,7 +179,7 @@ print(result.portal_url, result.access_code)
 - [x] Google Drive: criar pasta e upload do PDF
 - [x] Monday.com: cadastro em "pendentes de resposta"
 - [x] Elaboração de resposta com Gemini (requer `GEMINI_API_KEY`)
-- [x] PDF da resposta + unificação de anexos SAC (`resposta-unificada.pdf` no Drive)
+- [x] PDF da resposta + anexos SAC no Drive (`resposta-unificada.pdf`; sem o PDF da CIP do órgão)
 - [x] Persistência de estado no GitHub Actions (evita reprocessar o mesmo caso)
 - [x] Contratos: webhooks Autentique + Monday, sync Controle Assinaturas
 - [x] Agente jurídico: intimações → triagem → Monday + eventos de handoff
