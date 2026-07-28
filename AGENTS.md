@@ -41,6 +41,13 @@ Setup completo: `docs/cloud-agent-autonomia.md`.
 
 **Controle Assinaturas (duas filas):** cada documento gera **dois itens** no Monday — grupo **Jan** (com coluna **Tipo**, dispara automação → Contratos quando **Assinado**) e grupo **Luciano** (sem Tipo, só acompanhamento). Em regra o Luciano assina antes do Jan; o status dos dois itens é sincronizado via webhook/sync. Não é necessário duplicar manualmente ao concluir as assinaturas.
 
+**Deduplicação Autentique ↔ Controle (não confundir com mesmo fornecedor):**
+
+1. **Autentique ID** no link do item → mesma chave; nunca criar outro par.
+2. **Título idêntico** (normalizado) → mesmo contrato.
+3. **Título parecido** só com evidência forte (ex.: um título contém o outro com ≥18 caracteres; ou ≥3 tokens distintivos iguais; ou ≥2 tokens + mesma data/`YYYYMM` no nome). **Não** fundir só porque o fornecedor coincide (ex.: vários `*_BrassHill` com meses diferentes).
+4. Legado sem ID e título diferente (ex. minuta no Autentique vs contrato B2B no Monday) → colar o **Autentique ID** no item existente ou alinhar o título; o sync não adivinha.
+
 - `OPENAI_API_KEY` (fallback do `elaborate` quando Gemini atinge cota; recomendado em produção junto com `GEMINI_API_KEY`)
 
 Catch-up em lote (recomendado):

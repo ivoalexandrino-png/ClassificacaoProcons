@@ -1,4 +1,19 @@
-"""Deduplicação de itens do Controle Assinaturas (nome vs Autentique)."""
+"""Deduplicação de itens do Controle Assinaturas (nome vs Autentique).
+
+Regra de negócio (conservadora):
+
+1. **Autentique ID** na coluna de link → mesma chave (tratado fora deste módulo).
+2. **Título idêntico** após normalização → mesmo contrato.
+3. **Título parecido** só quando há evidência forte de ser o *mesmo* documento,
+   não vários contratos do mesmo fornecedor (ex.: série ``202505_BrassHill`` vs
+   ``202503_BrassHill`` são **diferentes** — só ``BrassHill`` em comum não basta).
+
+Critérios de título parecido (qualquer um):
+
+- um título normalizado contém o outro e o menor tem ≥ 18 caracteres;
+- ≥ 3 tokens distintivos em comum (fora stopwords);
+- ≥ 2 tokens em comum **e** o mesmo marcador de período (``202505``, ``23.07.2026``, etc.).
+"""
 
 from __future__ import annotations
 
@@ -33,11 +48,19 @@ _NAME_STOPWORDS: frozenset[str] = frozenset(
         "nda",
         "anexo",
         "lab",
+        "residual",
+        "pedido",
+        "reposicao",
+        "reposição",
+        "mlm",
     },
 )
 
-_DATE_TOKEN = re.compile(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}$")
+_DATE_DMY = re.compile(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}$")
+_PERIOD_YYYYMM = re.compile(r"^20\d{4}$")
+_PERIOD_YYMMDD = re.compile(r"^\d{6}$")
 _SUFFIX_COPY = re.compile(r"\(\d+\)$")
+_MIN_SUBSTRING_LEN = 18
 
 
 def _normalize_controle_name(value: str) -> str:
@@ -47,16 +70,23 @@ def _normalize_controle_name(value: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+def normalized_controle_titles_equal(left: str, right: str) -> bool:
+    """Títulos iguais após normalização (acentos, espaços, sufixo ``(1)``)."""
+    a = _normalize_controle_name(left)
+    b = _normalize_controle_name(right)
+    return bool(a) and a == b
+
+
 def extract_controle_name_tokens(document_name: str) -> set[str]:
-    """Tokens distintivos do título (contraparte, marca, projeto)."""
+    """Tokens distintivos do título (fora stopwords e períodos isolados)."""
     normalized = _normalize_controle_name(document_name)
-    raw_parts = re.split(r"[\s\-–—/,]+", normalized)
+    raw_parts = re.split(r"[\s\-–—/,_]+", normalized)
     tokens: set[str] = set()
     for part in raw_parts:
         token = part.strip()
         if len(token) < 3:
             continue
-        if _DATE_TOKEN.match(token):
+        if _DATE_DMY.match(token) or _PERIOD_YYYYMM.match(token) or _PERIOD_YYMMDD.match(token):
             continue
         if token in _NAME_STOPWORDS:
             continue
@@ -64,30 +94,47 @@ def extract_controle_name_tokens(document_name: str) -> set[str]:
     return tokens
 
 
+def extract_controle_period_tokens(document_name: str) -> set[str]:
+    """Marcadores de vigência/lote no título (datas e ``YYYYMM``)."""
+    normalized = _normalize_controle_name(document_name)
+    periods: set[str] = set()
+    for part in re.split(r"[\s\-–—/,_]+", normalized):
+        token = part.strip()
+        if _DATE_DMY.match(token) or _PERIOD_YYYYMM.match(token) or _PERIOD_YYMMDD.match(token):
+            periods.add(token)
+    return periods
+
+
 def controle_names_likely_same_contract(
     autentique_name: str,
     monday_item_name: str,
 ) -> bool:
-    """Indica se títulos diferentes referem-se ao mesmo contrato no Controle."""
+    """Indica se títulos diferentes são o mesmo contrato (não só o mesmo fornecedor)."""
+    if normalized_controle_titles_equal(autentique_name, monday_item_name):
+        return True
+
     left = _normalize_controle_name(autentique_name)
     right = _normalize_controle_name(monday_item_name)
     if not left or not right:
         return False
-    if left == right:
-        return True
-    if left in right or right in left:
+
+    shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+    if len(shorter) >= _MIN_SUBSTRING_LEN and shorter in longer:
         return True
 
     left_tokens = extract_controle_name_tokens(autentique_name)
     right_tokens = extract_controle_name_tokens(monday_item_name)
     overlap = left_tokens & right_tokens
-    if not overlap:
-        return False
-
-    distinctive = {token for token in overlap if len(token) >= 5}
-    if distinctive:
+    if len(overlap) >= 3:
         return True
-    return len(overlap) >= 2
+
+    if len(overlap) >= 2:
+        left_periods = extract_controle_period_tokens(autentique_name)
+        right_periods = extract_controle_period_tokens(monday_item_name)
+        if left_periods and right_periods and left_periods & right_periods:
+            return True
+
+    return False
 
 
 def find_likely_name_matches(
