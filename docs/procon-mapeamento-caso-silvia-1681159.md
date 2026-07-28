@@ -23,6 +23,7 @@ O board só tinha a linha da **CIP**. O PA é outro protocolo de atendimento; e-
 
 ## Verificação “mesmo caso”
 
+0. **Vínculo declarado** em `data/procon-pa-cip-links.json` (ou env `PROCON_PA_CIP_PROTOCOL_MAP`) — ex. `1681159/2026` → `1624924/2026`.
 1. **Portal** (lista PA): CPF/nome batem com item `12455122069`.  
 2. **Heurística** (sem portal): CPF único no board, “Gerou PA” = Sim, data da reclamação **anterior** à abertura do PA (`pa_conversion_heuristic`); fallback se houver **um único** item com Gerou PA = Sim.
 3. Se no futuro houver **duas** CIPs com PA aberto para o mesmo CPF, revisão manual.

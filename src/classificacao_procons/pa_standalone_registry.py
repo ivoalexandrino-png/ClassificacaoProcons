@@ -23,6 +23,7 @@ from classificacao_procons.monday.item_lookup import (
     load_monday_item_snapshot,
     register_standalone_pa_complaint,
 )
+from classificacao_procons.pa_cip_links import origin_cip_protocol_for_pa
 from classificacao_procons.portal.procurador import (
     ProcuradorPortalError,
     fetch_pa_row_by_protocol,
@@ -97,6 +98,24 @@ def resolve_related_cip_item(
         load_monday_item_snapshot,
         search_monday_items_by_name_contains,
     )
+
+    origin_protocol = origin_cip_protocol_for_pa(pa_protocol)
+    if origin_protocol:
+        origin_item_id = find_item_id_by_protocol(
+            api_token=api_token,
+            protocol_number=origin_protocol,
+            board_name=board_name,
+        )
+        if origin_item_id is not None:
+            snapshot = load_monday_item_snapshot(api_token=api_token, item_id=origin_item_id)
+            return RelatedCipMatch(
+                item_id=origin_item_id,
+                protocol_number=origin_protocol,
+                consumer_name=snapshot.consumer_name,
+                consumer_cpf=snapshot.consumer_cpf,
+                same_consumer_verified=True,
+                verification_source="declared_pa_cip_link",
+            )
 
     consumer_cpf: str | None = None
     consumer_name: str | None = None
