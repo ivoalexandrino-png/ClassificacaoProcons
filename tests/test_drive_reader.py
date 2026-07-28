@@ -9,6 +9,7 @@ from classificacao_procons.drive.reader import (
     _score_sac_folder_name,
     _select_sac_subfolder,
     extract_drive_resource_id,
+    is_procon_complaint_pdf,
 )
 
 
@@ -47,6 +48,17 @@ class TestDriveReaderHelpers:
         found = _find_complaint_pdf(files)
         assert found is not None
         assert found.file_id == "1"
+
+    def test_should_flag_procon_complaint_pdf_for_exclusion_from_unified(self) -> None:
+        procon = DriveFileInfo(
+            "1",
+            "Atendimento Procon - ANA - 1668179.pdf",
+            "application/pdf",
+            None,
+        )
+        other = DriveFileInfo("2", "comprovante-estorno.pdf", "application/pdf", None)
+        assert is_procon_complaint_pdf(procon)
+        assert not is_procon_complaint_pdf(other)
 
     def test_should_find_summary_txt(self) -> None:
         files = [

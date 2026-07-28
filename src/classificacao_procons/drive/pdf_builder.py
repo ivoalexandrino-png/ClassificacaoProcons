@@ -148,19 +148,16 @@ def merge_pdf_files(*, sources: list[Path], destination: Path) -> Path:
 def build_unified_response_pdf(
     *,
     response_text: str,
-    complaint_pdf: Path,
     supporting_files: list[Path],
     destination: Path,
     title: str = "Resposta ao Procon",
 ) -> Path:
-    """Monta PDF unificado: resposta + reclamação + anexos SAC."""
+    """Monta PDF unificado: texto da resposta + anexos SAC (sem PDF da CIP/reclamação do órgão)."""
     work_dir = destination.parent
     response_pdf = work_dir / "resposta-completa.pdf"
     text_to_pdf(text=response_text, destination=response_pdf, title=title)
 
     parts: list[Path] = [response_pdf]
-    if complaint_pdf.exists():
-        parts.append(complaint_pdf)
 
     for index, supporting_path in enumerate(supporting_files, start=1):
         kind = _resolve_supporting_file_kind(supporting_path)

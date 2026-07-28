@@ -17,6 +17,7 @@ from classificacao_procons.drive.reader import (
     download_drive_file,
     ensure_output_folder,
     find_existing_response_outputs,
+    is_procon_complaint_pdf,
     resolve_sac_folder_context,
     upload_pdf_file,
     upload_text_file,
@@ -138,6 +139,10 @@ def _download_supporting_files(
     attachments_dir = case_dir / "anexos-sac"
     downloaded: list[Path] = []
     for file_info in sac_context.supporting_files:
+        if file_info.file_id == sac_context.complaint_pdf.file_id:
+            continue
+        if is_procon_complaint_pdf(file_info):
+            continue
         if not is_mergeable_supporting_file(file_info):
             continue
         destination = attachments_dir / local_supporting_file_name(file_info)
@@ -292,7 +297,6 @@ def _elaborate_case(
         unified_pdf_path = case_dir / UNIFIED_PDF_NAME
         build_unified_response_pdf(
             response_text=generated.final_response,
-            complaint_pdf=complaint_pdf_path,
             supporting_files=supporting_paths,
             destination=unified_pdf_path,
             title=f"Resposta ao Procon - {case.item_name}",

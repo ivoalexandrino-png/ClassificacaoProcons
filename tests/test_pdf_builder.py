@@ -53,13 +53,11 @@ class TestPdfBuilder:
         assert output.stat().st_size > first.stat().st_size
 
     @patch("classificacao_procons.drive.pdf_builder.image_to_pdf")
-    def test_should_build_unified_pdf_with_response_complaint_and_attachments(
+    def test_should_build_unified_pdf_with_response_and_sac_attachments(
         self,
         image_to_pdf_mock,
         tmp_path: Path,
     ) -> None:
-        complaint = tmp_path / "reclamacao.pdf"
-        text_to_pdf(text="Reclamação", destination=complaint, title="Reclamação")
         attachment = tmp_path / "anexo.pdf"
         text_to_pdf(text="Anexo SAC", destination=attachment, title="Anexo")
 
@@ -71,24 +69,41 @@ class TestPdfBuilder:
         output = tmp_path / "unificado.pdf"
         build_unified_response_pdf(
             response_text="Resposta completa ao Procon.",
-            complaint_pdf=complaint,
             supporting_files=[attachment],
             destination=output,
         )
         assert output.exists()
 
+    def test_should_not_merge_procon_complaint_pdf_into_unified(self, tmp_path: Path) -> None:
+        from pypdf import PdfReader
+
+        complaint = tmp_path / "atendimento-procon.pdf"
+        text_to_pdf(text="CIP do órgão", destination=complaint, title="CIP")
+        attachment = tmp_path / "anexo.pdf"
+        text_to_pdf(text="Evidência SAC", destination=attachment, title="Anexo")
+        output = tmp_path / "unificado.pdf"
+        build_unified_response_pdf(
+            response_text="Nossa resposta.",
+            supporting_files=[attachment],
+            destination=output,
+        )
+        unified_pages = len(PdfReader(str(output)).pages)
+        response_pages = len(PdfReader(str(tmp_path / "resposta-completa.pdf")).pages)
+        attachment_pages = len(PdfReader(str(attachment)).pages)
+        complaint_pages = len(PdfReader(str(complaint)).pages)
+        assert unified_pages == response_pages + attachment_pages
+        assert complaint_pages > 0
+        assert unified_pages < response_pages + attachment_pages + complaint_pages
+
     def test_should_skip_unrecognized_supporting_file_in_unified_pdf(
         self,
         tmp_path: Path,
     ) -> None:
-        complaint = tmp_path / "reclamacao.pdf"
-        text_to_pdf(text="Reclamação", destination=complaint, title="Reclamação")
         unknown = tmp_path / "planilha.bin"
         unknown.write_bytes(b"not-a-pdf")
         output = tmp_path / "unificado.pdf"
         build_unified_response_pdf(
             response_text="Resposta completa ao Procon.",
-            complaint_pdf=complaint,
             supporting_files=[unknown],
             destination=output,
         )
