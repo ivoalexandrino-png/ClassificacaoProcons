@@ -7,7 +7,9 @@ from classificacao_procons.contratos.autentique.client import (
     AutentiqueSigner,
 )
 from classificacao_procons.contratos.controle_link_suggestions import (
+    ControleLinkSuggestion,
     apply_controle_link_suggestion,
+    filter_unambiguous_auto_legacy_links,
     suggest_legacy_controle_links,
 )
 from classificacao_procons.contratos.models import ControleAssinaturasItem
@@ -132,6 +134,59 @@ class TestSuggestLegacyControleLinks:
         )
 
         assert suggestions == ()
+
+
+class TestFilterUnambiguousAutoLegacyLinks:
+    def test_should_keep_only_unique_exact_title_pairs(self) -> None:
+        rows = (
+            ControleLinkSuggestion(
+                monday_item_id="a",
+                monday_item_name="T",
+                monday_status=None,
+                autentique_document_id="d1",
+                autentique_document_name="T",
+                match_reason="exact_title",
+                confidence="high",
+                autentique_fully_signed=False,
+            ),
+            ControleLinkSuggestion(
+                monday_item_id="b",
+                monday_item_name="T",
+                monday_status=None,
+                autentique_document_id="d1",
+                autentique_document_name="T",
+                match_reason="exact_title",
+                confidence="high",
+                autentique_fully_signed=False,
+            ),
+        )
+        assert filter_unambiguous_auto_legacy_links(rows) == ()
+
+    def test_should_apply_single_unambiguous_exact_match(self) -> None:
+        row = ControleLinkSuggestion(
+            monday_item_id="a",
+            monday_item_name="Contrato X",
+            monday_status=None,
+            autentique_document_id="d1",
+            autentique_document_name="Contrato X",
+            match_reason="exact_title",
+            confidence="high",
+            autentique_fully_signed=False,
+        )
+        assert filter_unambiguous_auto_legacy_links((row,)) == (row,)
+
+    def test_should_ignore_medium_confidence_even_if_unique(self) -> None:
+        row = ControleLinkSuggestion(
+            monday_item_id="a",
+            monday_item_name="A",
+            monday_status=None,
+            autentique_document_id="d1",
+            autentique_document_name="B",
+            match_reason="strong_title_match",
+            confidence="medium",
+            autentique_fully_signed=False,
+        )
+        assert filter_unambiguous_auto_legacy_links((row,)) == ()
 
 
 class TestApplyControleLinkSuggestion:
