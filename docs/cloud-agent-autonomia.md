@@ -81,6 +81,10 @@ gh run view <run-id> --log
 4. [ ] Se OK: *"Rode sync-all sem dry-run"*
 5. [ ] Pedir: *"Dispare o workflow Catch-up contratos com dry_run=false"*
 
+| **Procon: backup e-mail → Monday (30 min)** | — | Via GCP Scheduler → `workflow_dispatch` |
+
+Ver [`docs/gcp-procon-github-scheduler.md`](gcp-procon-github-scheduler.md).
+
 ## Limitações conhecidas
 
 - O token interno do Cursor (`ghs_...`) **não** dispara workflows — precisa do `GITHUB_ACTIONS_PAT`.

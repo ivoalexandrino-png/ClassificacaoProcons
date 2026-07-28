@@ -62,9 +62,19 @@ gh workflow run "Procon automation (every 30 min)"
 gh workflow run "Procon automation (every 30 min)" -f skip_elaborate=true
 ```
 
-### Recomendado se o GitHub pular janelas
+### Ping externo (Cloud Scheduler) — recomendado em produção
 
-Disparo externo (Cloud Scheduler) chamando `workflow_dispatch` a cada 30 min com `skip_elaborate=true` e, 1×/hora, sem esse flag — ver `docs/cloud-agent-autonomia.md`.
+Quando o GitHub **não dispara** o cron por várias horas, use o **Cloud Scheduler** para chamar `workflow_dispatch` na API do GitHub.
+
+Guia completo: [`docs/gcp-procon-github-scheduler.md`](gcp-procon-github-scheduler.md)
+
+```bash
+export GITHUB_ACTIONS_PAT="github_pat_..."   # Actions: Read and write no repo
+export PROJECT_ID="b4a-prj-SEU-SLUG-stg"
+bash scripts/setup-gcp-github-procon-scheduler.sh
+```
+
+Cria checagem **a cada 30 min** (só `process` / Monday) + backup de **elaborate** no minuto **:15** de cada hora (horário de Brasília).
 
 ## Secrets no GitHub (Settings → Secrets and variables → Actions)
 

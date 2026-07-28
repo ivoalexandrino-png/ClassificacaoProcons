@@ -52,3 +52,7 @@ Disparar workflow no GitHub (requer `GITHUB_ACTIONS_PAT` configurado no start ho
 ```bash
 gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" -f dry_run=false -f max_pages=50
 ```
+
+### Procon (backup SLA 30 min no GCP)
+
+Scheduler → GitHub API: `docs/gcp-procon-github-scheduler.md` e `scripts/setup-gcp-github-procon-scheduler.sh` (exige `PROJECT_ID` + `GITHUB_ACTIONS_PAT` no ambiente de setup; **não** commitar PAT).
