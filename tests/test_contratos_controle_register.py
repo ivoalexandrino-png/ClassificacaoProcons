@@ -18,21 +18,22 @@ from classificacao_procons.contratos.controle_sync import (
     process_document_created_webhook_event,
     register_document_in_controle,
 )
+from classificacao_procons.contratos.models import ControleAssinaturasItem
 
 
 class TestControleRegistration:
-    @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
-    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
-    @patch("classificacao_procons.contratos.controle_sync.find_controle_item_by_autentique_id")
-    def test_should_register_new_document_in_jan_group_with_tipo(
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
+    @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    def test_should_register_new_document_in_jan_and_luciano_tracks_with_tipo_on_jan(
         self,
-        find_mock,
-        fetch_mock,
-        load_groups_mock,
+        find_items_mock,
         create_item_mock,
+        load_groups_mock,
+        fetch_mock,
     ) -> None:
-        find_mock.return_value = None
+        find_items_mock.return_value = ()
         fetch_mock.return_value = AutentiqueDocumentSummary(
             document_id="doc-new",
             name="Contrato B2B - Empresa X",
@@ -60,7 +61,10 @@ class TestControleRegistration:
             "contratos pendentes de assinatura jan": "group-jan",
             "contratos pendentes de assinatura luciano": "group-luciano",
         }
-        create_item_mock.return_value = ("111", "https://monday/item/111")
+        create_item_mock.side_effect = [
+            ("111", "https://monday/item/111"),
+            ("222", "https://monday/item/222"),
+        ]
 
         result = register_document_in_controle(
             document_id="doc-new",
@@ -70,23 +74,28 @@ class TestControleRegistration:
 
         assert result.skipped_duplicate is False
         assert result.monday_item_id == "111"
+        assert result.mirror_monday_item_id == "222"
         assert result.group_id == "group-jan"
         assert result.tipo_filled is True
         assert result.status_label == CONTROLE_STATUS_AGUARDANDO_ASSINATURA
-        create_item_mock.assert_called_once()
-        assert create_item_mock.call_args.kwargs["group_id"] == "group-jan"
-        assert create_item_mock.call_args.kwargs["tipo_label"] is not None
+        assert create_item_mock.call_count == 2
+        jan_call = create_item_mock.call_args_list[0].kwargs
+        luciano_call = create_item_mock.call_args_list[1].kwargs
+        assert jan_call["group_id"] == "group-jan"
+        assert jan_call["tipo_label"] is not None
+        assert luciano_call["group_id"] == "group-luciano"
+        assert luciano_call["tipo_label"] is None
 
-    @patch("classificacao_procons.contratos.controle_sync.find_controle_item_by_autentique_id")
-    def test_should_skip_when_document_already_exists(self, find_mock) -> None:
-        from classificacao_procons.contratos.models import ControleAssinaturasItem
-
-        find_mock.return_value = ControleAssinaturasItem(
-            item_id="999",
-            name="Contrato",
-            status=None,
-            tipo=None,
-            signature_link="Autentique ID: doc-existing",
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    def test_should_skip_when_document_already_exists(self, find_items_mock) -> None:
+        find_items_mock.return_value = (
+            ControleAssinaturasItem(
+                item_id="999",
+                name="Contrato",
+                status=None,
+                tipo=None,
+                signature_link="Autentique ID: doc-existing",
+            ),
         )
 
         result = register_document_in_controle(
@@ -195,7 +204,7 @@ class TestControleGroupAndTipoRules:
 
         assert group_id == "g-luciano"
 
-    def test_should_not_fill_tipo_in_luciano_group(self) -> None:
+    def test_should_fill_tipo_in_luciano_group_when_inferring_label(self) -> None:
         groups = {
             "contratos pendentes de assinatura luciano": "g-luciano",
         }
@@ -206,7 +215,7 @@ class TestControleGroupAndTipoRules:
             groups=groups,
         )
 
-        assert tipo is None
+        assert tipo is not None
 
     def test_should_not_fill_tipo_for_aditivo(self) -> None:
         groups = {"contratos pendentes de assinatura jan": "g-jan"}

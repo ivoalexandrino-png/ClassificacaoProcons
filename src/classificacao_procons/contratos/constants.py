@@ -38,6 +38,10 @@ CONTROLE_STATUS_AGUARDANDO_ASSINATURA = "Aguardando Assinatura"
 CONTROLE_STATUS_ASSINADO = "Assinado"
 CONTROLE_STATUS_AGUARDANDO_OUTROS = "Aguardando outros"
 
+# Marcadores no link Autentique (duas filas Jan/Luciano no mesmo documento)
+CONTROLE_LINK_TRACK_JAN = "controle_track: jan"
+CONTROLE_LINK_TRACK_LUCIANO = "controle_track: luciano"
+
 # Signatários internos (Autentique)
 SIGNER_EMAIL_JAN = "assinador@b4a.com.br"
 # Luciano assina como juridico@b4a.com.br ou com o nome exibido "Beauty For All" no Autentique.

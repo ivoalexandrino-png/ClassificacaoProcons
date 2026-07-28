@@ -18,6 +18,8 @@ from classificacao_procons.contratos.autentique.client import (
 from classificacao_procons.contratos.autentique.webhook import AutentiqueWebhookEvent
 from classificacao_procons.contratos.constants import (
     CONTROLE_GROUP_ASSINADOS,
+    CONTROLE_LINK_TRACK_JAN,
+    CONTROLE_LINK_TRACK_LUCIANO,
     CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
     CONTROLE_STATUS_AGUARDANDO_OUTROS,
     CONTROLE_STATUS_ASSINADO,
@@ -33,7 +35,9 @@ from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     build_controle_assinaturas_index,
     create_controle_assinatura_item,
-    find_controle_item_by_autentique_id,
+    find_controle_items_by_autentique_id,
+    infer_controle_signer_track,
+    is_controle_contratos_trigger_item,
     load_controle_board_groups,
     update_controle_item_progress,
 )
@@ -101,6 +105,7 @@ class ControleRegistrationResult:
     group_id: str | None = None
     status_label: str | None = None
     tipo_filled: bool = False
+    mirror_monday_item_id: str | None = None
 
 
 def register_document_in_controle(
@@ -115,7 +120,7 @@ def register_document_in_controle(
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
 
-    if find_controle_item_by_autentique_id(api_token=monday_token, document_id=document_id):
+    if find_controle_items_by_autentique_id(api_token=monday_token, document_id=document_id):
         return ControleRegistrationResult(
             document_id=document_id,
             document_name=document_name or document_id,
@@ -130,29 +135,28 @@ def register_document_in_controle(
         raise ControleSyncError(str(exc)) from exc
 
     groups = load_controle_board_groups(api_token=monday_token)
-    group_id = _resolve_controle_group_id(document=document, groups=groups)
-    tipo_label = _resolve_tipo_label(
-        document_name=document.name,
-        group_id=group_id,
-        groups=groups,
-    )
+    tipo_label = _resolve_tipo_label(document_name=document.name)
 
     try:
-        item_id, item_url = _create_controle_item(
+        item_id, item_url, mirror_id = _create_controle_track_pair(
             api_token=monday_token,
             autentique_api_token=autentique_api_token,
             document=document,
             groups=groups,
+            tipo_label=tipo_label,
         )
     except (MondayClientError, AutentiqueClientError) as exc:
         raise ControleSyncError(str(exc)) from exc
+
+    jan_group_id, _ = _resolve_signer_group_ids(groups)
 
     return ControleRegistrationResult(
         document_id=document.document_id,
         document_name=document.name,
         monday_item_id=item_id,
         monday_item_url=item_url,
-        group_id=group_id,
+        mirror_monday_item_id=mirror_id,
+        group_id=jan_group_id,
         status_label=_resolve_controle_status(document=document),
         tipo_filled=tipo_label is not None,
     )
@@ -190,11 +194,11 @@ def process_signature_accepted_webhook_event(
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
 
-    existing = find_controle_item_by_autentique_id(
+    existing_items = find_controle_items_by_autentique_id(
         api_token=monday_token,
         document_id=event.document_id,
     )
-    if not existing:
+    if not existing_items:
         return register_document_in_controle(
             document_id=event.document_id,
             document_name=event.document_name or None,
@@ -212,14 +216,49 @@ def process_signature_accepted_webhook_event(
 
     groups = load_controle_board_groups(api_token=monday_token)
     try:
-        return reconcile_controle_item_from_document(
+        return reconcile_controle_from_document(
             document=document,
-            controle_item=existing,
+            controle_items=existing_items,
             api_token=monday_token,
             groups=groups,
         )
     except MondayClientError as exc:
         raise ControleSyncError(str(exc)) from exc
+
+
+def reconcile_controle_from_document(
+    *,
+    document: AutentiqueDocumentSummary,
+    controle_items: tuple[ControleAssinaturasItem, ...],
+    api_token: str,
+    groups: dict[str, str],
+    dry_run: bool = False,
+) -> ControleReconcileResult:
+    """Alinha itens do Controle (uma ou duas filas Jan/Luciano) com o Autentique."""
+    if len(controle_items) >= 2:
+        return _reconcile_dual_track_items(
+            document=document,
+            controle_items=controle_items,
+            api_token=api_token,
+            groups=groups,
+            dry_run=dry_run,
+        )
+    if len(controle_items) == 1:
+        return reconcile_controle_item_from_document(
+            document=document,
+            controle_item=controle_items[0],
+            api_token=api_token,
+            groups=groups,
+            dry_run=dry_run,
+        )
+    return ControleReconcileResult(
+        document_id=document.document_id,
+        document_name=document.name,
+        monday_item_id=None,
+        updated=False,
+        skipped=True,
+        skip_reason="no_controle_item",
+    )
 
 
 def reconcile_controle_item_from_document(
@@ -410,9 +449,13 @@ def sync_controle_from_autentique(
         existing_item = index.get_item(document.document_id)
         if existing_item and update_existing:
             if dry_run:
-                reconcile = reconcile_controle_item_from_document(
+                reconcile = reconcile_controle_from_document(
                     document=document,
-                    controle_item=existing_item,
+                    controle_items=_load_controle_items_for_document(
+                        api_token=monday_token,
+                        document_id=document.document_id,
+                        fallback_item=existing_item,
+                    ),
                     api_token=monday_token,
                     groups=groups,
                     dry_run=True,
@@ -441,9 +484,13 @@ def sync_controle_from_autentique(
                 continue
 
             try:
-                reconcile = reconcile_controle_item_from_document(
+                reconcile = reconcile_controle_from_document(
                     document=document,
-                    controle_item=existing_item,
+                    controle_items=_load_controle_items_for_document(
+                        api_token=monday_token,
+                        document_id=document.document_id,
+                        fallback_item=existing_item,
+                    ),
                     api_token=monday_token,
                     groups=groups,
                 )
@@ -514,11 +561,12 @@ def sync_controle_from_autentique(
             continue
 
         try:
-            item_id, item_url = _create_controle_item(
+            item_id, item_url, _mirror_id = _create_controle_track_pair(
                 api_token=monday_token,
                 autentique_api_token=autentique_api_token,
                 document=document,
                 groups=groups,
+                tipo_label=_resolve_tipo_label(document_name=document.name),
             )
         except (MondayClientError, AutentiqueClientError) as exc:
             failed += 1
@@ -568,6 +616,160 @@ def _status_matches(current: str | None, expected: str) -> bool:
     if not current:
         return False
     return current.casefold().strip() == expected.casefold().strip()
+
+
+def _load_controle_items_for_document(
+    *,
+    api_token: str,
+    document_id: str,
+    fallback_item: ControleAssinaturasItem,
+) -> tuple[ControleAssinaturasItem, ...]:
+    items = find_controle_items_by_autentique_id(api_token=api_token, document_id=document_id)
+    if items:
+        return items
+    return (fallback_item,)
+
+
+def _reconcile_dual_track_items(
+    *,
+    document: AutentiqueDocumentSummary,
+    controle_items: tuple[ControleAssinaturasItem, ...],
+    api_token: str,
+    groups: dict[str, str],
+    dry_run: bool = False,
+) -> ControleReconcileResult:
+    jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+    planned_status = _resolve_controle_status(document=document)
+    planned_signed_at = _resolve_signed_at(document=document)
+
+    if document.is_fully_signed:
+        return ControleReconcileResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=controle_items[0].item_id,
+            updated=False,
+            skipped=True,
+            skip_reason="awaiting_document_finished",
+        )
+
+    primary_item = next(
+        (item for item in controle_items if is_controle_contratos_trigger_item(item)),
+        controle_items[0],
+    )
+    any_updated = False
+    for item in controle_items:
+        if _status_matches(item.status, CONTROLE_STATUS_ASSINADO):
+            continue
+
+        track = infer_controle_signer_track(item)
+        if track == "jan":
+            target_group = jan_group_id or item.group_id or ""
+        elif track == "luciano":
+            target_group = luciano_group_id or item.group_id or ""
+        else:
+            target_group = item.group_id or jan_group_id or luciano_group_id or ""
+
+        status_changed = not _status_matches(item.status, planned_status)
+        group_changed = bool(target_group) and item.group_id != target_group
+        if not status_changed and not group_changed:
+            continue
+
+        if dry_run:
+            any_updated = True
+            continue
+
+        update_controle_item_progress(
+            api_token=api_token,
+            item_id=item.item_id,
+            group_id=target_group,
+            status_label=planned_status,
+            signed_at=planned_signed_at,
+            current_group_id=item.group_id,
+        )
+        any_updated = True
+
+    return ControleReconcileResult(
+        document_id=document.document_id,
+        document_name=document.name,
+        monday_item_id=primary_item.item_id,
+        updated=any_updated,
+        skipped=not any_updated,
+        skip_reason=None if any_updated else "already_up_to_date",
+        group_id=primary_item.group_id,
+        status_label=planned_status,
+    )
+
+
+def _create_controle_track_pair(
+    *,
+    api_token: str,
+    autentique_api_token: str | None,
+    document: AutentiqueDocumentSummary,
+    groups: dict[str, str],
+    tipo_label: str | None,
+) -> tuple[str, str | None, str]:
+    """Cria par Jan (com Tipo) + Luciano (sem Tipo) no Controle Assinaturas."""
+    jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+    if not jan_group_id or not luciano_group_id:
+        raise ControleSyncError(
+            "Grupos Jan e Luciano não encontrados no quadro Controle Assinaturas.",
+        )
+
+    status_label = _resolve_controle_status(document=document)
+    signed_at = _resolve_signed_at(document=document)
+    short_link = _resolve_signature_link(document=document, api_token=autentique_api_token)
+
+    jan_id, jan_url = create_controle_assinatura_item(
+        api_token=api_token,
+        item_name=document.name,
+        group_id=jan_group_id,
+        signature_link_text=_build_track_signature_link(
+            document=document,
+            track="jan",
+            short_link=short_link,
+        ),
+        status_label=status_label,
+        tipo_label=tipo_label,
+        signed_at=signed_at,
+        signed_pdf_url=None,
+    )
+    luciano_id, _luciano_url = create_controle_assinatura_item(
+        api_token=api_token,
+        item_name=document.name,
+        group_id=luciano_group_id,
+        signature_link_text=_build_track_signature_link(
+            document=document,
+            track="luciano",
+            short_link=short_link,
+        ),
+        status_label=status_label,
+        tipo_label=None,
+        signed_at=signed_at,
+        signed_pdf_url=None,
+    )
+    return jan_id, jan_url, luciano_id
+
+
+def _resolve_signer_group_ids(groups: dict[str, str]) -> tuple[str | None, str | None]:
+    assinados_id = groups.get("assinados", groups.get(CONTROLE_GROUP_ASSINADOS))
+    jan_group_id = _find_group_id_by_keyword(groups, keyword="jan", exclude_id=assinados_id)
+    luciano_group_id = _find_group_id_by_keyword(
+        groups,
+        keyword="luciano",
+        exclude_id=assinados_id,
+    )
+    return jan_group_id, luciano_group_id
+
+
+def _build_track_signature_link(
+    *,
+    document: AutentiqueDocumentSummary,
+    track: str,
+    short_link: str | None,
+) -> str:
+    marker = CONTROLE_LINK_TRACK_JAN if track == "jan" else CONTROLE_LINK_TRACK_LUCIANO
+    base = _build_signature_link_text(document=document, short_link=short_link)
+    return f"{base}\n{marker}"
 
 
 def _create_controle_item(
@@ -654,6 +856,15 @@ def _resolve_controle_group_id(
 
     if jan_signed and not luciano_signed and luciano_group_id:
         return luciano_group_id
+    if luciano_signed and not jan_signed and jan_group_id:
+        return jan_group_id
+
+    if not jan_signed and not luciano_signed:
+        if luciano_group_id:
+            return luciano_group_id
+        if jan_group_id:
+            return jan_group_id
+
     if jan_group_id:
         return jan_group_id
     if luciano_group_id:
@@ -674,26 +885,16 @@ def _resolve_controle_group_id(
 def _resolve_tipo_label(
     *,
     document_name: str,
-    group_id: str,
-    groups: dict[str, str],
+    group_id: str | None = None,
+    groups: dict[str, str] | None = None,
 ) -> str | None:
+    del group_id, groups
     if is_supplemental_document(document_name=document_name):
-        return None
-    if _group_is_luciano_track(group_id=group_id, groups=groups):
         return None
     return infer_monday_tipo(
         document_name=document_name,
         category=infer_category(document_name=document_name),
     )
-
-
-def _group_is_luciano_track(*, group_id: str, groups: dict[str, str]) -> bool:
-    for title, current_id in groups.items():
-        if current_id != group_id:
-            continue
-        normalized = _normalize_group_title(title)
-        return "luciano" in normalized
-    return False
 
 
 def _find_group_id_by_keyword(

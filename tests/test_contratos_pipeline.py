@@ -13,6 +13,7 @@ from classificacao_procons.contratos.pipeline import (
 
 
 class TestContractPipeline:
+    @patch("classificacao_procons.contratos.pipeline.find_controle_items_by_autentique_id")
     @patch("classificacao_procons.contratos.pipeline.register_contrato_subitem")
     @patch("classificacao_procons.contratos.pipeline.update_controle_assinado")
     @patch("classificacao_procons.contratos.pipeline.find_controle_item")
@@ -27,6 +28,7 @@ class TestContractPipeline:
         find_controle_mock,
         update_controle_mock,
         register_subitem_mock,
+        find_items_mock,
         tmp_path: Path,
     ) -> None:
         from classificacao_procons.contratos.gemini_extractor import ContractMetadata
@@ -55,6 +57,7 @@ class TestContractPipeline:
             tipo="Contratos B2B",
             signature_link="https://assina.ae/abc",
         )
+        find_items_mock.return_value = ()
 
         state_path = tmp_path / "processed.json"
         result = process_finished_document(
@@ -79,6 +82,7 @@ class TestContractPipeline:
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert "doc-1" in state["document_ids"]
 
+    @patch("classificacao_procons.contratos.pipeline.find_controle_items_by_autentique_id")
     @patch("classificacao_procons.contratos.pipeline.register_contrato_subitem")
     @patch("classificacao_procons.contratos.pipeline.resolve_parent_contrato_item")
     @patch("classificacao_procons.contratos.pipeline.update_controle_assinado")
@@ -95,6 +99,7 @@ class TestContractPipeline:
         update_controle_mock,
         resolve_parent_mock,
         register_subitem_mock,
+        find_items_mock,
         tmp_path: Path,
     ) -> None:
         from classificacao_procons.contratos.gemini_extractor import ContractMetadata
@@ -127,6 +132,7 @@ class TestContractPipeline:
             tipo=None,
             signature_link="https://assina.ae/aditivo",
         )
+        find_items_mock.return_value = ()
         resolve_parent_mock.return_value = ParentResolutionResult(
             parent_item_id="200",
             strategy="gemini_reference",

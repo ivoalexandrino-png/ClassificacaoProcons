@@ -39,6 +39,8 @@ Setup completo: `docs/cloud-agent-autonomia.md`.
 
 **Signatários internos no Autentique:** Jan = `assinador@b4a.com.br`. Luciano = `juridico@b4a.com.br` **ou** nome exibido **Beauty For All** (mesma pessoa; o código trata os dois como Luciano no Controle).
 
+**Controle Assinaturas (duas filas):** cada documento gera **dois itens** no Monday — grupo **Jan** (com coluna **Tipo**, dispara automação → Contratos quando **Assinado**) e grupo **Luciano** (sem Tipo, só acompanhamento). Em regra o Luciano assina antes do Jan; o status dos dois itens é sincronizado via webhook/sync. Não é necessário duplicar manualmente ao concluir as assinaturas.
+
 - `OPENAI_API_KEY` (fallback do `elaborate` quando Gemini atinge cota; recomendado em produção junto com `GEMINI_API_KEY`)
 
 Catch-up em lote (recomendado):
