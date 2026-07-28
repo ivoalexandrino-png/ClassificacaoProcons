@@ -32,3 +32,4 @@ O workflow **Procon automation (every 30 min)** executa `process-interactions` a
 - E-mail **Inclusão de Resposta em Sistema**
 - Upload de anexos para coluna file do Monday (apenas nomes no update)
 - Subpasta Drive `Interacao consumidor/` (fase 2)
+- **PA com novo protocolo** sem código de acesso e **alias** para CIP anterior — ver `docs/procon-mapeamento-caso-silvia-1681159.md`
