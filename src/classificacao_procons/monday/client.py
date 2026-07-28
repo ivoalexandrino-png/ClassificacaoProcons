@@ -497,6 +497,48 @@ def _find_existing_item_id(
     return str(items[0]["id"])
 
 
+def find_item_id_by_protocol(
+    *,
+    api_token: str,
+    protocol_number: str,
+    board_name: str = DEFAULT_BOARD_NAME,
+    board_id: str | None = None,
+) -> str | None:
+    """Localiza item no board pelo número de protocolo."""
+    if not protocol_number.strip():
+        return None
+    context = _load_board_context(
+        api_token=api_token,
+        board_name=board_name or get_board_name_from_env(),
+        group_name=DEFAULT_GROUP_NAME,
+        board_id=board_id or get_board_id_from_env(),
+    )
+    protocol_column = find_protocol_column(context.columns)
+    if protocol_column is None:
+        return None
+    return _find_existing_item_id(
+        api_token=api_token,
+        board_id=context.board_id,
+        protocol_column=protocol_column,
+        protocol_number=protocol_number,
+    )
+
+
+def create_item_update(*, api_token: str, item_id: str, body: str) -> None:
+    """Publica update na timeline do item (sem alterar colunas)."""
+    _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($itemId: ID!, $body: String!) {
+          create_update(item_id: $itemId, body: $body) {
+            id
+          }
+        }
+        """,
+        variables={"itemId": item_id, "body": body},
+    )
+
+
 def _find_existing_item_id_by_cpf(
     *,
     api_token: str,

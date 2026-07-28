@@ -23,6 +23,10 @@ from classificacao_procons.campinas.email_parser import (
     is_campinas_notification,
     parse_campinas_notification_body,
 )
+from classificacao_procons.email.interaction_parser import (
+    is_procon_consumer_interaction,
+    parse_procon_consumer_interaction_body,
+)
 from classificacao_procons.email.parser import (
     ProconEmailParseError,
     _html_to_text,
@@ -59,6 +63,9 @@ DEFAULT_GMAIL_QUERY = (
     '(subject:"Fundação Procon-SP - Notificação de emissão de CIP" '
     'OR subject:"Processo Administrativo Aberto:")'
     ") OR ("
+    "from:procon.naoresponder@procon.sp.gov.br "
+    'subject:"Interação do Consumidor"'
+    ") OR ("
     "from:admin@proconsumidor.mj.gov.br "
     'subject:"Proconsumidor - Notificação"'
     ' OR subject:"Notificação de Carta"'
@@ -73,6 +80,10 @@ DEFAULT_GMAIL_QUERY = (
     ") OR ("
     "from:alerj.rj.gov.br"
     ")"
+)
+
+CONSUMER_INTERACTION_GMAIL_QUERY = (
+    "from:procon.naoresponder subject:\"Interação do Consumidor\" is:unread"
 )
 
 
@@ -172,6 +183,17 @@ class GmailProconFetcher:
             if notification is not None:
                 notifications.append(notification)
         return notifications
+
+    def list_unread_consumer_interactions(
+        self,
+        *,
+        max_results: int = 20,
+    ) -> list[ProconNotificationEmail]:
+        """Lista e-mails não lidos de interação do consumidor (Procon-SP)."""
+        return self.list_unread_notifications(
+            max_results=max_results,
+            query=CONSUMER_INTERACTION_GMAIL_QUERY,
+        )
 
     def fetch_notification(self, message_id: str) -> ProconNotificationEmail | None:
         """Busca e parseia um e-mail pelo ID. Retorna None se não for notificação suportada."""
@@ -295,6 +317,24 @@ class GmailProconFetcher:
                 consumer_cpf=parsed.consumer_cpf,
                 complaint_date=parsed.complaint_date,
                 cause=parsed.cause,
+                raw_snippet=snippet,
+            )
+
+        if is_procon_consumer_interaction(subject=subject, sender=sender):
+            try:
+                parsed = parse_procon_consumer_interaction_body(html=text_html, text=text_plain)
+            except ProconEmailParseError:
+                return None
+            return ProconNotificationEmail(
+                message_id=message_id,
+                subject=subject,
+                sender=sender,
+                received_at=received_at,
+                portal_url=parsed.portal_url,
+                source_id="sp",
+                access_code=parsed.access_code or "",
+                notification_type="interacao_consumidor",
+                protocol_number=parsed.protocol_number,
                 raw_snippet=snippet,
             )
 

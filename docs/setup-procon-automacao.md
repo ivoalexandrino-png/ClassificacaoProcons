@@ -16,6 +16,7 @@ Guia sem terminal: [`docs/procon-guia-simples.md`](procon-guia-simples.md)
 | Comando | Fontes (`--sources`) no `process` |
 |---------|-------------------------------------|
 | `procon-email process` | `sp`, `sc`, `alerj`, `campinas`, `uberlandia` |
+| `procon-email process-interactions` | Interação do consumidor (Procon-SP) → update no Monday |
 | `procon-email elaborate` | Casos Monday com Docs SAC (só na run do `:00` UTC) |
 
 Workflow **Proconsumidor local processing** (runner **self-hosted** — portal bloqueia datacenter):

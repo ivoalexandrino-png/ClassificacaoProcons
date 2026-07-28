@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
 
-NotificationType = Literal["cip", "processo_administrativo"]
+NotificationType = Literal["cip", "processo_administrativo", "interacao_consumidor"]
 ComplaintKind = Literal["reclamacao", "processo_administrativo"]
 
 
