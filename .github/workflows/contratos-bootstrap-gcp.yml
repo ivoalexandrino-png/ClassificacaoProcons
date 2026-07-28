@@ -118,4 +118,6 @@ jobs:
           REGION: ${{ inputs.region }}
           SERVICE_URL: ${{ env.SERVICE_URL }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
-        run: bash scripts/register-contratos-autentique-webhook.sh
+        run: |
+          pip install .
+          bash scripts/register-contratos-autentique-webhook.sh

@@ -9,6 +9,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 export PATH="${HOME}/google-cloud-sdk/bin:${HOME}/google-cloud-sdk/google-cloud-sdk/bin:${PATH}"
 
+python3 -m pip install -q "${ROOT_DIR}"
+
 gcloud config set project "${PROJECT_ID}" >/dev/null
 
 if [[ -z "${SERVICE_URL:-}" ]]; then
