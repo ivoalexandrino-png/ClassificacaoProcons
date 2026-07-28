@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 
 PROCON_SP_SENDER: Final = "procon.naoresponder@procon.sp.gov.br"
 PROCON_SP_SUBJECT: Final = "Fundação Procon-SP - Notificação de emissão de CIP"
+PROCON_RECLAMACAO_SUBJECT_FRAGMENT: Final = "notificação de emissão de reclamação"
 PROCON_PA_SUBJECT_PREFIX: Final = "Processo Administrativo Aberto:"
 PROCON_PORTAL_HOST: Final = "fornecedor2.procon.sp.gov.br"
 PROCON_PORTAL_LOGIN_URL: Final = f"https://{PROCON_PORTAL_HOST}/login"
@@ -89,11 +90,20 @@ def is_procon_pa_notification(*, subject: str, sender: str) -> bool:
     return normalized_subject.lower().startswith(PROCON_PA_SUBJECT_PREFIX.lower())
 
 
+def is_procon_reclamacao_notification(*, subject: str, sender: str) -> bool:
+    """Notificação de reclamação (login usuário/senha no portal, sem código de acesso)."""
+    if not is_procon_naoresponder_sender(sender):
+        return False
+    normalized = " ".join(subject.split()).lower()
+    return PROCON_RECLAMACAO_SUBJECT_FRAGMENT in normalized
+
+
 def is_procon_notification(*, subject: str, sender: str) -> bool:
-    """Retorna True para notificações CIP ou Processo Administrativo do Procon-SP."""
-    return is_procon_cip_notification(subject=subject, sender=sender) or is_procon_pa_notification(
-        subject=subject,
-        sender=sender,
+    """Retorna True para notificações CIP, Reclamação ou Processo Administrativo do Procon-SP."""
+    return (
+        is_procon_cip_notification(subject=subject, sender=sender)
+        or is_procon_reclamacao_notification(subject=subject, sender=sender)
+        or is_procon_pa_notification(subject=subject, sender=sender)
     )
 
 
@@ -104,6 +114,14 @@ def extract_administrative_process_number(subject: str) -> str | None:
     if match:
         return match.group(1).strip()
     return None
+
+
+def protocol_from_pa_admin_segment(*, admin_number: str, year: int) -> str:
+    """Monta protocolo de atendimento a partir do número do PA (último segmento)."""
+    segment = admin_number.split(".")[-1].strip()
+    if not segment.isdigit():
+        raise ValueError(f"Segmento de protocolo inválido em {admin_number}.")
+    return f"{segment}/{year}"
 
 
 def _html_to_text(html: str) -> str:
@@ -161,6 +179,7 @@ def parse_procon_notification_body(
     *,
     html: str | None = None,
     text: str | None = None,
+    require_access_code: bool = True,
 ) -> ParsedEmailContent:
     """
     Extrai URL do portal e código de acesso do corpo do e-mail.
@@ -180,12 +199,12 @@ def parse_procon_notification_body(
         portal_url = PROCON_PORTAL_LOGIN_URL
 
     access_code = _extract_access_code(normalized_text)
-    if not access_code:
+    if not access_code and require_access_code:
         raise ProconEmailParseError("Código de acesso não encontrado no corpo do e-mail.")
 
     return ParsedEmailContent(
         portal_url=portal_url,
-        access_code=access_code,
+        access_code=access_code or "",
         protocol_number=_extract_protocol_number(normalized_text),
         response_deadline=_extract_response_deadline(normalized_text),
     )
