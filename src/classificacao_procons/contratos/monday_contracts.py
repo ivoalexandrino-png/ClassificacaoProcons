@@ -215,6 +215,7 @@ class ControleAssinaturasIndex:
     document_ids: frozenset[str]
     exact_names: frozenset[str]
     items_by_document_id: tuple[tuple[str, ControleAssinaturasItem], ...] = ()
+    all_items: tuple[ControleAssinaturasItem, ...] = ()
 
     def get_item(self, document_id: str) -> ControleAssinaturasItem | None:
         target = document_id.casefold().strip()
@@ -260,6 +261,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
     document_ids: set[str] = set()
     exact_names: set[str] = set()
     items_by_document_id: dict[str, ControleAssinaturasItem] = {}
+    all_items_by_id: dict[str, ControleAssinaturasItem] = {}
     cursor: str | None = None
 
     for _ in range(50):
@@ -318,6 +320,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
                     linked_ids.add(token)
             for token in linked_ids:
                 items_by_document_id[token] = controle_item
+            all_items_by_id[controle_item.item_id] = controle_item
 
         cursor = page.get("cursor")
         if not cursor:
@@ -327,6 +330,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
         document_ids=frozenset(document_ids),
         exact_names=frozenset(exact_names),
         items_by_document_id=tuple(items_by_document_id.items()),
+        all_items=tuple(all_items_by_id.values()),
     )
 
 

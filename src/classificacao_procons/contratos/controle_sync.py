@@ -63,6 +63,19 @@ class ControleSyncResult:
     failed: int
     dry_run: bool
     items: tuple[ControleSyncItemResult, ...]
+    deferred_signed: int = 0
+
+
+@dataclass(frozen=True)
+class ControleAutentiqueCompareResult:
+    """Comparação somente leitura Autentique ↔ Controle Assinaturas."""
+
+    autentique_total: int
+    monday_items_total: int
+    pending_missing_in_monday: tuple[tuple[str, str], ...]
+    signed_missing_in_monday: tuple[tuple[str, str], ...]
+    monday_without_autentique_link: tuple[tuple[str, str, str | None], ...]
+    monday_autentique_id_not_in_feed: tuple[tuple[str, str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -285,6 +298,61 @@ def reconcile_controle_item_from_document(
     )
 
 
+def compare_autentique_with_controle(
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+    max_pages: int = 50,
+) -> ControleAutentiqueCompareResult:
+    """Lista diferenças entre Autentique e Controle sem gravar no Monday."""
+    monday_token = monday_api_token or get_api_token_from_env()
+    if not monday_token:
+        raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+
+    try:
+        documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
+    except AutentiqueClientError as exc:
+        raise ControleSyncError(str(exc)) from exc
+
+    index = build_controle_assinaturas_index(api_token=monday_token)
+    autentique_ids = {document.document_id.casefold().strip() for document in documents}
+
+    pending_missing: list[tuple[str, str]] = []
+    signed_missing: list[tuple[str, str]] = []
+    for document in documents:
+        if index.matches_document(document):
+            continue
+        pair = (document.document_id, document.name)
+        if document.is_fully_signed:
+            signed_missing.append(pair)
+        else:
+            pending_missing.append(pair)
+
+    without_link: list[tuple[str, str, str | None]] = []
+    id_not_in_feed: list[tuple[str, str, str]] = []
+    for item in index.all_items:
+        item_doc_ids = {
+            indexed_id
+            for indexed_id, indexed_item in index.items_by_document_id
+            if indexed_item.item_id == item.item_id
+        }
+        if not item_doc_ids:
+            without_link.append((item.item_id, item.name, item.status))
+            continue
+        for doc_id in item_doc_ids:
+            if doc_id not in autentique_ids:
+                id_not_in_feed.append((item.item_id, item.name, doc_id))
+
+    return ControleAutentiqueCompareResult(
+        autentique_total=len(documents),
+        monday_items_total=len(index.all_items),
+        pending_missing_in_monday=tuple(pending_missing),
+        signed_missing_in_monday=tuple(signed_missing),
+        monday_without_autentique_link=tuple(without_link),
+        monday_autentique_id_not_in_feed=tuple(id_not_in_feed),
+    )
+
+
 def sync_controle_from_autentique(
     *,
     monday_api_token: str | None = None,
@@ -292,6 +360,7 @@ def sync_controle_from_autentique(
     dry_run: bool = False,
     max_pages: int = 50,
     update_existing: bool = True,
+    skip_signed_documents: bool = False,
 ) -> ControleSyncResult:
     """Cria ou atualiza itens no Controle Assinaturas a partir do Autentique."""
     monday_token = monday_api_token or get_api_token_from_env()
@@ -311,8 +380,32 @@ def sync_controle_from_autentique(
     skipped = 0
     failed = 0
     already = 0
+    deferred_signed = 0
 
     for document in documents:
+        if skip_signed_documents and document.is_fully_signed:
+            if index.matches_document(document) or index.get_item(document.document_id):
+                already += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="unchanged",
+                        detail="signed_deferred",
+                    ),
+                )
+            else:
+                deferred_signed += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="deferred_signed",
+                        detail="fully_signed_not_imported_in_this_phase",
+                    ),
+                )
+            continue
+
         existing_item = index.get_item(document.document_id)
         if existing_item and update_existing:
             if dry_run:
@@ -466,6 +559,7 @@ def sync_controle_from_autentique(
         failed=failed,
         dry_run=dry_run,
         items=tuple(results),
+        deferred_signed=deferred_signed,
     )
 
 

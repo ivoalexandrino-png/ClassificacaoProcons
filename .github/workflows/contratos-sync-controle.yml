@@ -1,8 +1,17 @@
 name: Sync Controle Assinaturas (Autentique)
 
+# Sincroniza somente Autentique → Monday Controle Assinaturas (sem Drive/Contratos).
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "compare = só relatório; sync = criar faltantes"
+        required: true
+        type: choice
+        options:
+          - compare
+          - sync
+        default: compare
       dry_run:
         description: "Somente simular (não cria itens no Monday)"
         required: false
@@ -13,6 +22,16 @@ on:
         required: false
         type: string
         default: "50"
+      create_only:
+        description: "Não atualiza itens existentes no Monday"
+        required: false
+        type: boolean
+        default: true
+      skip_signed_documents:
+        description: "Não importa documentos já 100% assinados (evita status Assinado)"
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   sync-controle:
@@ -23,13 +42,11 @@ jobs:
       - name: Set workflow parameters
         id: params
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
-            echo "max_pages=${{ inputs.max_pages }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "dry_run=false" >> "$GITHUB_OUTPUT"
-            echo "max_pages=50" >> "$GITHUB_OUTPUT"
-          fi
+          echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          echo "max_pages=${{ inputs.max_pages }}" >> "$GITHUB_OUTPUT"
+          echo "create_only=${{ inputs.create_only }}" >> "$GITHUB_OUTPUT"
+          echo "skip_signed_documents=${{ inputs.skip_signed_documents }}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,13 +71,28 @@ jobs:
             fi
           done
 
-      - name: Sync Controle Assinaturas
+      - name: Compare Autentique x Controle
+        if: ${{ steps.params.outputs.mode == 'compare' }}
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
         run: |
-          ARGS=""
+          contratos-webhook compare-controle --max-pages "${{ steps.params.outputs.max_pages }}"
+
+      - name: Sync Controle Assinaturas
+        if: ${{ steps.params.outputs.mode == 'sync' }}
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
-          contratos-webhook sync-controle $ARGS --max-pages "${{ steps.params.outputs.max_pages }}"
+          if [ "${{ steps.params.outputs.create_only }}" = "true" ]; then
+            ARGS="$ARGS --create-only"
+          fi
+          if [ "${{ steps.params.outputs.skip_signed_documents }}" = "true" ]; then
+            ARGS="$ARGS --skip-signed-documents"
+          fi
+          contratos-webhook sync-controle $ARGS
