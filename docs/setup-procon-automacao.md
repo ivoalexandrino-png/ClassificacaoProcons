@@ -8,8 +8,10 @@ Workflow **Procon automation (every 30 min)** (arquivo `.github/workflows/procon
 
 | Agenda (UTC) | Agenda (Brasília, UTC−3) | Etapas |
 |--------------|---------------------------|--------|
-| `:00` e `:30` de cada hora | `:00` e `:30` (ex.: 22:00 e 22:30) | `process` — Gmail → portal → Drive → Monday |
-| `:00` de cada hora | `:00` | `elaborate` — respostas (Gemini/OpenAI) |
+| `:00`, `:15`, `:30`, `:45` | mesmos minutos (−3h na hora) | `process` — Gmail → Monday |
+| `:00` | `:00` (−3h) | `elaborate` — respostas (Gemini/OpenAI) |
+
+Guia sem terminal: [`docs/procon-guia-simples.md`](procon-guia-simples.md)
 
 | Comando | Fontes (`--sources`) no `process` |
 |---------|-------------------------------------|
