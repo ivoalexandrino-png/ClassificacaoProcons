@@ -1,11 +1,14 @@
 name: Sync Controle Assinaturas (Autentique)
 
 # Sincroniza somente Autentique → Monday Controle Assinaturas (sem Drive/Contratos).
+# Agendado: sync real com vínculo legado automático (título exato inequívoco).
 on:
+  schedule:
+    - cron: "15 * * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "compare = só relatório; sync = criar faltantes"
+        description: "compare = só relatório; sync = criar faltantes + auto-link legado"
         required: true
         type: choice
         options:
@@ -42,11 +45,19 @@ jobs:
       - name: Set workflow parameters
         id: params
         run: |
-          echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
-          echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
-          echo "max_pages=${{ inputs.max_pages }}" >> "$GITHUB_OUTPUT"
-          echo "create_only=${{ inputs.create_only }}" >> "$GITHUB_OUTPUT"
-          echo "skip_signed_documents=${{ inputs.skip_signed_documents }}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "mode=sync" >> "$GITHUB_OUTPUT"
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+            echo "max_pages=50" >> "$GITHUB_OUTPUT"
+            echo "create_only=true" >> "$GITHUB_OUTPUT"
+            echo "skip_signed_documents=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+            echo "max_pages=${{ inputs.max_pages }}" >> "$GITHUB_OUTPUT"
+            echo "create_only=${{ inputs.create_only }}" >> "$GITHUB_OUTPUT"
+            echo "skip_signed_documents=${{ inputs.skip_signed_documents }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Checkout
         uses: actions/checkout@v4

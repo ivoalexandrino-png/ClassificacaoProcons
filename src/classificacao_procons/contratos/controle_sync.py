@@ -33,6 +33,7 @@ from classificacao_procons.contratos.contratos_routing import (
 from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
 from classificacao_procons.contratos.controle_link_suggestions import (
     ControleLinkSuggestion,
+    auto_link_unambiguous_legacy_controle,
     suggest_legacy_controle_links,
 )
 from classificacao_procons.contratos.controle_reconcile import (
@@ -80,6 +81,10 @@ class ControleSyncResult:
     dry_run: bool
     items: tuple[ControleSyncItemResult, ...]
     deferred_signed: int = 0
+    legacy_linked: int = 0
+    legacy_link_would_apply: int = 0
+    legacy_link_ambiguous_skipped: int = 0
+    legacy_link_failed: int = 0
 
 
 @dataclass(frozen=True)
@@ -456,6 +461,7 @@ def sync_controle_from_autentique(
     max_pages: int = 50,
     update_existing: bool = True,
     skip_signed_documents: bool = False,
+    auto_link_legacy: bool = True,
 ) -> ControleSyncResult:
     """Cria ou atualiza itens no Controle Assinaturas a partir do Autentique."""
     monday_token = monday_api_token or get_api_token_from_env()
@@ -468,6 +474,35 @@ def sync_controle_from_autentique(
         raise ControleSyncError(str(exc)) from exc
 
     index = build_controle_assinaturas_index(api_token=monday_token)
+    legacy_linked = 0
+    legacy_link_would_apply = 0
+    legacy_link_ambiguous_skipped = 0
+    legacy_link_failed = 0
+
+    if auto_link_legacy:
+        try:
+            legacy_result = auto_link_unambiguous_legacy_controle(
+                api_token=monday_token,
+                autentique_api_token=autentique_api_token,
+                max_pages=max_pages,
+                dry_run=dry_run,
+                index=index,
+                pending_documents=tuple(
+                    document
+                    for document in documents
+                    if not document.is_fully_signed
+                    and index.get_item(document.document_id) is None
+                ),
+            )
+        except ValueError as exc:
+            raise ControleSyncError(str(exc)) from exc
+        legacy_linked = legacy_result.applied
+        legacy_link_would_apply = legacy_result.would_apply
+        legacy_link_ambiguous_skipped = legacy_result.ambiguous_skipped
+        legacy_link_failed = legacy_result.failed
+        if not dry_run and legacy_result.applied:
+            index = build_controle_assinaturas_index(api_token=monday_token)
+
     groups = load_controle_board_groups(api_token=monday_token)
     results: list[ControleSyncItemResult] = []
     created = 0
@@ -692,6 +727,10 @@ def sync_controle_from_autentique(
         dry_run=dry_run,
         items=tuple(results),
         deferred_signed=deferred_signed,
+        legacy_linked=legacy_linked,
+        legacy_link_would_apply=legacy_link_would_apply,
+        legacy_link_ambiguous_skipped=legacy_link_ambiguous_skipped,
+        legacy_link_failed=legacy_link_failed,
     )
 
 

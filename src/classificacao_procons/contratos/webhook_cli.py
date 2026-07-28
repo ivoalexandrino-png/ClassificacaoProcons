@@ -93,6 +93,7 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
             max_pages=args.max_pages,
             update_existing=not args.create_only,
             skip_signed_documents=args.skip_signed_documents,
+            auto_link_legacy=not args.no_auto_link_legacy,
         )
     except ControleSyncError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
@@ -107,6 +108,10 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
         "deferred_signed": result.deferred_signed,
         "failed": result.failed,
         "dry_run": result.dry_run,
+        "legacy_linked": result.legacy_linked,
+        "legacy_link_would_apply": result.legacy_link_would_apply,
+        "legacy_link_ambiguous_skipped": result.legacy_link_ambiguous_skipped,
+        "legacy_link_failed": result.legacy_link_failed,
         "items": [
             item.__dict__
             for item in result.items
@@ -462,6 +467,11 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-signed-documents",
         action="store_true",
         help="Não cria itens já totalmente assinados no Autentique (próxima fase)",
+    )
+    sync_parser.add_argument(
+        "--no-auto-link-legacy",
+        action="store_true",
+        help="Não vincula automaticamente itens legados com título exato inequívoco",
     )
     sync_parser.set_defaults(func=_run_sync_controle)
 
