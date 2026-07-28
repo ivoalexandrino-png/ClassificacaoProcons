@@ -129,6 +129,9 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
         "signed_missing_in_monday_count": len(result.signed_missing_in_monday),
         "monday_without_autentique_link_count": len(result.monday_without_autentique_link),
         "monday_autentique_id_not_in_feed_count": len(result.monday_autentique_id_not_in_feed),
+        "duplicate_autentique_ids_count": len(result.duplicate_autentique_ids),
+        "duplicate_normalized_names_count": len(result.duplicate_normalized_names),
+        "monday_status_behind_autentique_count": len(result.monday_status_behind_autentique),
         "pending_missing_in_monday": [
             {"document_id": doc_id, "document_name": name}
             for doc_id, name in result.pending_missing_in_monday[:200]
@@ -144,6 +147,29 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
         "monday_autentique_id_not_in_feed": [
             {"item_id": item_id, "name": name, "autentique_id": doc_id}
             for item_id, name, doc_id in result.monday_autentique_id_not_in_feed[:100]
+        ],
+        "duplicate_autentique_ids": [
+            {"autentique_id": doc_id, "monday_item_ids": list(item_ids)}
+            for doc_id, item_ids in result.duplicate_autentique_ids[:50]
+        ],
+        "duplicate_normalized_names": [
+            {
+                "normalized_title": title,
+                "items": [{"item_id": i, "name": n} for i, n in entries],
+            }
+            for title, entries in result.duplicate_normalized_names[:30]
+        ],
+        "monday_status_behind_autentique": [
+            {
+                "item_id": item_id,
+                "name": name,
+                "autentique_id": doc_id,
+                "monday_status": status,
+                "expected_status": expected,
+            }
+            for item_id, name, doc_id, status, expected in result.monday_status_behind_autentique[
+                :100
+            ]
         ],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))

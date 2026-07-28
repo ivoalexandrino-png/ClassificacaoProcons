@@ -35,7 +35,7 @@ Nunca commitar `credentials/`. Usar Secret Manager em produção.
 
 ### Contratos (Autentique → Monday/Drive)
 
-Setup completo: `docs/cloud-agent-autonomia.md`.
+Setup completo: `docs/cloud-agent-autonomia.md`. Reconciliação Controle: `docs/controle-autentique-reconciliacao.md`.
 
 **Signatários internos no Autentique:** Jan = `assinador@b4a.com.br`. Luciano = `juridico@b4a.com.br` **ou** nome exibido **Beauty For All** (mesma pessoa; o código trata os dois como Luciano no Controle).
 

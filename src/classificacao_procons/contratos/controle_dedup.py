@@ -63,6 +63,11 @@ _SUFFIX_COPY = re.compile(r"\(\d+\)$")
 _MIN_SUBSTRING_LEN = 18
 
 
+def normalize_controle_title(value: str) -> str:
+    """Normaliza título para comparação (público)."""
+    return _normalize_controle_name(value)
+
+
 def _normalize_controle_name(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value.casefold())
     without_marks = "".join(char for char in normalized if not unicodedata.combining(char))
