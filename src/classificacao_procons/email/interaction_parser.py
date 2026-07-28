@@ -13,6 +13,7 @@ from classificacao_procons.email.parser import (
     _extract_portal_url,
     _extract_protocol_number,
     _html_to_text,
+    extract_protocol_number_from_subject,
     is_procon_naoresponder_sender,
     normalize_email_address,
 )
@@ -39,6 +40,7 @@ def parse_procon_consumer_interaction_body(
     *,
     html: str | None = None,
     text: str | None = None,
+    subject: str | None = None,
 ) -> ParsedConsumerInteractionEmail:
     """Extrai protocolo e, quando presente, código de acesso do corpo do e-mail."""
     if not html and not text:
@@ -49,6 +51,8 @@ def parse_procon_consumer_interaction_body(
         normalized_text = f"{normalized_text}\n{_html_to_text(html)}".strip()
 
     protocol_number = _extract_protocol_number(normalized_text)
+    if not protocol_number and subject:
+        protocol_number = extract_protocol_number_from_subject(subject)
     if not protocol_number:
         protocol_match = re.search(
             r"reclama[çc][aã]o\s+(\d+/\d+)",

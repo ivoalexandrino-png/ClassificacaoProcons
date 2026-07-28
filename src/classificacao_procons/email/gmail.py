@@ -59,12 +59,10 @@ from classificacao_procons.uberlandia.email_parser import (
 
 DEFAULT_GMAIL_QUERY = (
     "("
-    "from:procon.naoresponder@procon.sp.gov.br "
+    "from:procon.sp.gov.br "
     '(subject:"Fundação Procon-SP - Notificação de emissão de CIP" '
-    'OR subject:"Processo Administrativo Aberto:")'
-    ") OR ("
-    "from:procon.naoresponder@procon.sp.gov.br "
-    'subject:"Interação do Consumidor"'
+    'OR subject:"Processo Administrativo Aberto:" '
+    'OR subject:"Interação do Consumidor")'
     ") OR ("
     "from:admin@proconsumidor.mj.gov.br "
     'subject:"Proconsumidor - Notificação"'
@@ -83,7 +81,7 @@ DEFAULT_GMAIL_QUERY = (
 )
 
 CONSUMER_INTERACTION_GMAIL_QUERY = (
-    "from:procon.naoresponder subject:\"Interação do Consumidor\" is:unread"
+    'from:procon.sp.gov.br subject:"Interação do Consumidor" is:unread'
 )
 
 
@@ -322,7 +320,11 @@ class GmailProconFetcher:
 
         if is_procon_consumer_interaction(subject=subject, sender=sender):
             try:
-                parsed = parse_procon_consumer_interaction_body(html=text_html, text=text_plain)
+                parsed = parse_procon_consumer_interaction_body(
+                    html=text_html,
+                    text=text_plain,
+                    subject=subject,
+                )
             except ProconEmailParseError:
                 return None
             return ProconNotificationEmail(
