@@ -185,3 +185,52 @@ def test_should_process_administrative_process_notification(
     assert fetch_complaint_mock.call_args.args[0].complaint_kind == "processo_administrativo"
     update_monday_mock.assert_called_once()
     fetcher.mark_as_read.assert_called_once_with("msg-pa")
+
+
+@patch("classificacao_procons.pipeline.GmailProconFetcher")
+@patch("classificacao_procons.pipeline.has_gmail_modify_access", return_value=True)
+@patch("classificacao_procons.pipeline.has_valid_token", return_value=True)
+@patch("classificacao_procons.pa_standalone_registry.ensure_pa_monday_item_for_protocol")
+@patch("classificacao_procons.pipeline.fetch_complaint")
+def test_process_should_register_standalone_pa_when_access_code_missing(
+    fetch_complaint_mock,
+    ensure_pa_mock,
+    _has_token_mock,
+    _modify_mock,
+    fetcher_cls_mock,
+    tmp_path,
+) -> None:
+    notification = ProconNotificationEmail(
+        message_id="msg-pa-empty",
+        subject="Processo Administrativo Aberto: 35.001.003.26.1681159",
+        sender="Procon <procon.naoresponder15@procon.sp.gov.br>",
+        received_at=datetime(2026, 7, 22, 10, 0),
+        portal_url="https://fornecedor2.procon.sp.gov.br/login",
+        access_code="",
+        notification_type="processo_administrativo",
+        protocol_number="1681159/2026",
+        administrative_process_number="35.001.003.26.1681159",
+    )
+    fetcher = MagicMock()
+    fetcher_cls_mock.from_credentials.return_value = fetcher
+    fetcher.list_unread_notifications.return_value = [notification]
+    ensure_pa_mock.return_value = MondayRegistrationResult(
+        item_id="monday-pa-standalone",
+        board_id="board-1",
+        item_url="https://b4a.monday.com/boards/board-1/pulses/monday-pa-standalone",
+    )
+
+    options = PipelineOptions(
+        download_dir=tmp_path / "downloads",
+        state_path=tmp_path / "processed.json",
+        mark_read=True,
+        monday_api_token="token-test",
+    )
+    results = process_new_complaints(options)
+
+    assert len(results) == 1
+    assert results[0].status == "success"
+    assert results[0].protocol_number == "1681159/2026"
+    fetch_complaint_mock.assert_not_called()
+    ensure_pa_mock.assert_called_once()
+    assert ensure_pa_mock.call_args.kwargs["pa_protocol"] == "1681159/2026"

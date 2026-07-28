@@ -83,10 +83,9 @@ def is_procon_cip_notification(*, subject: str, sender: str) -> bool:
 
 def is_procon_pa_notification(*, subject: str, sender: str) -> bool:
     """Retorna True se o e-mail corresponde a abertura de Processo Administrativo."""
-    normalized_subject = " ".join(subject.split())
-    normalized_sender = normalize_email_address(sender)
-    if normalized_sender != PROCON_SP_SENDER:
+    if not is_procon_naoresponder_sender(sender):
         return False
+    normalized_subject = " ".join(subject.split())
     return normalized_subject.lower().startswith(PROCON_PA_SUBJECT_PREFIX.lower())
 
 

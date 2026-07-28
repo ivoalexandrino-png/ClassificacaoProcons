@@ -53,6 +53,13 @@ class TestIsProconPaNotification:
         subject = f"{PROCON_PA_SUBJECT_PREFIX} 35.001.003.26.1620383"
         assert is_procon_pa_notification(subject=subject, sender=PROCON_SP_SENDER)
 
+    def test_should_match_pa_when_sender_is_naoresponder_variant(self) -> None:
+        subject = f"{PROCON_PA_SUBJECT_PREFIX} 35.001.003.26.1681159"
+        assert is_procon_pa_notification(
+            subject=subject,
+            sender="Procon <procon.naoresponder15@procon.sp.gov.br>",
+        )
+
     def test_should_extract_pa_number_from_subject(self) -> None:
         subject = f"{PROCON_PA_SUBJECT_PREFIX} 35.001.003.26.1620383"
         assert extract_administrative_process_number(subject) == "35.001.003.26.1620383"
