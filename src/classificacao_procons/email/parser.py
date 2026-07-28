@@ -26,7 +26,7 @@ _CODE_LABEL_PATTERN = re.compile(
 )
 
 _PROTOCOL_PATTERN = re.compile(
-    r"protocolo\s+(\d+/\d+)",
+    r"protocolo\s*:?\s*(\d+/\d+)",
     re.IGNORECASE,
 )
 
@@ -136,6 +136,15 @@ def _extract_access_code(text: str) -> str | None:
 
 def _extract_protocol_number(text: str) -> str | None:
     match = _PROTOCOL_PATTERN.search(text)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def extract_protocol_number_from_subject(subject: str) -> str | None:
+    """Extrai protocolo do assunto (ex.: ... Protocolo: 1668179/2026)."""
+    normalized = " ".join(subject.split())
+    match = _PROTOCOL_PATTERN.search(normalized)
     if match:
         return match.group(1).strip()
     return None

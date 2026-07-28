@@ -94,6 +94,12 @@ class TestParseProconNotificationBody:
         assert result.response_deadline == "24-07-2026"
         assert "fornecedor2.procon.sp.gov.br" in result.portal_url
 
+    def test_should_extract_protocol_with_colon_label(self) -> None:
+        html = "<p>Protocolo: 1653213/2026<br>Código: 2*26WwV1UjWM@714</p>"
+        result = parse_procon_notification_body(html=html)
+        assert result.protocol_number == "1653213/2026"
+        assert result.access_code == "2*26WwV1UjWM@714"
+
     def test_should_raise_when_body_is_empty(self) -> None:
         with pytest.raises(ProconEmailParseError, match="Corpo do e-mail vazio"):
             parse_procon_notification_body()
