@@ -2,9 +2,12 @@ name: Procon automation (every 30 min)
 
 on:
   schedule:
-    # Checagem Gmail → Monday a cada 30 min (UTC). Elaboração só no :00.
+    # Checagem Gmail → Monday (UTC). Elaboração só no :00.
+    # Quatro disparos/hora reduz atraso quando o GitHub pula uma janela.
     - cron: "0 * * * *"
+    - cron: "15 * * * *"
     - cron: "30 * * * *"
+    - cron: "45 * * * *"
   workflow_dispatch:
     inputs:
       register_monday_access_code:
