@@ -8,8 +8,8 @@ Fica na internet 24h escutando eventos do Autentique:
 
 | Evento | O que faz |
 |--------|-----------|
-| `document.created` | Cria item no Monday **Controle Assinaturas** (grupo Jan/Luciano, com Tipo só no grupo Jan) |
-| `signature.accepted` | Atualiza status e move entre grupos Jan/Luciano quando alguém assina |
+| `document.created` | Cria **dois** itens no Monday **Controle Assinaturas**: grupo Jan (com **Tipo**) e grupo Luciano (sem Tipo), mesmo Autentique ID |
+| `signature.accepted` | Atualiza status nos dois itens (fila fixa Jan/Luciano; Luciano costuma assinar primeiro) |
 | `document.finished` | Baixa PDF assinado, extrai dados com Gemini, salva no Drive e atualiza Monday |
 
 Quando um contrato é totalmente assinado (`document.finished`):
@@ -87,9 +87,9 @@ Criar ou assinar um contrato de teste no Autentique (ou reenviar eventos de test
 
 Verificar após **criar** o documento (`document.created`):
 
-- Novo item no Monday Controle Assinaturas → grupo **Contratos pendentes de assinatura Jan**
-- Coluna **Tipo** preenchida (apenas nesse grupo)
-- Link de assinatura preenchido
+- Dois itens no Monday Controle Assinaturas → grupos **Jan** (com **Tipo**) e **Luciano** (sem Tipo)
+- Coluna **Tipo** apenas no item da fila Jan
+- Link de assinatura preenchido nos dois
 
 Verificar após **assinar** por completo (`document.finished`):
 

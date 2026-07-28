@@ -58,25 +58,56 @@ def _document_jan_signed() -> AutentiqueDocumentSummary:
 
 class TestSignatureAccepted:
     @patch("classificacao_procons.contratos.controle_sync.update_controle_item_progress")
-    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
-    @patch("classificacao_procons.contratos.controle_sync.find_controle_item_by_autentique_id")
-    def test_should_move_item_to_luciano_group_when_jan_signs(
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    def test_should_update_both_tracks_when_luciano_signs_first(
         self,
-        find_mock,
-        fetch_mock,
+        find_items_mock,
         load_groups_mock,
+        fetch_mock,
         update_mock,
     ) -> None:
-        find_mock.return_value = ControleAssinaturasItem(
-            item_id="111",
-            name="Contrato B2B - Empresa X",
-            status=CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
-            tipo="Contratos B2B",
-            signature_link="Autentique ID: doc-jan-signed",
-            group_id="group-jan",
+        find_items_mock.return_value = (
+            ControleAssinaturasItem(
+                item_id="111",
+                name="Contrato B2B - Empresa X",
+                status=CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
+                tipo="Contratos B2B",
+                signature_link="Autentique ID: doc-jan-signed\ncontrole_track: jan",
+                group_id="group-jan",
+            ),
+            ControleAssinaturasItem(
+                item_id="222",
+                name="Contrato B2B - Empresa X",
+                status=CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
+                tipo=None,
+                signature_link="Autentique ID: doc-jan-signed\ncontrole_track: luciano",
+                group_id="group-luciano",
+            ),
         )
-        fetch_mock.return_value = _document_jan_signed()
+        fetch_mock.return_value = AutentiqueDocumentSummary(
+            document_id="doc-jan-signed",
+            name="Contrato B2B - Empresa X",
+            created_at="2026-07-16",
+            signed_pdf_url=None,
+            signatures=(
+                AutentiqueSigner(
+                    public_id="sig-jan",
+                    name="Jan",
+                    email=SIGNER_EMAIL_JAN,
+                    short_link="https://assina.ae/jan",
+                    signed_at=None,
+                ),
+                AutentiqueSigner(
+                    public_id="sig-luc",
+                    name="Luciano",
+                    email=SIGNER_EMAIL_LUCIANO,
+                    short_link="https://assina.ae/luc",
+                    signed_at="2026-07-16T10:00:00Z",
+                ),
+            ),
+        )
         load_groups_mock.return_value = _jan_luciano_groups()
 
         result = process_signature_accepted_webhook_event(
@@ -92,22 +123,19 @@ class TestSignatureAccepted:
         )
 
         assert result.updated is True
-        assert result.group_id == "group-luciano"
         assert result.status_label == CONTROLE_STATUS_AGUARDANDO_OUTROS
-        update_mock.assert_called_once()
-        assert update_mock.call_args.kwargs["group_id"] == "group-luciano"
-        assert update_mock.call_args.kwargs["status_label"] == CONTROLE_STATUS_AGUARDANDO_OUTROS
+        assert update_mock.call_count == 2
 
     @patch("classificacao_procons.contratos.controle_sync.register_document_in_controle")
-    @patch("classificacao_procons.contratos.controle_sync.find_controle_item_by_autentique_id")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
     def test_should_register_when_item_missing(
         self,
-        find_mock,
+        find_items_mock,
         register_mock,
     ) -> None:
         from classificacao_procons.contratos.controle_sync import ControleRegistrationResult
 
-        find_mock.return_value = None
+        find_items_mock.return_value = ()
         register_mock.return_value = ControleRegistrationResult(
             document_id="doc-new",
             document_name="Contrato novo",
@@ -183,7 +211,8 @@ class TestControleReconcile:
 
 
 class TestControleSyncUpdateExisting:
-    @patch("classificacao_procons.contratos.controle_sync.reconcile_controle_item_from_document")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    @patch("classificacao_procons.contratos.controle_sync.reconcile_controle_from_document")
     @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
     @patch("classificacao_procons.contratos.controle_sync.list_documents")
@@ -193,6 +222,7 @@ class TestControleSyncUpdateExisting:
         build_index_mock,
         load_groups_mock,
         reconcile_mock,
+        find_items_mock,
     ) -> None:
         document = _document_jan_signed()
         existing_item = ControleAssinaturasItem(
@@ -210,6 +240,7 @@ class TestControleSyncUpdateExisting:
             items_by_document_id=(("doc-jan-signed", existing_item),),
         )
         load_groups_mock.return_value = _jan_luciano_groups()
+        find_items_mock.return_value = (existing_item,)
         from classificacao_procons.contratos.controle_sync import ControleReconcileResult
 
         reconcile_mock.return_value = ControleReconcileResult(

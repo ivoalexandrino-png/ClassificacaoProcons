@@ -14,10 +14,16 @@ from classificacao_procons.contratos.autentique.client import (
     fetch_document,
 )
 from classificacao_procons.contratos.autentique.webhook import AutentiqueWebhookEvent
-from classificacao_procons.contratos.contratos_routing import resolve_contratos_registration_mode
+from classificacao_procons.contratos.constants import CONTROLE_STATUS_ASSINADO
+from classificacao_procons.contratos.contratos_routing import (
+    is_supplemental_document,
+    resolve_contratos_registration_mode,
+)
 from classificacao_procons.contratos.drive_routing import (
     build_contract_pdf_filename,
     format_drive_folder_path,
+    infer_category,
+    infer_monday_tipo,
     resolve_drive_destination,
 )
 from classificacao_procons.contratos.gemini_extractor import (
@@ -27,8 +33,13 @@ from classificacao_procons.contratos.gemini_extractor import (
 )
 from classificacao_procons.contratos.monday_contracts import (
     find_controle_item,
+    find_controle_items_by_autentique_id,
+    infer_controle_signer_track,
+    is_controle_contratos_trigger_item,
     register_contrato_subitem,
     update_controle_assinado,
+    update_controle_mirror_assinado,
+    update_controle_tipo,
 )
 from classificacao_procons.contratos.parent_resolver import resolve_parent_contrato_item
 from classificacao_procons.drive.client import DriveClientError, upload_pdf_to_folder_path
@@ -189,11 +200,33 @@ def process_finished_document(
         )
 
     tipo_label = controle_item.tipo if controle_item else None
-    if monday_token and controle_item and controle_item.status != "Assinado":
+    if monday_token and controle_item and controle_item.status != CONTROLE_STATUS_ASSINADO:
+        if not (tipo_label and str(tipo_label).strip()) and not is_supplemental_document(
+            document_name=document.name,
+        ):
+            inferred_tipo = infer_monday_tipo(
+                document_name=document.name,
+                category=infer_category(document_name=document.name),
+            )
+            if inferred_tipo:
+                update_controle_tipo(
+                    api_token=monday_token,
+                    item_id=controle_item.item_id,
+                    tipo_label=inferred_tipo,
+                )
+                tipo_label = inferred_tipo
         update_controle_assinado(
             api_token=monday_token,
             item_id=controle_item.item_id,
             signed_pdf_url=drive_pdf_url,
+            signed_at=date.today(),
+        )
+
+    if monday_token:
+        _finalize_controle_mirror_items(
+            api_token=monday_token,
+            document_id=document.document_id,
+            trigger_item_id=controle_item.item_id if controle_item else None,
             signed_at=date.today(),
         )
 
@@ -245,6 +278,34 @@ def process_finished_document(
         if parent_resolution
         else None,
     )
+
+
+def _finalize_controle_mirror_items(
+    *,
+    api_token: str,
+    document_id: str,
+    trigger_item_id: str | None,
+    signed_at: date,
+) -> None:
+    """Marca filas espelho (Luciano) como Assinado após o gatilho Jan ser concluído."""
+    items = find_controle_items_by_autentique_id(api_token=api_token, document_id=document_id)
+    for item in items:
+        if trigger_item_id and item.item_id == trigger_item_id:
+            continue
+        if is_controle_contratos_trigger_item(item):
+            continue
+        if item.status == CONTROLE_STATUS_ASSINADO:
+            continue
+        track = infer_controle_signer_track(item)
+        group_id = item.group_id or ""
+        if track == "luciano" and group_id:
+            update_controle_mirror_assinado(
+                api_token=api_token,
+                item_id=item.item_id,
+                signed_at=signed_at,
+                group_id=group_id,
+                current_group_id=item.group_id,
+            )
 
 
 def process_finished_webhook_event(

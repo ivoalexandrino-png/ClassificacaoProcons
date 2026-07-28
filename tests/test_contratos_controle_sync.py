@@ -43,8 +43,15 @@ class TestControleSync:
             document_ids=frozenset(),
             exact_names=frozenset(),
         )
-        load_groups_mock.return_value = {"assinados": "novo_grupo"}
-        create_item_mock.return_value = ("111", "https://monday/item/111")
+        load_groups_mock.return_value = {
+            "assinados": "novo_grupo",
+            "contratos pendentes de assinatura jan": "group-jan",
+            "contratos pendentes de assinatura luciano": "group-luciano",
+        }
+        create_item_mock.side_effect = [
+            ("111", "https://monday/item/111"),
+            ("112", "https://monday/item/112"),
+        ]
 
         result = sync_controle_from_autentique(
             monday_api_token="monday-token",
@@ -54,8 +61,8 @@ class TestControleSync:
 
         assert result.created == 1
         assert result.failed == 0
-        create_item_mock.assert_called_once()
-        call_kwargs = create_item_mock.call_args.kwargs
+        assert create_item_mock.call_count == 2
+        call_kwargs = create_item_mock.call_args_list[0].kwargs
         assert call_kwargs["item_name"] == "Contrato B2B - Empresa X"
         assert call_kwargs["status_label"] == "Assinado"
         assert call_kwargs["signed_at"] == date(2026, 1, 2)
@@ -83,8 +90,12 @@ class TestControleSync:
             document_ids=frozenset(),
             exact_names=frozenset(),
         )
-        load_groups_mock.return_value = {"assinados": "novo_grupo"}
-        create_item_mock.return_value = ("222", None)
+        load_groups_mock.return_value = {
+            "assinados": "novo_grupo",
+            "contratos pendentes de assinatura jan": "group-jan",
+            "contratos pendentes de assinatura luciano": "group-luciano",
+        }
+        create_item_mock.side_effect = [("222", None), ("223", None)]
 
         sync_controle_from_autentique(
             monday_api_token="monday-token",
@@ -92,8 +103,8 @@ class TestControleSync:
             dry_run=False,
         )
 
-        call_kwargs = create_item_mock.call_args.kwargs
-        assert call_kwargs["tipo_label"] is None
+        for call in create_item_mock.call_args_list:
+            assert call.kwargs["tipo_label"] is None
 
     @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")

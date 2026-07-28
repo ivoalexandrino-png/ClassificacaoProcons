@@ -18,6 +18,8 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_COL_STATUS,
     CONTROLE_COL_TIPO,
     CONTROLE_GROUP_ASSINADOS,
+    CONTROLE_LINK_TRACK_JAN,
+    CONTROLE_LINK_TRACK_LUCIANO,
     CONTROLE_STATUS_ASSINADO,
     DEFAULT_CONTRATOS_GROUP_ID,
     DYNAMIC_CONTRATOS_GROUP_TITLES,
@@ -59,13 +61,121 @@ class MondayContractRegistrationResult:
     parent_item_id: str | None = None
 
 
+def is_controle_contratos_trigger_item(item: ControleAssinaturasItem) -> bool:
+    """Item cuja coluna Tipo dispara a automação Monday → Contratos (fila Jan)."""
+    if item.tipo and str(item.tipo).strip():
+        return True
+    link = item.signature_link or ""
+    return CONTROLE_LINK_TRACK_JAN.casefold() in link.casefold()
+
+
+def infer_controle_signer_track(item: ControleAssinaturasItem) -> str:
+    """Retorna ``jan``, ``luciano`` ou ``unknown`` a partir do link de assinatura."""
+    link = (item.signature_link or "").casefold()
+    if CONTROLE_LINK_TRACK_LUCIANO.casefold() in link:
+        return "luciano"
+    if CONTROLE_LINK_TRACK_JAN.casefold() in link:
+        return "jan"
+    if is_controle_contratos_trigger_item(item):
+        return "jan"
+    return "unknown"
+
+
+def pick_canonical_controle_item(
+    items: tuple[ControleAssinaturasItem, ...] | list[ControleAssinaturasItem],
+) -> ControleAssinaturasItem | None:
+    """Escolhe o item gatilho (Tipo / fila Jan) entre duplicatas do mesmo Autentique ID."""
+    if not items:
+        return None
+    for item in items:
+        if is_controle_contratos_trigger_item(item):
+            return item
+    return items[0]
+
+
+def find_controle_items_by_autentique_id(
+    *,
+    api_token: str,
+    document_id: str,
+) -> tuple[ControleAssinaturasItem, ...]:
+    """Todos os itens do Controle vinculados ao mesmo documento Autentique."""
+    normalized_id = document_id.casefold().strip()
+    if not normalized_id:
+        return ()
+
+    related_col_id = discover_controle_related_contract_column_id(api_token=api_token)
+    column_ids = ["status", "status_1__1", "long_text_mkvnwp6d"]
+    if related_col_id:
+        column_ids.append(related_col_id)
+
+    matches: list[ControleAssinaturasItem] = []
+    cursor: str | None = None
+    for _ in range(30):
+        data = _graphql_request(
+            api_token=api_token,
+            query="""
+            query ($boardId: ID!, $limit: Int!, $cursor: String, $columnIds: [String!]) {
+              boards(ids: [$boardId]) {
+                items_page(limit: $limit, cursor: $cursor) {
+                  cursor
+                  items {
+                    id
+                    name
+                    group { id }
+                    column_values(ids: $columnIds) {
+                      id
+                      text
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            """,
+            variables={
+                "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
+                "limit": 100,
+                "cursor": cursor,
+                "columnIds": column_ids,
+            },
+        )
+        page = data["boards"][0]["items_page"]
+        for item in page["items"]:
+            columns_by_id = {
+                column["id"]: column for column in item.get("column_values", [])
+            }
+            values = {column_id: column.get("text") for column_id, column in columns_by_id.items()}
+            signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
+            if normalized_id not in signature_link.casefold():
+                continue
+            item["group"] = item.get("group") or {}
+            matches.append(
+                _to_controle_item(
+                    item,
+                    values,
+                    signature_link,
+                    related_col_id=related_col_id,
+                    columns_by_id=columns_by_id,
+                ),
+            )
+
+        cursor = page.get("cursor")
+        if not cursor:
+            break
+
+    return tuple(matches)
+
+
 def find_controle_item(
     *,
     api_token: str,
     document_id: str,
     document_name: str,
 ) -> ControleAssinaturasItem | None:
-    """Localiza item no Controle Assinaturas por ID/nome/link Autentique."""
+    """Localiza item gatilho no Controle Assinaturas por ID/nome/link Autentique."""
+    by_id = find_controle_items_by_autentique_id(api_token=api_token, document_id=document_id)
+    if by_id:
+        return pick_canonical_controle_item(by_id)
     related_col_id = discover_controle_related_contract_column_id(api_token=api_token)
     column_ids = ["status", "status_1__1", "long_text_mkvnwp6d"]
     if related_col_id:
@@ -148,66 +258,9 @@ def find_controle_item_by_autentique_id(
     api_token: str,
     document_id: str,
 ) -> ControleAssinaturasItem | None:
-    """Localiza item no Controle Assinaturas apenas pelo ID do Autentique."""
-    normalized_id = document_id.casefold().strip()
-    if not normalized_id:
-        return None
-
-    related_col_id = discover_controle_related_contract_column_id(api_token=api_token)
-    column_ids = ["status", "status_1__1", "long_text_mkvnwp6d"]
-    if related_col_id:
-        column_ids.append(related_col_id)
-
-    cursor: str | None = None
-    for _ in range(30):
-        data = _graphql_request(
-            api_token=api_token,
-            query="""
-            query ($boardId: ID!, $limit: Int!, $cursor: String, $columnIds: [String!]) {
-              boards(ids: [$boardId]) {
-                items_page(limit: $limit, cursor: $cursor) {
-                  cursor
-                  items {
-                    id
-                    name
-                    column_values(ids: $columnIds) {
-                      id
-                      text
-                      value
-                    }
-                  }
-                }
-              }
-            }
-            """,
-            variables={
-                "boardId": MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
-                "limit": 100,
-                "cursor": cursor,
-                "columnIds": column_ids,
-            },
-        )
-        page = data["boards"][0]["items_page"]
-        for item in page["items"]:
-            columns_by_id = {
-                column["id"]: column for column in item.get("column_values", [])
-            }
-            values = {column_id: column.get("text") for column_id, column in columns_by_id.items()}
-            signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
-            if normalized_id in signature_link.casefold():
-                return _to_controle_item(
-                    item,
-                    values,
-                    signature_link,
-                    related_col_id=related_col_id,
-                    columns_by_id=columns_by_id,
-                )
-
-        cursor = page.get("cursor")
-        if not cursor:
-            break
-
-    return None
+    """Localiza item gatilho no Controle Assinaturas pelo ID do Autentique."""
+    items = find_controle_items_by_autentique_id(api_token=api_token, document_id=document_id)
+    return pick_canonical_controle_item(items)
 
 
 @dataclass(frozen=True)
@@ -319,7 +372,9 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
                     document_ids.add(token)
                     linked_ids.add(token)
             for token in linked_ids:
-                items_by_document_id[token] = controle_item
+                existing = items_by_document_id.get(token)
+                if existing is None or _prefer_controle_index_item(controle_item, existing):
+                    items_by_document_id[token] = controle_item
             all_items_by_id[controle_item.item_id] = controle_item
 
         cursor = page.get("cursor")
@@ -562,6 +617,62 @@ def _create_controle_item(
         },
     )
     return str(data["create_item"]["id"])
+
+
+def _prefer_controle_index_item(
+    candidate: ControleAssinaturasItem,
+    current: ControleAssinaturasItem,
+) -> bool:
+    if is_controle_contratos_trigger_item(candidate) and not is_controle_contratos_trigger_item(
+        current,
+    ):
+        return True
+    return False
+
+
+def update_controle_tipo(
+    *,
+    api_token: str,
+    item_id: str,
+    tipo_label: str,
+) -> None:
+    """Preenche coluna Tipo no item gatilho (sem alterar status)."""
+    column_details = _load_controle_column_details(api_token=api_token)
+    column_by_title = {detail.column.title.casefold(): detail.column for detail in column_details}
+    tipo_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_TIPO, ("tipo",))
+    if not tipo_col:
+        return
+    column_values = _sanitize_column_values(
+        column_details,
+        {tipo_col.id: format_column_value(tipo_col.column_type, tipo_label)},
+    )
+    if not column_values:
+        return
+    _apply_controle_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
+        column_values=column_values,
+    )
+
+
+def update_controle_mirror_assinado(
+    *,
+    api_token: str,
+    item_id: str,
+    signed_at: date,
+    group_id: str,
+    current_group_id: str | None = None,
+) -> None:
+    """Marca fila espelho (Luciano) como Assinado sem Tipo e sem mover para grupo Assinados."""
+    update_controle_item_progress(
+        api_token=api_token,
+        item_id=item_id,
+        group_id=group_id,
+        status_label=CONTROLE_STATUS_ASSINADO,
+        signed_at=signed_at,
+        current_group_id=current_group_id,
+    )
 
 
 def _extract_document_ids_from_text(text: str) -> set[str]:
