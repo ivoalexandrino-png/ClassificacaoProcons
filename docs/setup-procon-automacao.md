@@ -23,7 +23,7 @@ Workflow **Proconsumidor local processing** (`.github/workflows/procon-proconsum
 
 | Agenda (UTC) | Etapa |
 |--------------|--------|
-| `:05`, `:20`, `:35`, `:50` | `process` — fonte `proconsumidor` (e-mail + portal MJ) |
+| `:05`, `:20`, `:35`, `:50` | `process` — fonte `proconsumidor` (**cron pausado** até runner `procon-br`; use **Run workflow** ou reative o `schedule` no YAML) |
 
 Estado em `data/` é o **mesmo** do workflow hourly (cache `procon-pipeline-state-*`). Os dois workflows usam `concurrency: procon-pipeline-mutex` para não rodar `process` ao mesmo tempo e sobrescrever estado.
 
@@ -67,7 +67,7 @@ O cadastro no Monday ocorre no passo `process` do workflow **Procon automation (
 
 - **Checagem a cada 30 minutos** (`:00` e `:30` UTC) — só `process`; elaboração 1×/hora no `:00` UTC.
 - `process` roda **antes** da validação Gemini (Monday não depende da API de elaboração).
-- `concurrency` (`procon-pipeline-mutex`) compartilhado com o workflow Proconsumidor — sem cancelar run em andamento.
+- Mutex `procon-hourly-automation` no hourly; Proconsumidor usa grupo próprio (cron só após runner `procon-br`).
 
 ### Disparo manual
 

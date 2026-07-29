@@ -1,19 +1,20 @@
 name: Proconsumidor local processing
 
 # Portal MJ bloqueia datacenter (403). Roda só em runner self-hosted no Brasil.
-# Estado do pipeline compartilhado com "Procon automation" via cache + mutex.
+# Estado do pipeline compartilhado com "Procon automation" via cache (prefixo procon-pipeline-state-).
+# Cron desligado até existir runner procon-br — evita fila infinita no Actions.
 
 concurrency:
-  group: procon-pipeline-mutex
+  group: procon-proconsumidor-automation
   cancel-in-progress: false
 
 on:
-  schedule:
-    # Deslocado 5 min em relação ao hourly (:00/:15/:30/:45) para reduzir fila.
-    - cron: "5 * * * *"
-    - cron: "20 * * * *"
-    - cron: "35 * * * *"
-    - cron: "50 * * * *"
+  # Reative após registrar runner (docs/procon-proconsumidor-runner.md):
+  # schedule:
+  #   - cron: "5 * * * *"
+  #   - cron: "20 * * * *"
+  #   - cron: "35 * * * *"
+  #   - cron: "50 * * * *"
   workflow_dispatch:
     inputs:
       max_results:

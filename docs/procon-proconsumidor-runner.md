@@ -63,7 +63,9 @@ Agenda padrão: minutos **:10** e **:40** (horário de Brasília). O runner aind
 
 VM em `southamerica-east1` **pode** continuar com 403 (IP de cloud). Só use se `curl -I https://proconsumidor.mj.gov.br/` retornar 200/302. Em dúvida, use Mac/PC do escritório.
 
+5. **Depois que o runner estiver verde**, reative o cron em `.github/workflows/procon-proconsumidor-local.yml` (descomente o bloco `schedule`) para rodar automático 4×/hora.
+
 ## O que não muda
 
 - Workflow **Procon automation (every 30 min)** segue só `sp,sc,alerj,campinas,uberlandia` em `ubuntu-latest`.
-- Mutex `procon-pipeline-mutex` evita `process` simultâneo entre hourly e Proconsumidor quando ambos usam cache `data/`.
+- Mutex `procon-proconsumidor-automation` só no workflow Proconsumidor; o hourly **não** espera mais runner na fila.
