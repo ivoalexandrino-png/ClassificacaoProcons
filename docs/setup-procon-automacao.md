@@ -31,7 +31,7 @@ Estado em `data/` é o **mesmo** do workflow hourly (cache `procon-pipeline-stat
 
 1. Máquina no Brasil (IP que não receba 403 em `https://proconsumidor.mj.gov.br/`).
 2. GitHub → **Settings → Actions → Runners → New self-hosted runner** (Linux ou macOS).
-3. Instalar o runner no host; labels padrão `self-hosted` bastam (o workflow usa `runs-on: self-hosted`).
+3. Instalar o runner: `bash scripts/setup-github-proconsumidor-runner.sh` (label **`procon-br`**). Guia: [`docs/procon-proconsumidor-runner.md`](procon-proconsumidor-runner.md).
 4. Mesmos secrets do hourly (`GMAIL_*`, `MONDAY_API_TOKEN`) no repositório — o runner herda secrets do repo.
 5. Validar: `gh workflow run "Proconsumidor local processing"` e conferir job verde (ou warning 403 se o IP ainda for bloqueado).
 
