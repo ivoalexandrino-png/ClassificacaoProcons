@@ -1,7 +1,7 @@
 name: Procon automation (every 30 min)
 
 concurrency:
-  group: procon-pipeline-mutex
+  group: procon-hourly-automation
   cancel-in-progress: false
 
 on:
