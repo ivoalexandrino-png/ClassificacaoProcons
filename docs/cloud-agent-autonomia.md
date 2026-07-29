@@ -64,6 +64,9 @@ contratos-webhook sync-all --max-pages 50             # aplicar
 gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" \
   -f dry_run=false \
   -f max_pages=50
+
+# Proconsumidor (exige runner self-hosted procon-br no repo):
+gh workflow run "Proconsumidor local processing" -f max_results=20
 ```
 
 ### Acompanhar execução
