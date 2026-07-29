@@ -1,5 +1,9 @@
 name: Procon automation (every 30 min)
 
+concurrency:
+  group: procon-pipeline-mutex
+  cancel-in-progress: false
+
 on:
   schedule:
     # Checagem Gmail → Monday (UTC). Elaboração só no :00.
@@ -24,9 +28,6 @@ jobs:
   process:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    concurrency:
-      group: procon-automation-${{ github.workflow }}
-      cancel-in-progress: false
 
     steps:
       - name: Checkout
