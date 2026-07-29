@@ -1,6 +1,19 @@
 name: Proconsumidor local processing
 
+# Portal MJ bloqueia datacenter (403). Roda só em runner self-hosted no Brasil.
+# Estado do pipeline compartilhado com "Procon automation" via cache + mutex.
+
+concurrency:
+  group: procon-pipeline-mutex
+  cancel-in-progress: false
+
 on:
+  schedule:
+    # Deslocado 5 min em relação ao hourly (:00/:15/:30/:45) para reduzir fila.
+    - cron: "5 * * * *"
+    - cron: "20 * * * *"
+    - cron: "35 * * * *"
+    - cron: "50 * * * *"
   workflow_dispatch:
     inputs:
       max_results:
@@ -16,6 +29,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Restore pipeline state
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: procon-pipeline-state-${{ github.run_id }}
+          restore-keys: |
+            procon-pipeline-state-
+
+      - name: Prepare state directory
+        run: mkdir -p data
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -36,19 +60,56 @@ jobs:
           printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
           printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
 
-      - name: Check Proconsumidor portal access
+      - name: Validate Google credentials
         run: |
-          STATUS="$(curl -s -o /dev/null -w "%{http_code}" https://proconsumidor.mj.gov.br/)"
+          python3 <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          for filename in ("gmail-oauth.json", "gmail-token.json"):
+              path = Path("credentials") / filename
+              if not path.exists() or path.stat().st_size < 10:
+                  print(f"ERRO: {filename} vazio ou ausente.")
+                  sys.exit(1)
+              json.loads(path.read_text())
+
+          from classificacao_procons.google_auth import has_valid_token
+
+          if not has_valid_token():
+              print("ERRO: token Google inválido ou expirado.")
+              sys.exit(1)
+          print("Credenciais Google OK.")
+          PY
+
+      - name: Check Proconsumidor portal access
+        id: portal_check
+        run: |
+          STATUS="$(curl -s -o /dev/null -w "%{http_code}" "https://proconsumidor.mj.gov.br/" || true)"
+          echo "http_status=${STATUS}" >> "$GITHUB_OUTPUT"
           echo "HTTP status: ${STATUS}"
           if [ "${STATUS}" = "403" ]; then
-            echo "ERRO: runner self-hosted ainda bloqueado pelo portal (403)."
-            exit 1
+            echo "::warning::Portal Proconsumidor retornou 403. Use runner no Brasil (IP residencial/escritório)."
           fi
 
       - name: Process Proconsumidor complaints
+        if: steps.portal_check.outputs.http_status != '403'
+        continue-on-error: true
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
         run: >
           python -m classificacao_procons.cli process
           --sources proconsumidor
-          --max-results ${{ inputs.max_results }}
+          --max-results ${{ inputs.max_results || '20' }}
+
+      - name: Skip message when portal blocked
+        if: steps.portal_check.outputs.http_status == '403'
+        run: |
+          echo "Processamento Proconsumidor ignorado nesta execução (portal inacessível neste IP)."
+
+      - name: Save pipeline state
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: procon-pipeline-state-${{ github.run_id }}

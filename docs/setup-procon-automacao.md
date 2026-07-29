@@ -19,11 +19,23 @@ Guia sem terminal: [`docs/procon-guia-simples.md`](procon-guia-simples.md)
 | `procon-email process-interactions` | Interação do consumidor (Procon-SP) → update no Monday |
 | `procon-email elaborate` | Casos Monday com Docs SAC (só na run do `:00` UTC) |
 
-Workflow **Proconsumidor local processing** (runner **self-hosted** — portal bloqueia datacenter):
+Workflow **Proconsumidor local processing** (`.github/workflows/procon-proconsumidor-local.yml`, runner **self-hosted** — portal bloqueia datacenter):
 
-| Etapa | Fontes |
-|-------|--------|
-| `process` | `proconsumidor` (e-mail + portal MJ) |
+| Agenda (UTC) | Etapa |
+|--------------|--------|
+| `:05`, `:20`, `:35`, `:50` | `process` — fonte `proconsumidor` (e-mail + portal MJ) |
+
+Estado em `data/` é o **mesmo** do workflow hourly (cache `procon-pipeline-state-*`). Os dois workflows usam `concurrency: procon-pipeline-mutex` para não rodar `process` ao mesmo tempo e sobrescrever estado.
+
+**Runner self-hosted (obrigatório para o cron do Proconsumidor):**
+
+1. Máquina no Brasil (IP que não receba 403 em `https://proconsumidor.mj.gov.br/`).
+2. GitHub → **Settings → Actions → Runners → New self-hosted runner** (Linux ou macOS).
+3. Instalar o runner no host; labels padrão `self-hosted` bastam (o workflow usa `runs-on: self-hosted`).
+4. Mesmos secrets do hourly (`GMAIL_*`, `MONDAY_API_TOKEN`) no repositório — o runner herda secrets do repo.
+5. Validar: `gh workflow run "Proconsumidor local processing"` e conferir job verde (ou warning 403 se o IP ainda for bloqueado).
+
+Sem runner online, jobs agendados ficam em fila; o hourly **não** inclui `proconsumidor` e continua igual.
 
 ### Cobertura por origem
 
@@ -55,7 +67,7 @@ O cadastro no Monday ocorre no passo `process` do workflow **Procon automation (
 
 - **Checagem a cada 30 minutos** (`:00` e `:30` UTC) — só `process`; elaboração 1×/hora no `:00` UTC.
 - `process` roda **antes** da validação Gemini (Monday não depende da API de elaboração).
-- `concurrency` sem cancelar run em andamento.
+- `concurrency` (`procon-pipeline-mutex`) compartilhado com o workflow Proconsumidor — sem cancelar run em andamento.
 
 ### Disparo manual
 
@@ -123,6 +135,7 @@ Sem essas colunas, os arquivos ainda vão para o Drive; só os links no Monday p
 
 ```bash
 gh workflow run "Procon automation (every 30 min)"
+gh workflow run "Proconsumidor local processing"
 gh run list --workflow="Procon automation (every 30 min)" --limit 3
 ```
 
