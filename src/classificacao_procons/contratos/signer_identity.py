@@ -1,4 +1,4 @@
-"""Identidade dos signatários internos B4A no Autentique (filas Jan/Luciano).
+"""Identidade dos signatários internos B4A no Autentique (filas Jan e Luciano).
 
 Regras Jan vs Luciano (nomes e e-mails): ver `AGENTS.md` e `tests/test_signer_identity.py`.
 """
