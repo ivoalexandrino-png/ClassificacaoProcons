@@ -24,9 +24,6 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
     CONTROLE_STATUS_AGUARDANDO_OUTROS,
     CONTROLE_STATUS_ASSINADO,
-    SIGNER_DISPLAY_NAME_LUCIANO,
-    SIGNER_EMAIL_JAN,
-    SIGNER_EMAIL_LUCIANO,
 )
 from classificacao_procons.contratos.contratos_routing import (
     is_supplemental_document,
@@ -61,6 +58,7 @@ from classificacao_procons.contratos.monday_contracts import (
     load_controle_board_groups,
     update_controle_item_progress,
 )
+from classificacao_procons.contratos.signer_identity import find_jan_signer, find_luciano_signer
 from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
 
 
@@ -1030,7 +1028,7 @@ def _resolve_controle_group_id(
     if document.is_fully_signed and assinados_id:
         return assinados_id
 
-    jan_signed = _is_signer_signed(document=document, email=SIGNER_EMAIL_JAN)
+    jan_signed = _is_jan_signed(document=document)
     luciano_signed = _is_luciano_signed(document=document)
 
     jan_group_id = _find_group_id_by_keyword(groups, keyword="jan", exclude_id=assinados_id)
@@ -1104,33 +1102,14 @@ def _normalize_group_title(value: str) -> str:
     return without_marks.strip()
 
 
-def _is_signer_signed(*, document: AutentiqueDocumentSummary, email: str) -> bool:
-    signer = _find_signer_by_email(document.signatures, email=email)
+def _is_jan_signed(*, document: AutentiqueDocumentSummary) -> bool:
+    signer = find_jan_signer(document.signatures)
     return bool(signer and signer.signed_at)
 
 
 def _is_luciano_signed(*, document: AutentiqueDocumentSummary) -> bool:
-    signer = _find_luciano_signer(document.signatures)
+    signer = find_luciano_signer(document.signatures)
     return bool(signer and signer.signed_at)
-
-
-def _signer_is_luciano(signer: AutentiqueSigner) -> bool:
-    if signer.email and signer.email.casefold().strip() == SIGNER_EMAIL_LUCIANO.casefold():
-        return True
-    if signer.name:
-        return _normalize_group_title(signer.name) == _normalize_group_title(
-            SIGNER_DISPLAY_NAME_LUCIANO,
-        )
-    return False
-
-
-def _find_luciano_signer(
-    signatures: tuple[AutentiqueSigner, ...],
-) -> AutentiqueSigner | None:
-    for signer in signatures:
-        if _signer_is_luciano(signer):
-            return signer
-    return None
 
 
 def _find_signer_by_email(

@@ -196,6 +196,41 @@ class TestControleGroupAndTipoRules:
 
         assert group_id == "g-luciano"
 
+    def test_should_route_to_jan_group_when_only_assinador_display_name_signed(self) -> None:
+        from classificacao_procons.contratos.constants import SIGNER_DISPLAY_NAME_JAN
+
+        document = AutentiqueDocumentSummary(
+            document_id="doc-assinador",
+            name="Contrato",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(
+                AutentiqueSigner(
+                    public_id="1",
+                    name=SIGNER_DISPLAY_NAME_JAN,
+                    email=None,
+                    short_link=None,
+                    signed_at="2026-07-16T10:00:00Z",
+                ),
+                AutentiqueSigner(
+                    public_id="2",
+                    name="Beauty For All",
+                    email=None,
+                    short_link=None,
+                    signed_at=None,
+                ),
+            ),
+        )
+        groups = {
+            "assinados": "g-assinados",
+            "contratos pendentes de assinatura jan": "g-jan",
+            "contratos pendentes de assinatura luciano": "g-luciano",
+        }
+
+        group_id = _resolve_controle_group_id(document=document, groups=groups)
+
+        assert group_id == "g-luciano"
+
     def test_should_route_to_luciano_when_pending_signer_is_beauty_for_all(
         self,
     ) -> None:
