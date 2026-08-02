@@ -71,6 +71,8 @@ Disparar workflow no GitHub (requer `GITHUB_ACTIONS_PAT` configurado no start ho
 gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" -f dry_run=false -f max_pages=50
 ```
 
+**Automação sem intervenção:** merge em `main` que altere `src/classificacao_procons/contratos/**` dispara o workflow **Sync Controle Assinaturas** (reparo Jan/Luciano + reconcile, sem import em massa de já assinados). O cron horário (`:15`) usa os mesmos parâmetros.
+
 ### Procon (backup SLA 30 min no GCP)
 
 Scheduler → GitHub API: `docs/gcp-procon-github-scheduler.md` e `scripts/setup-gcp-github-procon-scheduler.sh` (exige `PROJECT_ID` + `GITHUB_ACTIONS_PAT` no ambiente de setup; **não** commitar PAT).

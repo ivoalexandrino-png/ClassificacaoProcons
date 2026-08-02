@@ -1,10 +1,16 @@
 name: Sync Controle Assinaturas (Autentique)
 
 # Sincroniza somente Autentique → Monday Controle Assinaturas (sem Drive/Contratos).
-# Agendado: sync real com vínculo legado automático (título exato inequívoco).
+# Agendado + push em main (contratos): reparo Jan/Luciano, reconcile conservador, sem import em massa de assinados.
 on:
   schedule:
     - cron: "15 * * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/classificacao_procons/contratos/**"
+      - ".github/workflows/contratos-sync-controle.yml"
   workflow_dispatch:
     inputs:
       mode:
@@ -36,20 +42,24 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: contratos-sync-controle
+  cancel-in-progress: false
+
 jobs:
   sync-controle:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Set workflow parameters
         id: params
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
             echo "mode=sync" >> "$GITHUB_OUTPUT"
             echo "dry_run=false" >> "$GITHUB_OUTPUT"
             echo "max_pages=50" >> "$GITHUB_OUTPUT"
-            echo "create_only=true" >> "$GITHUB_OUTPUT"
+            echo "create_only=false" >> "$GITHUB_OUTPUT"
             echo "skip_signed_documents=true" >> "$GITHUB_OUTPUT"
           else
             echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
