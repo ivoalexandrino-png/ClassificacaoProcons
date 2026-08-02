@@ -128,6 +128,7 @@ def build_interaction_update_body(
     consumer_messages: tuple[str, ...],
     portal_attachment_labels: tuple[str, ...],
     email_attachment_names: tuple[str, ...],
+    procon_notices: tuple[str, ...] = (),
 ) -> str:
     """Monta texto do update no Monday com menções fixas."""
     mentions = " ".join(f"@{email}" for email in INTERACTION_MENTION_EMAILS)
@@ -139,6 +140,11 @@ def build_interaction_update_body(
         f"Assunto do e-mail: {email_subject}",
         "",
     ]
+    if procon_notices:
+        lines.append("Avisos do órgão (portal):")
+        for index, notice in enumerate(procon_notices, start=1):
+            lines.append(f"{index}. {notice}")
+        lines.append("")
     if consumer_messages:
         lines.append("Mensagens do consumidor (portal):")
         for index, message in enumerate(consumer_messages, start=1):
@@ -151,7 +157,8 @@ def build_interaction_update_body(
         for name in email_attachment_names:
             lines.append(f"- {name} (e-mail)")
         lines.append("")
-    if not consumer_messages and not portal_attachment_labels and not email_attachment_names:
+    has_detail = bool(consumer_messages or procon_notices)
+    if not has_detail and not portal_attachment_labels and not email_attachment_names:
         lines.append(
             "Conteúdo detalhado não extraído automaticamente; "
             "verifique o portal na aba Interações & Respostas.",
@@ -260,6 +267,7 @@ def _process_single_interaction(
 
     consumer_message_bodies: tuple[str, ...] = ()
     portal_attachment_labels: tuple[str, ...] = ()
+    procon_notices: tuple[str, ...] = ()
     if options.fetch_portal and notification.access_code:
         try:
             portal_data = fetch_consumer_interactions(
@@ -271,9 +279,11 @@ def _process_single_interaction(
             )
             consumer_message_bodies = tuple(message.body for message in portal_data.messages)
             portal_attachment_labels = portal_data.attachment_labels
+            procon_notices = portal_data.procon_notices
         except ProconPortalError:
             consumer_message_bodies = ()
             portal_attachment_labels = ()
+            procon_notices = ()
 
     body = build_interaction_update_body(
         protocol_number=protocol,
@@ -281,6 +291,7 @@ def _process_single_interaction(
         consumer_messages=consumer_message_bodies,
         portal_attachment_labels=portal_attachment_labels,
         email_attachment_names=email_attachment_names,
+        procon_notices=procon_notices,
     )
 
     try:

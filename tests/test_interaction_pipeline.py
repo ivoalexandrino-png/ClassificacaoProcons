@@ -19,11 +19,14 @@ def test_build_interaction_update_body_should_include_mentions() -> None:
         consumer_messages=("Mensagem do consumidor",),
         portal_attachment_labels=(),
         email_attachment_names=("IMG_3492.png",),
+        procon_notices=("Convertido em PA",),
     )
     assert "walquiria.marquart@b4a.com.br" in body
     assert "manu@b4a.com.br" in body
     assert "1623103/2026" in body
     assert "IMG_3492.png" in body
+    assert "Convertido em PA" in body
+    assert "Avisos do órgão" in body
 
 
 @patch("classificacao_procons.interaction_pipeline.GmailProconFetcher.from_credentials")
