@@ -10,7 +10,13 @@
 
 1. **Não** cria item no Monday.
 2. Localiza item existente pela coluna de protocolo e publica **update** com menções a `walquiria.marquart@b4a.com.br` e `manu@b4a.com.br`.
-3. Lê a aba **Interações & Respostas** no portal (somente blocos do consumidor).
+3. Lê a aba **Interações & Respostas** no portal:
+
+   - Rótulo **Consumidor** / **Reclamante** (formato antigo).
+   - **Nome completo** do consumidor após conversão em PA.
+   - Avisos do **PROCON** (ex.: conversão em processo administrativo) no update.
+   - Login no portal tenta **reclamação** e, se falhar, **processo administrativo** (mesmo código do e-mail).
+
 4. Lista anexos do e-mail e rótulos de anexo do portal no update.
 5. **Não** altera prazos, status nem dispara elaboração automática.
 
