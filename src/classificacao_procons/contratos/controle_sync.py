@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -40,6 +41,13 @@ from classificacao_procons.contratos.controle_reconcile import (
     find_duplicate_autentique_ids,
     find_duplicate_normalized_names,
     find_monday_status_behind_autentique,
+)
+from classificacao_procons.contratos.controle_track_repair import (
+    CONTROLE_PLATFORM_AUTENTIQUE,
+    CONTROLE_SIGNER_LABEL_JAN,
+    CONTROLE_SIGNER_LABEL_LUCIANO,
+    ensure_controle_dual_tracks_for_document,
+    parse_autentique_created_date,
 )
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.models import ControleAssinaturasItem
@@ -140,19 +148,35 @@ def register_document_in_controle(
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
 
-    if find_controle_items_by_autentique_id(api_token=monday_token, document_id=document_id):
-        return ControleRegistrationResult(
-            document_id=document_id,
-            document_name=document_name or document_id,
-            monday_item_id=None,
-            monday_item_url=None,
-            skipped_duplicate=True,
-        )
-
     try:
         document = fetch_document_summary(document_id=document_id, api_token=autentique_api_token)
     except AutentiqueClientError as exc:
         raise ControleSyncError(str(exc)) from exc
+
+    if find_controle_items_by_autentique_id(
+        api_token=monday_token,
+        document_id=document.document_id,
+    ):
+        groups = load_controle_board_groups(api_token=monday_token)
+        jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+        if jan_group_id and luciano_group_id:
+            ensure_controle_dual_tracks_for_document(
+                api_token=monday_token,
+                document=document,
+                jan_group_id=jan_group_id,
+                luciano_group_id=luciano_group_id,
+                tipo_label=_resolve_tipo_label(document_name=document.name),
+                status_label=_resolve_controle_status(document=document),
+                signed_at=_resolve_signed_at(document=document),
+                build_track_link=_build_track_signature_link,
+            )
+        return ControleRegistrationResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=None,
+            monday_item_url=None,
+            skipped_duplicate=True,
+        )
 
     index = build_controle_assinaturas_index(api_token=monday_token)
     if index.matches_document(document):
@@ -165,6 +189,19 @@ def register_document_in_controle(
                 api_token=monday_token,
                 document_id=document.document_id,
                 items=likely,
+            )
+        groups = load_controle_board_groups(api_token=monday_token)
+        jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+        if jan_group_id and luciano_group_id:
+            ensure_controle_dual_tracks_for_document(
+                api_token=monday_token,
+                document=document,
+                jan_group_id=jan_group_id,
+                luciano_group_id=luciano_group_id,
+                tipo_label=_resolve_tipo_label(document_name=document.name),
+                status_label=_resolve_controle_status(document=document),
+                signed_at=_resolve_signed_at(document=document),
+                build_track_link=_build_track_signature_link,
             )
         return ControleRegistrationResult(
             document_id=document.document_id,
@@ -513,6 +550,25 @@ def sync_controle_from_autentique(
     deferred_signed = 0
 
     for document in documents:
+        if not dry_run:
+            linked_items = find_controle_items_by_autentique_id(
+                api_token=monday_token,
+                document_id=document.document_id,
+            )
+            if linked_items:
+                jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+                if jan_group_id and luciano_group_id:
+                    ensure_controle_dual_tracks_for_document(
+                        api_token=monday_token,
+                        document=document,
+                        jan_group_id=jan_group_id,
+                        luciano_group_id=luciano_group_id,
+                        tipo_label=_resolve_tipo_label(document_name=document.name),
+                        status_label=_resolve_controle_status(document=document),
+                        signed_at=_resolve_signed_at(document=document),
+                        build_track_link=_build_track_signature_link,
+                    )
+
         if skip_signed_documents and document.is_fully_signed:
             if index.matches_document(document) or index.get_item(document.document_id):
                 already += 1
@@ -841,6 +897,8 @@ def _create_controle_track_pair(
     signed_at = _resolve_signed_at(document=document)
     short_link = _resolve_signature_link(document=document, api_token=autentique_api_token)
 
+    inclusion_date = parse_autentique_created_date(document)
+
     jan_id, jan_url = create_controle_assinatura_item(
         api_token=api_token,
         item_name=document.name,
@@ -854,6 +912,9 @@ def _create_controle_track_pair(
         tipo_label=tipo_label,
         signed_at=signed_at,
         signed_pdf_url=None,
+        signer_label=CONTROLE_SIGNER_LABEL_JAN,
+        platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
+        inclusion_date=inclusion_date,
     )
     luciano_id, _luciano_url = create_controle_assinatura_item(
         api_token=api_token,
@@ -868,6 +929,9 @@ def _create_controle_track_pair(
         tipo_label=None,
         signed_at=signed_at,
         signed_pdf_url=None,
+        signer_label=CONTROLE_SIGNER_LABEL_LUCIANO,
+        platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
+        inclusion_date=inclusion_date,
     )
     return jan_id, jan_url, luciano_id
 
@@ -1025,10 +1089,11 @@ def _find_group_id_by_keyword(
     keyword: str,
     exclude_id: str | None,
 ) -> str | None:
+    pattern = re.compile(rf"\b{re.escape(keyword)}\b")
     for title, group_id in groups.items():
         if exclude_id and group_id == exclude_id:
             continue
-        if keyword in _normalize_group_title(title):
+        if pattern.search(_normalize_group_title(title)):
             return group_id
     return None
 

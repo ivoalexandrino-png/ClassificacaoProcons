@@ -6,6 +6,7 @@ from classificacao_procons.contratos.autentique.client import (
     AutentiqueDocumentSummary,
     AutentiqueSigner,
 )
+from classificacao_procons.contratos.controle_link_suggestions import LegacyAutoLinkResult
 from classificacao_procons.contratos.controle_sync import (
     compare_autentique_with_controle,
     sync_controle_from_autentique,
@@ -100,6 +101,8 @@ class TestControleCompare:
 
 
 class TestControleSyncSkipSigned:
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    @patch("classificacao_procons.contratos.controle_sync.auto_link_unambiguous_legacy_controle")
     @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
     @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
@@ -110,7 +113,18 @@ class TestControleSyncSkipSigned:
         build_index_mock,
         load_groups_mock,
         create_item_mock,
+        auto_link_mock,
+        find_items_mock,
     ) -> None:
+        find_items_mock.return_value = ()
+        auto_link_mock.return_value = LegacyAutoLinkResult(
+            applied=0,
+            would_apply=0,
+            ambiguous_skipped=0,
+            failed=0,
+            dry_run=False,
+            items=(),
+        )
         signed = AutentiqueDocumentSummary(
             document_id="signed-1",
             name="Contrato assinado",
