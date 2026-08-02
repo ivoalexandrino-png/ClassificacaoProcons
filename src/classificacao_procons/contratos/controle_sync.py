@@ -21,8 +21,6 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_GROUP_ASSINADOS,
     CONTROLE_LINK_TRACK_JAN,
     CONTROLE_LINK_TRACK_LUCIANO,
-    CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
-    CONTROLE_STATUS_AGUARDANDO_OUTROS,
     CONTROLE_STATUS_ASSINADO,
 )
 from classificacao_procons.contratos.contratos_routing import (
@@ -38,6 +36,13 @@ from classificacao_procons.contratos.controle_reconcile import (
     find_duplicate_autentique_ids,
     find_duplicate_normalized_names,
     find_monday_status_behind_autentique,
+    find_monday_track_status_mismatch,
+)
+from classificacao_procons.contratos.controle_status import (
+    resolve_controle_status_document,
+    resolve_controle_status_for_track,
+    resolve_signed_at_document,
+    resolve_signed_at_for_track,
 )
 from classificacao_procons.contratos.controle_track_repair import (
     CONTROLE_PLATFORM_AUTENTIQUE,
@@ -106,6 +111,10 @@ class ControleAutentiqueCompareResult:
     duplicate_autentique_ids: tuple[tuple[str, tuple[str, ...]], ...] = ()
     duplicate_normalized_names: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = ()
     monday_status_behind_autentique: tuple[tuple[str, str, str, str | None, str], ...] = ()
+    monday_track_status_mismatch: tuple[
+        tuple[str, str, str, str | None, str, str],
+        ...,
+    ] = ()
     legacy_link_suggestions: tuple[ControleLinkSuggestion, ...] = ()
 
 
@@ -356,18 +365,56 @@ def reconcile_controle_item_from_document(
         )
 
     if document.is_fully_signed:
+        planned_status = CONTROLE_STATUS_ASSINADO
+        track = infer_controle_signer_track(controle_item)
+        planned_signed_at = (
+            resolve_signed_at_for_track(document, track=track)
+            if track in ("jan", "luciano")
+            else resolve_signed_at_document(document)
+        )
+        if _status_matches(controle_item.status, planned_status):
+            return ControleReconcileResult(
+                document_id=document.document_id,
+                document_name=document.name,
+                monday_item_id=controle_item.item_id,
+                updated=False,
+                skipped=True,
+                skip_reason="already_assinado",
+            )
+        if dry_run:
+            return ControleReconcileResult(
+                document_id=document.document_id,
+                document_name=document.name,
+                monday_item_id=controle_item.item_id,
+                updated=True,
+                skipped=False,
+                status_label=planned_status,
+            )
+        update_controle_item_progress(
+            api_token=api_token,
+            item_id=controle_item.item_id,
+            group_id=controle_item.group_id or "",
+            status_label=planned_status,
+            signed_at=planned_signed_at,
+            current_group_id=controle_item.group_id,
+        )
         return ControleReconcileResult(
             document_id=document.document_id,
             document_name=document.name,
             monday_item_id=controle_item.item_id,
-            updated=False,
-            skipped=True,
-            skip_reason="awaiting_document_finished",
+            updated=True,
+            skipped=False,
+            status_label=planned_status,
         )
 
     planned_group_id = _resolve_controle_group_id(document=document, groups=groups)
-    planned_status = _resolve_controle_status(document=document)
-    planned_signed_at = _resolve_signed_at(document=document)
+    track = infer_controle_signer_track(controle_item)
+    if track in ("jan", "luciano"):
+        planned_status = resolve_controle_status_for_track(document, track=track)
+        planned_signed_at = resolve_signed_at_for_track(document, track=track)
+    else:
+        planned_status = resolve_controle_status_document(document)
+        planned_signed_at = resolve_signed_at_document(document)
 
     status_changed = not _status_matches(controle_item.status, planned_status)
     group_changed = controle_item.group_id != planned_group_id
@@ -481,6 +528,10 @@ def compare_autentique_with_controle(
         duplicate_autentique_ids=find_duplicate_autentique_ids(index),
         duplicate_normalized_names=find_duplicate_normalized_names(index),
         monday_status_behind_autentique=find_monday_status_behind_autentique(
+            index=index,
+            documents_by_id=documents_by_id,
+        ),
+        monday_track_status_mismatch=find_monday_track_status_mismatch(
             index=index,
             documents_by_id=documents_by_id,
         ),
@@ -826,17 +877,42 @@ def _reconcile_dual_track_items(
     dry_run: bool = False,
 ) -> ControleReconcileResult:
     jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
-    planned_status = _resolve_controle_status(document=document)
-    planned_signed_at = _resolve_signed_at(document=document)
 
     if document.is_fully_signed:
+        primary_item = next(
+            (item for item in controle_items if is_controle_contratos_trigger_item(item)),
+            controle_items[0],
+        )
+        any_updated = False
+        for item in controle_items:
+            if _status_matches(item.status, CONTROLE_STATUS_ASSINADO):
+                continue
+            track = infer_controle_signer_track(item)
+            signed_at = (
+                resolve_signed_at_for_track(document, track=track)
+                if track in ("jan", "luciano")
+                else resolve_signed_at_document(document)
+            )
+            if dry_run:
+                any_updated = True
+                continue
+            update_controle_item_progress(
+                api_token=api_token,
+                item_id=item.item_id,
+                group_id=item.group_id or "",
+                status_label=CONTROLE_STATUS_ASSINADO,
+                signed_at=signed_at,
+                current_group_id=item.group_id,
+            )
+            any_updated = True
         return ControleReconcileResult(
             document_id=document.document_id,
             document_name=document.name,
-            monday_item_id=controle_items[0].item_id,
-            updated=False,
-            skipped=True,
-            skip_reason="awaiting_document_finished",
+            monday_item_id=primary_item.item_id,
+            updated=any_updated,
+            skipped=not any_updated,
+            skip_reason=None if any_updated else "already_assinado",
+            status_label=CONTROLE_STATUS_ASSINADO,
         )
 
     primary_item = next(
@@ -855,6 +931,13 @@ def _reconcile_dual_track_items(
             target_group = luciano_group_id or item.group_id or ""
         else:
             target_group = item.group_id or jan_group_id or luciano_group_id or ""
+
+        if track in ("jan", "luciano"):
+            planned_status = resolve_controle_status_for_track(document, track=track)
+            planned_signed_at = resolve_signed_at_for_track(document, track=track)
+        else:
+            planned_status = resolve_controle_status_document(document)
+            planned_signed_at = resolve_signed_at_document(document)
 
         status_changed = not _status_matches(item.status, planned_status)
         group_changed = bool(target_group) and item.group_id != target_group
@@ -883,7 +966,7 @@ def _reconcile_dual_track_items(
         skipped=not any_updated,
         skip_reason=None if any_updated else "already_up_to_date",
         group_id=primary_item.group_id,
-        status_label=planned_status,
+        status_label=resolve_controle_status_document(document),
     )
 
 
@@ -902,10 +985,7 @@ def _create_controle_track_pair(
             "Grupos Jan e Luciano não encontrados no quadro Controle Assinaturas.",
         )
 
-    status_label = _resolve_controle_status(document=document)
-    signed_at = _resolve_signed_at(document=document)
     short_link = _resolve_signature_link(document=document, api_token=autentique_api_token)
-
     inclusion_date = parse_autentique_created_date(document)
 
     jan_id, jan_url = create_controle_assinatura_item(
@@ -917,9 +997,9 @@ def _create_controle_track_pair(
             track="jan",
             short_link=short_link,
         ),
-        status_label=status_label,
+        status_label=resolve_controle_status_for_track(document, track="jan"),
         tipo_label=tipo_label,
-        signed_at=signed_at,
+        signed_at=resolve_signed_at_for_track(document, track="jan"),
         signed_pdf_url=None,
         signer_label=CONTROLE_SIGNER_LABEL_JAN,
         platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
@@ -934,9 +1014,9 @@ def _create_controle_track_pair(
             track="luciano",
             short_link=short_link,
         ),
-        status_label=status_label,
+        status_label=resolve_controle_status_for_track(document, track="luciano"),
         tipo_label=None,
-        signed_at=signed_at,
+        signed_at=resolve_signed_at_for_track(document, track="luciano"),
         signed_pdf_url=None,
         signer_label=CONTROLE_SIGNER_LABEL_LUCIANO,
         platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
@@ -1136,26 +1216,11 @@ def _find_signer_by_email(
 
 
 def _resolve_controle_status(document: AutentiqueDocumentSummary) -> str:
-    if document.is_fully_signed:
-        return CONTROLE_STATUS_ASSINADO
-
-    signed_count = sum(1 for signer in document.signatures if signer.signed_at)
-    if signed_count > 0:
-        return CONTROLE_STATUS_AGUARDANDO_OUTROS
-    return CONTROLE_STATUS_AGUARDANDO_ASSINATURA
+    return resolve_controle_status_document(document)
 
 
 def _resolve_signed_at(document: AutentiqueDocumentSummary) -> date | None:
-    signed_dates: list[date] = []
-    for signer in document.signatures:
-        if not signer.signed_at:
-            continue
-        parsed = _parse_iso_datetime(signer.signed_at)
-        if parsed is not None:
-            signed_dates.append(parsed)
-    if not signed_dates:
-        return None
-    return max(signed_dates)
+    return resolve_signed_at_document(document)
 
 
 def _parse_iso_datetime(value: str) -> date | None:
