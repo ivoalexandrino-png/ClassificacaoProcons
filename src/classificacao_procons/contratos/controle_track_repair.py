@@ -14,9 +14,11 @@ from classificacao_procons.contratos.constants import (
 )
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
+    archive_controle_item,
     create_controle_assinatura_item,
     find_controle_items_by_autentique_id,
     infer_controle_signer_track,
+    pick_canonical_controle_item,
     update_controle_item_fields,
 )
 
@@ -31,6 +33,7 @@ class ControleTrackRepairResult:
     created_jan: bool
     created_luciano: bool
     updated_items: int
+    archived_duplicates: int
     duplicate_tracks_remaining: int
 
 
@@ -169,10 +172,22 @@ def ensure_controle_dual_tracks_for_document(
         )
 
     updated = 0
+    archived = 0
     duplicates = 0
     for track, track_items in by_track.items():
         if len(track_items) > 1:
             duplicates += len(track_items) - 1
+            canonical_pick = pick_canonical_controle_item(tuple(track_items)) or track_items[0]
+            for extra in track_items:
+                if extra.item_id == canonical_pick.item_id:
+                    continue
+                if dry_run:
+                    archived += 1
+                else:
+                    archive_controle_item(api_token=api_token, item_id=extra.item_id)
+                    archived += 1
+            track_items = [canonical_pick]
+
         canonical = track_items[0] if track_items else None
         if canonical is None:
             continue
@@ -233,5 +248,6 @@ def ensure_controle_dual_tracks_for_document(
         created_jan=created_jan,
         created_luciano=created_luciano,
         updated_items=updated,
-        duplicate_tracks_remaining=duplicates,
+        archived_duplicates=archived,
+        duplicate_tracks_remaining=max(0, duplicates - archived),
     )

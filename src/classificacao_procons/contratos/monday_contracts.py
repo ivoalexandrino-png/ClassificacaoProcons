@@ -800,6 +800,19 @@ def ensure_autentique_id_on_controle_items(
         )
 
 
+def archive_controle_item(*, api_token: str, item_id: str) -> None:
+    """Arquiva item duplicado no quadro Controle Assinaturas (reversível no Monday)."""
+    _graphql_request(
+        api_token=api_token,
+        query="""
+        mutation ($itemId: ID!) {
+          archive_item(item_id: $itemId) { id }
+        }
+        """,
+        variables={"itemId": item_id},
+    )
+
+
 def update_controle_item_progress(
     *,
     api_token: str,
