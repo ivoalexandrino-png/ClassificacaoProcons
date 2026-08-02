@@ -2,7 +2,7 @@ name: Controle sync after agent merge
 
 # Roda sync-controle após merge de PR cursor/* que altere contratos (sem dispatch — GITHUB_TOKEN não dispara outros workflows).
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
     branches: [main]
 
