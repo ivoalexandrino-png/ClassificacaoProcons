@@ -1,4 +1,7 @@
-"""Identidade dos signatários internos B4A no Autentique."""
+"""Identidade dos signatários internos B4A no Autentique.
+
+Regras Jan vs Luciano (nomes e e-mails): `AGENTS.md` e `tests/test_signer_identity.py`.
+"""
 
 from __future__ import annotations
 
