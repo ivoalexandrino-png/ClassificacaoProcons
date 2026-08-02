@@ -9,6 +9,8 @@ from classificacao_procons.contratos.autentique.client import AutentiqueDocument
 from classificacao_procons.contratos.constants import (
     CONTROLE_LINK_TRACK_JAN,
     CONTROLE_LINK_TRACK_LUCIANO,
+    CONTROLE_QUEM_ASSINA_JAN,
+    CONTROLE_QUEM_ASSINA_LUCIANO,
 )
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
@@ -18,8 +20,8 @@ from classificacao_procons.contratos.monday_contracts import (
     update_controle_item_fields,
 )
 
-CONTROLE_SIGNER_LABEL_JAN = "Jan"
-CONTROLE_SIGNER_LABEL_LUCIANO = "Luciano"
+CONTROLE_SIGNER_LABEL_JAN = CONTROLE_QUEM_ASSINA_JAN
+CONTROLE_SIGNER_LABEL_LUCIANO = CONTROLE_QUEM_ASSINA_LUCIANO
 CONTROLE_PLATFORM_AUTENTIQUE = "Autentique"
 
 

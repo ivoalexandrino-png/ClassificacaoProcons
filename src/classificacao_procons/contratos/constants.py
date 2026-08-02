@@ -44,9 +44,14 @@ CONTROLE_LINK_TRACK_LUCIANO = "controle_track: luciano"
 
 # Signatários internos (Autentique)
 SIGNER_EMAIL_JAN = "assinador@b4a.com.br"
-# Luciano assina como juridico@b4a.com.br ou com o nome exibido "Beauty For All" no Autentique.
+SIGNER_DISPLAY_NAME_JAN = "Assinador"
+# Luciano = juridico@b4a.com.br ou nome exibido "Beauty For All" no Autentique.
 SIGNER_EMAIL_LUCIANO = "juridico@b4a.com.br"
 SIGNER_DISPLAY_NAME_LUCIANO = "Beauty For All"
+
+# Rótulos na coluna "Quem Assina" do Monday Controle
+CONTROLE_QUEM_ASSINA_JAN = SIGNER_DISPLAY_NAME_JAN
+CONTROLE_QUEM_ASSINA_LUCIANO = "Luciano"
 
 # Controle Assinaturas — coluna Tipo (status) e grupo no quadro Contratos
 MONDAY_TIPO_RH = "RH"

@@ -7,8 +7,8 @@ from classificacao_procons.contratos.autentique.client import (
     AutentiqueDocumentSummary,
     AutentiqueSigner,
 )
-from classificacao_procons.contratos.controle_sync import sync_controle_from_autentique
 from classificacao_procons.contratos.controle_link_suggestions import LegacyAutoLinkResult
+from classificacao_procons.contratos.controle_sync import sync_controle_from_autentique
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import ControleAssinaturasIndex
 
