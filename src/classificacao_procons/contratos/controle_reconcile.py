@@ -7,7 +7,11 @@ from collections import defaultdict
 from classificacao_procons.contratos.autentique.client import AutentiqueDocumentSummary
 from classificacao_procons.contratos.constants import CONTROLE_STATUS_ASSINADO
 from classificacao_procons.contratos.controle_dedup import normalize_controle_title
-from classificacao_procons.contratos.monday_contracts import ControleAssinaturasIndex
+from classificacao_procons.contratos.controle_status import resolve_controle_status_for_track
+from classificacao_procons.contratos.monday_contracts import (
+    ControleAssinaturasIndex,
+    infer_controle_signer_track,
+)
 
 
 def find_duplicate_autentique_ids(
@@ -66,4 +70,29 @@ def find_monday_status_behind_autentique(
         if _status_matches_monday(item.status, expected):
             continue
         rows.append((item.item_id, item.name, doc_id, item.status, expected))
+    return tuple(rows)
+
+
+def find_monday_track_status_mismatch(
+    *,
+    index: ControleAssinaturasIndex,
+    documents_by_id: dict[str, AutentiqueDocumentSummary],
+) -> tuple[tuple[str, str, str, str, str | None, str], ...]:
+    """Status do item Monday não bate com a fila Jan/Luciano no Autentique (pendentes)."""
+    rows: list[tuple[str, str, str, str, str | None, str]] = []
+    seen_items: set[str] = set()
+    for doc_id, item in index.items_by_document_id:
+        if item.item_id in seen_items:
+            continue
+        seen_items.add(item.item_id)
+        document = documents_by_id.get(doc_id)
+        if document is None or document.is_fully_signed:
+            continue
+        track = infer_controle_signer_track(item)
+        if track not in ("jan", "luciano"):
+            continue
+        expected = resolve_controle_status_for_track(document, track=track)
+        if _status_matches_monday(item.status, expected):
+            continue
+        rows.append((item.item_id, item.name, doc_id, track, item.status, expected))
     return tuple(rows)

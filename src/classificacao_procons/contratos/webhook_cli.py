@@ -144,6 +144,7 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
         "duplicate_autentique_ids_count": len(result.duplicate_autentique_ids),
         "duplicate_normalized_names_count": len(result.duplicate_normalized_names),
         "monday_status_behind_autentique_count": len(result.monday_status_behind_autentique),
+        "monday_track_status_mismatch_count": len(result.monday_track_status_mismatch),
         "legacy_link_suggestions_count": len(result.legacy_link_suggestions),
         "pending_missing_in_monday": [
             {"document_id": doc_id, "document_name": name}
@@ -183,6 +184,19 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
             for item_id, name, doc_id, status, expected in result.monday_status_behind_autentique[
                 :100
             ]
+        ],
+        "monday_track_status_mismatch": [
+            {
+                "item_id": item_id,
+                "name": name,
+                "autentique_id": doc_id,
+                "track": track,
+                "monday_status": status,
+                "expected_status": expected,
+            }
+            for item_id, name, doc_id, track, status, expected in (
+                result.monday_track_status_mismatch[:200]
+            )
         ],
         "legacy_link_suggestions": [
             {

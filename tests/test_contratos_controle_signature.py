@@ -1,5 +1,6 @@
 """Testes de signature.accepted e reconciliação do Controle Assinaturas."""
 
+from datetime import date
 from unittest.mock import patch
 
 from classificacao_procons.contratos.autentique.client import (
@@ -123,8 +124,15 @@ class TestSignatureAccepted:
         )
 
         assert result.updated is True
-        assert result.status_label == CONTROLE_STATUS_AGUARDANDO_OUTROS
-        assert update_mock.call_count == 2
+        assert update_mock.call_count == 1
+        update_mock.assert_called_once_with(
+            api_token="monday-token",
+            item_id="222",
+            group_id="group-luciano",
+            status_label=CONTROLE_STATUS_AGUARDANDO_OUTROS,
+            signed_at=date(2026, 7, 16),
+            current_group_id="group-luciano",
+        )
 
     @patch("classificacao_procons.contratos.controle_sync.register_document_in_controle")
     @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
@@ -183,7 +191,7 @@ class TestControleReconcile:
         update_mock.assert_not_called()
 
     @patch("classificacao_procons.contratos.controle_sync.update_controle_item_progress")
-    def test_should_skip_when_document_fully_signed(self, update_mock) -> None:
+    def test_should_mark_assinado_when_document_fully_signed(self, update_mock) -> None:
         document = AutentiqueDocumentSummary(
             document_id="doc-done",
             name="Contrato",
@@ -205,9 +213,9 @@ class TestControleReconcile:
             groups=_jan_luciano_groups(),
         )
 
-        assert result.skipped is True
-        assert result.skip_reason == "awaiting_document_finished"
-        update_mock.assert_not_called()
+        assert result.updated is True
+        assert result.status_label == CONTROLE_STATUS_ASSINADO
+        update_mock.assert_called_once()
 
 
 class TestControleSyncUpdateExisting:

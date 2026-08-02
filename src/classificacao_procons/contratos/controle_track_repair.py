@@ -16,6 +16,10 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_QUEM_ASSINA_JAN,
     CONTROLE_QUEM_ASSINA_LUCIANO,
 )
+from classificacao_procons.contratos.controle_status import (
+    resolve_controle_status_for_track,
+    resolve_signed_at_for_track,
+)
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     archive_controle_item,
@@ -133,9 +137,9 @@ def ensure_controle_dual_tracks_for_document(
                     track="jan",
                     short_link=short_link,
                 ),
-                status_label=status_label,
+                status_label=resolve_controle_status_for_track(document, track="jan"),
                 tipo_label=tipo_label,
-                signed_at=signed_at,
+                signed_at=resolve_signed_at_for_track(document, track="jan"),
                 signer_label=CONTROLE_SIGNER_LABEL_JAN,
                 platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
                 inclusion_date=inclusion_date,
@@ -155,9 +159,9 @@ def ensure_controle_dual_tracks_for_document(
                     track="luciano",
                     short_link=short_link,
                 ),
-                status_label=status_label,
+                status_label=resolve_controle_status_for_track(document, track="luciano"),
                 tipo_label=None,
-                signed_at=signed_at,
+                signed_at=resolve_signed_at_for_track(document, track="luciano"),
                 signer_label=CONTROLE_SIGNER_LABEL_LUCIANO,
                 platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
                 inclusion_date=inclusion_date,
@@ -206,6 +210,9 @@ def ensure_controle_dual_tracks_for_document(
         needs_marker = marker.casefold() not in link.casefold()
         needs_group = canonical.group_id != target_group
 
+        track_status = resolve_controle_status_for_track(document, track=track)
+        track_signed_at = resolve_signed_at_for_track(document, track=track)
+
         if not needs_marker and not needs_group:
             if dry_run:
                 updated += 1
@@ -213,8 +220,8 @@ def ensure_controle_dual_tracks_for_document(
                 update_controle_item_fields(
                     api_token=api_token,
                     item_id=canonical.item_id,
-                    status_label=status_label,
-                    signed_at=signed_at,
+                    status_label=track_status,
+                    signed_at=track_signed_at,
                     tipo_label=target_tipo,
                     signer_label=target_signer,
                     platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
@@ -237,8 +244,8 @@ def ensure_controle_dual_tracks_for_document(
             item_id=canonical.item_id,
             group_id=target_group if needs_group else None,
             current_group_id=canonical.group_id,
-            status_label=status_label,
-            signed_at=signed_at,
+            status_label=track_status,
+            signed_at=track_signed_at,
             tipo_label=target_tipo,
             signer_label=target_signer,
             platform_name=CONTROLE_PLATFORM_AUTENTIQUE,

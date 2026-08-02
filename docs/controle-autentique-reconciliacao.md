@@ -34,9 +34,9 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 
 ### 4 — Monday reflete o que está pendente no Autentique
 
+- Cada fila (**Jan** / **Luciano**) tem status e **data de assinatura** próprios: só contam assinaturas de **Jan/Assinador** ou **Luciano/Beauty For All**, não de terceiros.
 - Item no Controle com link para documento **já totalmente assinado** no Autentique mas status ainda “Aguardando…” → **desatualizado**.
-- Item **sem** `Autentique ID` e sem correspondência no feed → legado; o **sync** vincula automaticamente quando o título normalizado é igual e o par é único.
-- **Como medir:** `compare-controle` → `monday_status_behind_autentique`, `monday_without_autentique_link`, `legacy_link_suggestions`.
+- **Como medir:** `compare-controle` → `monday_track_status_mismatch`, `monday_status_behind_autentique`.
 - **Como corrigir:** `sync-controle` (campo `legacy_linked` no JSON); workflow **Sync Controle Assinaturas** roda em cron (sync real).
 
 ## Comandos
