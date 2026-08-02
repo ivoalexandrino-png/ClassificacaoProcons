@@ -19,8 +19,12 @@ jobs:
     if: startsWith(github.event.pull_request.head.ref, 'cursor/')
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    outputs:
+      merged: ${{ steps.automerge.outputs.merged }}
+      pull_number: ${{ steps.automerge.outputs.pull_number }}
     steps:
       - name: Prepare PR and enable auto-merge
+        id: automerge
         uses: actions/github-script@v7
         with:
           script: |
@@ -173,6 +177,8 @@ jobs:
                   pull_number: pullNumber,
                   merge_method: "merge",
                 });
+                core.setOutput("merged", "true");
+                core.setOutput("pull_number", String(pullNumber));
                 core.info(`Merged PR #${pullNumber} after all checks passed.`);
                 return;
               } catch (mergeError) {
@@ -189,3 +195,76 @@ jobs:
             core.setFailed(
               `Timed out waiting for checks on PR #${pullNumber}; not merged.`,
             );
+
+  sync-controle-after-agent-merge:
+    needs: prepare-and-automerge
+    if: needs.prepare-and-automerge.outputs.merged == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: contratos-sync-controle
+      cancel-in-progress: false
+    steps:
+      - name: Check whether merged PR touched contratos
+        id: paths
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pullNumber = Number(
+              "${{ needs.prepare-and-automerge.outputs.pull_number }}",
+            );
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pullNumber,
+              per_page: 100,
+            });
+            const prefixes = [
+              "src/classificacao_procons/contratos/",
+              ".github/workflows/contratos-",
+            ];
+            const touched = files.some((file) =>
+              prefixes.some(
+                (prefix) => file.filename === prefix || file.filename.startsWith(prefix),
+              ),
+            );
+            core.setOutput("touched", touched ? "true" : "false");
+
+      - name: Checkout
+        if: steps.paths.outputs.touched == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Python
+        if: steps.paths.outputs.touched == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        if: steps.paths.outputs.touched == 'true'
+        run: pip install .
+
+      - name: Validate secrets
+        if: steps.paths.outputs.touched == 'true'
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          for name in MONDAY_API_TOKEN AUTENTIQUE_API_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "Secret ausente: $name"
+              exit 1
+            fi
+          done
+
+      - name: Sync Controle Assinaturas (reparo Jan/Luciano)
+        if: steps.paths.outputs.touched == 'true'
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          contratos-webhook sync-controle \
+            --max-pages 50 \
+            --skip-signed-documents
