@@ -1,6 +1,6 @@
 name: Controle sync after agent merge
 
-# Dispara sync-controle após merge de PR cursor/* que altere contratos (push sozinho nem sempre roda).
+# Roda sync-controle após merge de PR cursor/* que altere contratos (sem dispatch — GITHUB_TOKEN não dispara outros workflows).
 on:
   pull_request:
     types: [closed]
@@ -8,31 +8,31 @@ on:
 
 permissions:
   contents: read
-  actions: write
+
+concurrency:
+  group: contratos-sync-controle
+  cancel-in-progress: false
 
 jobs:
-  dispatch-sync-controle:
+  sync-controle:
     if: >-
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'cursor/')
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 45
     steps:
-      - name: Dispatch Sync Controle when contratos paths changed
+      - name: Check whether PR touched contratos
+        id: paths
         uses: actions/github-script@v7
         with:
           script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
             const pullNumber = context.payload.pull_request.number;
-
             const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner,
-              repo,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
               pull_number: pullNumber,
               per_page: 100,
             });
-
             const prefixes = [
               "src/classificacao_procons/contratos/",
               ".github/workflows/contratos-",
@@ -42,23 +42,44 @@ jobs:
                 (prefix) => file.filename === prefix || file.filename.startsWith(prefix),
               ),
             );
-
+            core.setOutput("touched", touched ? "true" : "false");
             if (!touched) {
-              core.info("PR não alterou contratos; sync Controle não disparado.");
-              return;
+              core.info("PR não alterou contratos; sync Controle ignorado.");
             }
 
-            await github.rest.actions.createWorkflowDispatch({
-              owner,
-              repo,
-              workflow_id: "contratos-sync-controle.yml",
-              ref: "main",
-              inputs: {
-                mode: "sync",
-                dry_run: false,
-                max_pages: "50",
-                create_only: false,
-                skip_signed_documents: true,
-              },
-            });
-            core.info("Sync Controle Assinaturas disparado (reparo Jan/Luciano).");
+      - name: Checkout
+        if: steps.paths.outputs.touched == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        if: steps.paths.outputs.touched == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        if: steps.paths.outputs.touched == 'true'
+        run: pip install .
+
+      - name: Validate secrets
+        if: steps.paths.outputs.touched == 'true'
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          for name in MONDAY_API_TOKEN AUTENTIQUE_API_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "Secret ausente: $name"
+              exit 1
+            fi
+          done
+
+      - name: Sync Controle Assinaturas (reparo Jan/Luciano)
+        if: steps.paths.outputs.touched == 'true'
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          contratos-webhook sync-controle \
+            --max-pages 50 \
+            --skip-signed-documents
