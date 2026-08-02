@@ -200,7 +200,7 @@ jobs:
     needs: prepare-and-automerge
     if: needs.prepare-and-automerge.outputs.merged == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     concurrency:
       group: contratos-sync-controle
       cancel-in-progress: false

@@ -556,16 +556,27 @@ def sync_controle_from_autentique(
             if linked_items:
                 jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
                 if jan_group_id and luciano_group_id:
-                    ensure_controle_dual_tracks_for_document(
-                        api_token=monday_token,
-                        document=document,
-                        jan_group_id=jan_group_id,
-                        luciano_group_id=luciano_group_id,
-                        tipo_label=_resolve_tipo_label(document_name=document.name),
-                        status_label=_resolve_controle_status(document=document),
-                        signed_at=_resolve_signed_at(document=document),
-                        build_track_link=_build_track_signature_link,
-                    )
+                    try:
+                        ensure_controle_dual_tracks_for_document(
+                            api_token=monday_token,
+                            document=document,
+                            jan_group_id=jan_group_id,
+                            luciano_group_id=luciano_group_id,
+                            tipo_label=_resolve_tipo_label(document_name=document.name),
+                            status_label=_resolve_controle_status(document=document),
+                            signed_at=_resolve_signed_at(document=document),
+                            build_track_link=_build_track_signature_link,
+                        )
+                    except MondayClientError as exc:
+                        failed += 1
+                        results.append(
+                            ControleSyncItemResult(
+                                document_id=document.document_id,
+                                document_name=document.name,
+                                action="failed",
+                                detail=f"track_repair: {exc}",
+                            ),
+                        )
 
         if skip_signed_documents and document.is_fully_signed:
             if index.matches_document(document) or index.get_item(document.document_id):
