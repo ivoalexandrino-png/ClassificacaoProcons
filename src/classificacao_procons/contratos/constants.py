@@ -42,10 +42,9 @@ CONTROLE_STATUS_AGUARDANDO_OUTROS = "Aguardando outros"
 CONTROLE_LINK_TRACK_JAN = "controle_track: jan"
 CONTROLE_LINK_TRACK_LUCIANO = "controle_track: luciano"
 
-# Signatários internos (Autentique)
+# Signatários internos (Autentique) — ver `signer_identity.py` para aliases
 SIGNER_EMAIL_JAN = "assinador@b4a.com.br"
 SIGNER_DISPLAY_NAME_JAN = "Assinador"
-# Luciano = juridico@b4a.com.br ou nome exibido "Beauty For All" no Autentique.
 SIGNER_EMAIL_LUCIANO = "juridico@b4a.com.br"
 SIGNER_DISPLAY_NAME_LUCIANO = "Beauty For All"
 

@@ -37,7 +37,14 @@ Nunca commitar `credentials/`. Usar Secret Manager em produção.
 
 Setup completo: `docs/cloud-agent-autonomia.md`. Reconciliação Controle: `docs/controle-autentique-reconciliacao.md`.
 
-**Signatários internos no Autentique:** **Assinador** (= fila Jan no Controle; e-mail `assinador@b4a.com.br`) e **Beauty For All** (= Luciano; e-mail `juridico@b4a.com.br` ou só o nome exibido). O código reconhece e-mail **ou** nome exibido para decidir quem já assinou e preencher **Quem Assina** no Monday.
+**Signatários internos no Autentique (mapeamento para filas Jan/Luciano no Controle):**
+
+| Atribuir a **Jan** | Atribuir a **Luciano** |
+|--------------------|-------------------------|
+| Nome **Jan** (ex.: Jan Riehle), **Assinador** | Nome **Luciano**, **Beauty For All** |
+| E-mail `assinador@b4a…` (variações) | E-mail `juridico@b4a…` (variações) |
+
+Implementação: `signer_identity.py` (e-mail ou nome exibido). Coluna **Quem Assina** no Monday: **Assinador** / **Luciano**.
 
 **Controle Assinaturas (duas filas):** cada documento gera **dois itens** no Monday — grupo **Jan** (com coluna **Tipo**, dispara automação → Contratos quando **Assinado**) e grupo **Luciano** (sem Tipo, só acompanhamento). Em regra o Luciano assina antes do Jan; o status dos dois itens é sincronizado via webhook/sync. Não é necessário duplicar manualmente ao concluir as assinaturas.
 
