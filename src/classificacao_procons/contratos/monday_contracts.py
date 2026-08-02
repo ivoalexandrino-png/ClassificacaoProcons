@@ -440,6 +440,9 @@ def create_controle_assinatura_item(
     tipo_label: str | None = None,
     signed_at: date | None = None,
     signed_pdf_url: str | None = None,
+    signer_label: str | None = None,
+    platform_name: str | None = None,
+    inclusion_date: date | None = None,
 ) -> tuple[str, str | None]:
     """Cria item no Controle Assinaturas."""
     board_context = load_board_metadata(
@@ -456,6 +459,9 @@ def create_controle_assinatura_item(
             tipo_label=tipo_label,
             signed_at=signed_at,
             signed_pdf_url=signed_pdf_url,
+            signer_label=signer_label,
+            platform_name=platform_name,
+            inclusion_date=inclusion_date,
         ),
     )
 
@@ -522,6 +528,9 @@ def _build_controle_column_values(
     tipo_label: str | None,
     signed_at: date | None,
     signed_pdf_url: str | None,
+    signer_label: str | None = None,
+    platform_name: str | None = None,
+    inclusion_date: date | None = None,
 ) -> dict[str, Any]:
     column_by_title = {column.title.casefold(): column for column in columns}
     values: dict[str, Any] = {}
@@ -557,6 +566,24 @@ def _build_controle_column_values(
             signed_pdf_url,
             link_text="Contrato assinado",
         )
+
+    quem_col = _find_column(column_by_title, ("quem assina",))
+    if quem_col and signer_label:
+        values[quem_col.id] = format_column_value(quem_col.column_type, signer_label)
+
+    platform_col = _find_column(
+        column_by_title,
+        ("nome da plataforma", "plataforma"),
+    )
+    if platform_col and platform_name:
+        values[platform_col.id] = format_column_value(platform_col.column_type, platform_name)
+
+    inclusion_col = _find_column(
+        column_by_title,
+        ("data de inclusao", "inclusão na plataforma", "inclusao"),
+    )
+    if inclusion_col and inclusion_date:
+        values[inclusion_col.id] = format_column_value(inclusion_col.column_type, inclusion_date)
 
     return {key: value for key, value in values.items() if value is not None}
 
@@ -806,6 +833,95 @@ def update_controle_item_progress(
             "columnValues": json.dumps(column_values),
         },
     )
+
+    if group_id and group_id != current_group_id:
+        _graphql_request(
+            api_token=api_token,
+            query="""
+            mutation ($itemId: ID!, $groupId: String!) {
+              move_item_to_group(item_id: $itemId, group_id: $groupId) { id }
+            }
+            """,
+            variables={"itemId": item_id, "groupId": group_id},
+        )
+
+
+def update_controle_item_fields(
+    *,
+    api_token: str,
+    item_id: str,
+    group_id: str | None = None,
+    current_group_id: str | None = None,
+    status_label: str | None = None,
+    signed_at: date | None = None,
+    tipo_label: str | None = None,
+    signer_label: str | None = None,
+    platform_name: str | None = None,
+    inclusion_date: date | None = None,
+    signature_link_text: str | None = None,
+) -> None:
+    """Atualiza colunas do Controle sem recriar o item."""
+    column_details = _load_controle_column_details(api_token=api_token)
+    column_by_title = {detail.column.title.casefold(): detail.column for detail in column_details}
+    values: dict[str, Any] = {}
+
+    if status_label is not None:
+        status_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_STATUS, ("status",))
+        if status_col:
+            values[status_col.id] = format_column_value(status_col.column_type, status_label)
+
+    if signed_at is not None:
+        data_col = columns_by_id_or_title(
+            column_by_title,
+            CONTROLE_COL_DATA_ASSINATURA,
+            ("data",),
+        )
+        if data_col:
+            values[data_col.id] = format_column_value(data_col.column_type, signed_at)
+
+    if tipo_label is not None:
+        tipo_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_TIPO, ("tipo",))
+        if tipo_col:
+            values[tipo_col.id] = format_column_value(tipo_col.column_type, tipo_label)
+
+    if signature_link_text is not None:
+        link_col = columns_by_id_or_title(
+            column_by_title,
+            CONTROLE_COL_LINK_ASSINATURA,
+            ("link autentique", "assinatura", "link"),
+        )
+        if link_col:
+            values[link_col.id] = format_column_value(
+                link_col.column_type,
+                signature_link_text,
+            )
+
+    quem_col = _find_column(column_by_title, ("quem assina",))
+    if quem_col and signer_label:
+        values[quem_col.id] = format_column_value(quem_col.column_type, signer_label)
+
+    platform_col = _find_column(
+        column_by_title,
+        ("nome da plataforma", "plataforma"),
+    )
+    if platform_col and platform_name:
+        values[platform_col.id] = format_column_value(platform_col.column_type, platform_name)
+
+    inclusion_col = _find_column(
+        column_by_title,
+        ("data de inclusao", "inclusão na plataforma", "inclusao"),
+    )
+    if inclusion_col and inclusion_date:
+        values[inclusion_col.id] = format_column_value(inclusion_col.column_type, inclusion_date)
+
+    column_values = _sanitize_column_values(column_details, values)
+    if column_values:
+        _apply_controle_column_values(
+            api_token=api_token,
+            item_id=item_id,
+            column_details=column_details,
+            column_values=column_values,
+        )
 
     if group_id and group_id != current_group_id:
         _graphql_request(

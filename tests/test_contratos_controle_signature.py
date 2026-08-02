@@ -211,6 +211,8 @@ class TestControleReconcile:
 
 
 class TestControleSyncUpdateExisting:
+    @patch("classificacao_procons.contratos.controle_sync.ensure_controle_dual_tracks_for_document")
+    @patch("classificacao_procons.contratos.controle_sync.auto_link_unambiguous_legacy_controle")
     @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
     @patch("classificacao_procons.contratos.controle_sync.reconcile_controle_from_document")
     @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
@@ -223,7 +225,19 @@ class TestControleSyncUpdateExisting:
         load_groups_mock,
         reconcile_mock,
         find_items_mock,
+        auto_link_mock,
+        repair_mock,
     ) -> None:
+        from classificacao_procons.contratos.controle_link_suggestions import LegacyAutoLinkResult
+
+        auto_link_mock.return_value = LegacyAutoLinkResult(
+            applied=0,
+            would_apply=0,
+            ambiguous_skipped=0,
+            failed=0,
+            dry_run=False,
+            items=(),
+        )
         document = _document_jan_signed()
         existing_item = ControleAssinaturasItem(
             item_id="111",

@@ -93,8 +93,17 @@ class TestControleRegistration:
         assert luciano_call["group_id"] == "group-luciano"
         assert luciano_call["tipo_label"] is None
 
+    @patch("classificacao_procons.contratos.controle_sync.ensure_controle_dual_tracks_for_document")
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
+    @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
     @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
-    def test_should_skip_when_document_already_exists(self, find_items_mock) -> None:
+    def test_should_skip_when_document_already_exists(
+        self,
+        find_items_mock,
+        fetch_mock,
+        load_groups_mock,
+        repair_mock,
+    ) -> None:
         find_items_mock.return_value = (
             ControleAssinaturasItem(
                 item_id="999",
@@ -104,6 +113,17 @@ class TestControleRegistration:
                 signature_link="Autentique ID: doc-existing",
             ),
         )
+        fetch_mock.return_value = AutentiqueDocumentSummary(
+            document_id="doc-existing",
+            name="Contrato",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(),
+        )
+        load_groups_mock.return_value = {
+            "contratos pendentes de assinatura jan": "group-jan",
+            "contratos pendentes de assinatura luciano": "group-luciano",
+        }
 
         result = register_document_in_controle(
             document_id="doc-existing",
