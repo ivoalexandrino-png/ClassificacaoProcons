@@ -121,7 +121,12 @@ def _normalize_name(value: str) -> str:
 
 def _is_transient_monday_error(exc: MondayClientError) -> bool:
     message = str(exc).casefold()
-    return "internal server error" in message or "http 500" in message or "http 502" in message
+    return (
+        "internal server error" in message
+        or "http 500" in message
+        or "http 502" in message
+        or "failed to lock item" in message
+    )
 
 
 def _graphql_request(
