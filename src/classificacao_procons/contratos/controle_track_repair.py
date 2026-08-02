@@ -1,4 +1,7 @@
-"""Garante par Jan/Luciano e metadados no Controle Assinaturas."""
+"""Garante par Jan/Luciano e metadados no Controle Assinaturas.
+
+Sync automático: workflow `contratos-sync-controle.yml` (cron + pós-merge do agente).
+"""
 
 from __future__ import annotations
 
