@@ -48,6 +48,7 @@ class TestGeminiQuota:
             _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
 
     def test_should_skip_network_calls_while_quota_cooldown_is_active(self) -> None:
+        """Cooldown global desativado: segunda chamada ainda tenta a rede."""
         error_429 = urllib.error.HTTPError(
             url="https://generativelanguage.googleapis.com",
             code=429,
@@ -66,10 +67,14 @@ class TestGeminiQuota:
         first_calls = urlopen_mock.call_count
         assert first_calls >= 1
 
-        with pytest.raises(GeminiQuotaError, match="cooldown"):
+        with (
+            patch("urllib.request.urlopen", urlopen_mock),
+            patch("classificacao_procons.gemini.client.time.sleep"),
+            pytest.raises(GeminiQuotaError, match="HTTP 429"),
+        ):
             _gemini_request(api_key="k", model="gemini-3.5-flash", parts=[{"text": "oi"}])
 
-        assert urlopen_mock.call_count == first_calls
+        assert urlopen_mock.call_count > first_calls
 
     def test_should_allow_requests_again_after_quota_cooldown_reset(self) -> None:
         error_429 = urllib.error.HTTPError(

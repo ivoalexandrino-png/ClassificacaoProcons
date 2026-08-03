@@ -190,6 +190,7 @@ def _run_elaborate(args: argparse.Namespace) -> int:
         max_cases=args.max_results,
         dry_run=args.dry_run,
         token_path=args.token,
+        monday_item_ids=frozenset(args.item_id) if args.item_id else None,
     )
 
     try:
@@ -347,6 +348,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Elaborar respostas para casos com Docs SAC no Monday",
     )
     elaborate_parser.add_argument("--max-results", type=int, default=20)
+    elaborate_parser.add_argument(
+        "--item-id",
+        action="append",
+        dest="item_id",
+        metavar="MONDAY_ITEM_ID",
+        help="Elaborar só estes itens do Monday (pode repetir a flag).",
+    )
     elaborate_parser.add_argument("--work-dir", default="downloads/elaboration")
     elaborate_parser.add_argument(
         "--dry-run",

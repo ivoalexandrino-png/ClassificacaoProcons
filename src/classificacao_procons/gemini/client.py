@@ -51,20 +51,18 @@ class GeminiQuotaError(GeminiClientError):
     """Cota do Gemini esgotada (HTTP 429). Condição transitória — tentar depois."""
 
 
-# Circuit breaker de cota: depois de um 429 definitivo, as próximas chamadas
-# falham imediatamente (sem 80s de retries cada) até o cooldown expirar.
-# Evita que um lote grande passe dezenas de minutos re-tentando cota esgotada.
+# Circuit breaker de cota (legado): cooldown global desativado — bloqueava
+# casos longos (ex.: vários PDFs digitalizados na pasta Informações).
 QUOTA_COOLDOWN_SECONDS = 600
 _quota_cooldown_until = 0.0
 
 
 def _quota_cooldown_active() -> bool:
-    return time.monotonic() < _quota_cooldown_until
+    return False
 
 
 def _start_quota_cooldown() -> None:
-    global _quota_cooldown_until
-    _quota_cooldown_until = time.monotonic() + QUOTA_COOLDOWN_SECONDS
+    return
 
 
 def reset_quota_cooldown() -> None:
@@ -288,11 +286,6 @@ def _gemini_request(
     model: str,
     parts: list[dict[str, object]],
 ) -> str:
-    if _quota_cooldown_active():
-        raise GeminiQuotaError(
-            "Cota do Gemini em cooldown após 429; pulando chamada até o limite renovar.",
-        )
-
     url = f"{GEMINI_API_BASE}/models/{model}:generateContent?key={api_key}"
     payload = {"contents": [{"parts": parts}]}
     request = urllib.request.Request(
@@ -313,7 +306,6 @@ def _gemini_request(
                 time.sleep(_gemini_retry_delay_seconds(code=exc.code, attempt=attempt))
                 continue
             if exc.code == 429:
-                _start_quota_cooldown()
                 raise GeminiQuotaError(
                     "Cota ou limite de requisições do Gemini atingido (HTTP 429). "
                     "Verifique billing em https://aistudio.google.com/apikey "
