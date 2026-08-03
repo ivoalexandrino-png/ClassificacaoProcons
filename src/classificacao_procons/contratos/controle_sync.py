@@ -44,6 +44,7 @@ from classificacao_procons.contratos.controle_reconcile import (
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
+    ControleAssinaturasIndex,
     build_controle_assinaturas_index,
     create_controle_assinatura_item,
     ensure_autentique_id_on_controle_items,
@@ -128,6 +129,59 @@ class ControleRegistrationResult:
     mirror_monday_item_id: str | None = None
 
 
+def _link_or_skip_existing_controle_document(
+    *,
+    document: AutentiqueDocumentSummary,
+    index: ControleAssinaturasIndex,
+    monday_token: str,
+) -> ControleRegistrationResult | None:
+    """Se o documento já está no Controle (ID ou nome), só vincula Autentique ID e não cria item."""
+    if not index.matches_document(document):
+        return None
+    likely = find_likely_name_matches(
+        document_name=document.name,
+        items=index.all_items,
+    )
+    if likely and document.document_id.casefold().strip() not in index.document_ids:
+        ensure_autentique_id_on_controle_items(
+            api_token=monday_token,
+            document_id=document.document_id,
+            items=likely,
+        )
+    return ControleRegistrationResult(
+        document_id=document.document_id,
+        document_name=document.name,
+        monday_item_id=likely[0].item_id if likely else None,
+        monday_item_url=None,
+        skipped_duplicate=True,
+    )
+
+
+def _skip_fully_signed_new_controle_item(
+    *,
+    document: AutentiqueDocumentSummary,
+    index: ControleAssinaturasIndex,
+    monday_token: str,
+) -> ControleRegistrationResult | None:
+    """Não cria linhas novas no Monday para envelopes já 100% assinados."""
+    if not document.is_fully_signed:
+        return None
+    existing = _link_or_skip_existing_controle_document(
+        document=document,
+        index=index,
+        monday_token=monday_token,
+    )
+    if existing is not None:
+        return existing
+    return ControleRegistrationResult(
+        document_id=document.document_id,
+        document_name=document.name,
+        monday_item_id=None,
+        monday_item_url=None,
+        skipped_duplicate=True,
+    )
+
+
 def register_document_in_controle(
     *,
     document_id: str,
@@ -155,6 +209,14 @@ def register_document_in_controle(
         raise ControleSyncError(str(exc)) from exc
 
     index = build_controle_assinaturas_index(api_token=monday_token)
+    deferred = _skip_fully_signed_new_controle_item(
+        document=document,
+        index=index,
+        monday_token=monday_token,
+    )
+    if deferred is not None:
+        return deferred
+
     if index.matches_document(document):
         likely = find_likely_name_matches(
             document_name=document.name,

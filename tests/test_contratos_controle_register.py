@@ -113,6 +113,47 @@ class TestControleRegistration:
         assert result.skipped_duplicate is True
         assert result.monday_item_id is None
 
+        assert result.skipped_duplicate is True
+        assert result.monday_item_id is None
+
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    def test_should_skip_register_when_document_already_fully_signed(
+        self,
+        find_items_mock,
+        fetch_mock,
+        build_index_mock,
+    ) -> None:
+        find_items_mock.return_value = ()
+        fetch_mock.return_value = AutentiqueDocumentSummary(
+            document_id="doc-signed-new-id",
+            name="1º TERMO ADITIVO - 4Equity x BVI-B4A x CODEMP 2026",
+            created_at="2026-06-23",
+            signed_pdf_url="https://example.com/signed.pdf",
+            signatures=(
+                AutentiqueSigner(
+                    public_id="s1",
+                    name="Jan",
+                    email=SIGNER_EMAIL_JAN,
+                    short_link=None,
+                    signed_at="2026-06-23T10:00:00Z",
+                ),
+            ),
+        )
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset(),
+        )
+
+        result = register_document_in_controle(
+            document_id="doc-signed-new-id",
+            monday_api_token="monday-token",
+        )
+
+        assert result.skipped_duplicate is True
+        assert result.monday_item_id is None
+
     @patch("classificacao_procons.contratos.controle_sync.register_document_in_controle")
     def test_should_process_document_created_webhook(self, register_mock) -> None:
         from classificacao_procons.contratos.controle_sync import ControleRegistrationResult

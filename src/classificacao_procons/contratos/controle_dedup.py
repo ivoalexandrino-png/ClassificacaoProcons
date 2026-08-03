@@ -59,6 +59,7 @@ _NAME_STOPWORDS: frozenset[str] = frozenset(
 _DATE_DMY = re.compile(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}$")
 _PERIOD_YYYYMM = re.compile(r"^20\d{4}$")
 _PERIOD_YYMMDD = re.compile(r"^\d{6}$")
+_PERIOD_YEAR = re.compile(r"^20\d{2}$")
 _SUFFIX_COPY = re.compile(r"\(\d+\)$")
 _MIN_SUBSTRING_LEN = 18
 
@@ -72,6 +73,7 @@ def _normalize_controle_name(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value.casefold())
     without_marks = "".join(char for char in normalized if not unicodedata.combining(char))
     cleaned = _SUFFIX_COPY.sub("", without_marks)
+    cleaned = re.sub(r"\s*-\s*", "-", cleaned)
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
@@ -93,6 +95,8 @@ def extract_controle_name_tokens(document_name: str) -> set[str]:
             continue
         if _DATE_DMY.match(token) or _PERIOD_YYYYMM.match(token) or _PERIOD_YYMMDD.match(token):
             continue
+        if _PERIOD_YEAR.match(token):
+            continue
         if token in _NAME_STOPWORDS:
             continue
         tokens.add(token)
@@ -107,7 +111,26 @@ def extract_controle_period_tokens(document_name: str) -> set[str]:
         token = part.strip()
         if _DATE_DMY.match(token) or _PERIOD_YYYYMM.match(token) or _PERIOD_YYMMDD.match(token):
             periods.add(token)
+            continue
+        if _PERIOD_YEAR.match(token):
+            periods.add(token)
     return periods
+
+
+def _pka_or_permuta_family_match(autentique_name: str, monday_item_name: str) -> bool:
+    """Mesmo envelope PKA / carta permuta (títulos truncados ou combinados no Monday)."""
+    left = _normalize_controle_name(autentique_name)
+    right = _normalize_controle_name(monday_item_name)
+    if not left or not right:
+        return False
+    left_has_pka = "pka" in left or "carta permuta" in left or "carta-permuta" in left
+    right_has_pka = "pka" in right or "carta permuta" in right or "carta-permuta" in right
+    if not (left_has_pka and right_has_pka):
+        return False
+    shared = extract_controle_name_tokens(autentique_name) & extract_controle_name_tokens(
+        monday_item_name,
+    )
+    return "4equity" in shared or ("bvi" in shared and "b4a" in shared)
 
 
 def controle_names_likely_same_contract(
@@ -117,6 +140,8 @@ def controle_names_likely_same_contract(
     """Indica se títulos diferentes são o mesmo contrato (não só o mesmo fornecedor)."""
     if normalized_controle_titles_equal(autentique_name, monday_item_name):
         return True
+    if _pka_or_permuta_family_match(autentique_name, monday_item_name):
+        return True
 
     left = _normalize_controle_name(autentique_name)
     right = _normalize_controle_name(monday_item_name)
@@ -124,6 +149,11 @@ def controle_names_likely_same_contract(
         return False
 
     shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+    left_periods = extract_controle_period_tokens(autentique_name)
+    right_periods = extract_controle_period_tokens(monday_item_name)
+    if left_periods and right_periods and not (left_periods & right_periods):
+        return False
+
     if len(shorter) >= _MIN_SUBSTRING_LEN and shorter in longer:
         return True
 

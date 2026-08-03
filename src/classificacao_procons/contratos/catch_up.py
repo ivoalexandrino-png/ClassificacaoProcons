@@ -79,6 +79,7 @@ def catch_up_contratos(
             dry_run=dry_run,
             max_pages=max_pages,
             update_existing=True,
+            skip_signed_documents=True,
         )
     except ControleSyncError as exc:
         raise CatchUpError(str(exc)) from exc

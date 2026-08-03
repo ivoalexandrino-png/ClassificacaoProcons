@@ -58,6 +58,25 @@ class TestControleNameDedup:
             is False
         )
 
+    def test_should_not_match_codemp_with_different_years(self) -> None:
+        assert (
+            controle_names_likely_same_contract(
+                "1º TERMO ADITIVO - 4Equity x BVI-B4A x CODEMP 2025",
+                "1º TERMO ADITIVO - 4Equity x BVI- B4A x CODEMP 2026",
+            )
+            is False
+        )
+
+    def test_should_match_pka_family_with_truncated_monday_title(self) -> None:
+        monday = "CARTA PERMUTA-ALL SPACE x PKA x B4A-SERVIÇOS"
+        autentique = "1º TERMO ADITIVO - 4Equity x BVI-B4A x AS, PKA-CARTA PERMUTA"
+        assert controle_names_likely_same_contract(autentique, monday) is True
+
+    def test_should_match_titles_with_spacing_differences_around_hyphens(self) -> None:
+        left = "1º TERMO ADITIVO - 4Equity x BVI - B4A x CODEMP 2026"
+        right = "1º TERMO ADITIVO - 4Equity x BVI- B4A x CODEMP 2026"
+        assert normalized_controle_titles_equal(left, right) is True
+
     def test_index_matches_document_by_exact_name_only_without_autentique_id(self) -> None:
         title = "Contrato - B2B - Risotex - LaboCortex - 23.07.2026"
         existing = ControleAssinaturasItem(
