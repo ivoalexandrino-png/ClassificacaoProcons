@@ -18,6 +18,7 @@ from classificacao_procons.drive.reader import (
 _IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
 _MAX_CHARS_PER_FILE = 40_000
 _MAX_TOTAL_CHARS = 120_000
+_MAX_VISION_FILES_PER_SAC = 3
 _PLACEHOLDER_NO_TEXT = (
     "(Arquivo anexado pelo SAC; texto não extraído automaticamente neste formato.)"
 )
@@ -137,6 +138,7 @@ def build_sac_summary_from_drive_files(
     sections: list[str] = []
     total_chars = 0
     extracted_any = False
+    vision_calls = 0
 
     for file_info in files:
         local_path = work_dir / _safe_local_name(file_info.name)
@@ -151,12 +153,14 @@ def build_sac_summary_from_drive_files(
             continue
 
         body = extract_local_file_text(local_path)
-        if not body.strip():
+        if not body.strip() and vision_calls < _MAX_VISION_FILES_PER_SAC:
             body = _vision_extract_local_file_text(
                 local_path,
                 gemini_api_key=gemini_api_key,
                 gemini_model=gemini_model,
             )
+            if body.strip():
+                vision_calls += 1
         if body.strip():
             extracted_any = True
             section = f"### {file_info.name}\n{body.strip()}"

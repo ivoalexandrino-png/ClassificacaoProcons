@@ -64,6 +64,7 @@ class ResponsePipelineOptions:
     openai_api_key: str | None = None
     max_cases: int = 20
     dry_run: bool = False
+    monday_item_ids: frozenset[str] | None = None
 
 
 def _load_elaborated_item_ids(state_path: Path) -> set[str]:
@@ -382,6 +383,8 @@ def elaborate_pending_responses(
     results: list[ElaboratedResponseResult] = []
 
     for case in cases:
+        if options.monday_item_ids is not None and case.item_id not in options.monday_item_ids:
+            continue
         results.append(
             _elaborate_case(
                 case,
