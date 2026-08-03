@@ -32,6 +32,7 @@ from classificacao_procons.gemini import (
     generate_procon_response,
     get_api_key_from_env,
 )
+from classificacao_procons.gemini.client import reset_quota_cooldown
 from classificacao_procons.google_auth import has_valid_token
 from classificacao_procons.llm.openai_client import (
     get_api_key_from_env as get_openai_api_key_from_env,
@@ -181,6 +182,8 @@ def _elaborate_case(
             consumer_name=case.item_name,
             protocol_number=case.protocol_number,
         )
+
+    reset_quota_cooldown()
 
     try:
         sac_context = resolve_sac_folder_context(

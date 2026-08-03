@@ -7,18 +7,17 @@ from classificacao_procons.llm.procon_response import _generate_with_gemini
 
 
 @patch("classificacao_procons.llm.procon_response._gemini_text_with_model_fallback")
-@patch("classificacao_procons.llm.procon_response.resolve_complaint_text")
-def test_should_elaborate_when_complaint_pdf_has_no_embedded_text(
-    resolve_text_mock,
+@patch("classificacao_procons.llm.procon_response.extract_pdf_text_soft", return_value="")
+def test_should_elaborate_scanned_pdf_via_analysis_attachment(
+    _soft_extract_mock,
     gemini_text_mock,
     tmp_path: Path,
 ) -> None:
     pdf_path = tmp_path / "cip.pdf"
     pdf_path.write_bytes(b"%PDF-1.4")
 
-    resolve_text_mock.return_value = "Reclamação transcrita via Gemini."
     gemini_text_mock.side_effect = [
-        ("Análise", "gemini-2.0-flash"),
+        ("Análise lida do PDF anexo.", "gemini-2.0-flash"),
         ("Rascunho", "gemini-2.0-flash"),
         ("Resposta final", "gemini-2.0-flash"),
         ("Resumo portal", "gemini-2.0-flash"),
@@ -35,5 +34,9 @@ def test_should_elaborate_when_complaint_pdf_has_no_embedded_text(
     )
 
     assert result.final_response == "Resposta final"
-    resolve_text_mock.assert_called_once()
-    assert gemini_text_mock.call_count == 4
+    first_call_parts = gemini_text_mock.call_args_list[0].kwargs["parts"]
+    pdf_parts = [
+        part for part in first_call_parts
+        if part.get("inline_data", {}).get("mime_type") == "application/pdf"
+    ]
+    assert pdf_parts

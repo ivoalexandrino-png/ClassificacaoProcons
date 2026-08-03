@@ -32,7 +32,7 @@ from classificacao_procons.llm.openai_client import (
 from classificacao_procons.llm.openai_client import (
     get_api_key_from_env as get_openai_api_key_from_env,
 )
-from classificacao_procons.llm.pdf_text import resolve_complaint_text
+from classificacao_procons.llm.pdf_text import extract_pdf_text_soft, resolve_complaint_text
 
 _OPENAI_SYSTEM = (
     "Você é advogado(a) especializado em defesa do fornecedor em reclamações no Procon-SP. "
@@ -85,6 +85,14 @@ def _apply_defendant_legal_guards(text: str, *, complaint_text: str) -> str:
     return replace_unauthorized_cnpjs(text, profile=profile)
 
 
+def _complaint_text_for_legal_guards(*, embedded: str, analysis: str) -> str:
+    if embedded.strip():
+        return embedded.strip()
+    if analysis.strip():
+        return analysis.strip()[:12_000]
+    return ""
+
+
 def _generate_with_gemini(
     *,
     complaint_pdf_path: Path,
@@ -114,13 +122,7 @@ def _generate_with_gemini(
 
     signed = prompts.signed_date_label()
     supporting_list = "\n".join(f"- {name}" for name in supporting_file_names) or "- (nenhum)"
-    complaint_text = resolve_complaint_text(
-        complaint_pdf_path,
-        gemini_api_key=api_key,
-        gemini_model=model,
-    )
-    legal_profile = resolve_defendant_legal_profile(complaint_text=complaint_text)
-    defendant_block = defendant_legal_prompt_block(legal_profile)
+    complaint_text_embedded = extract_pdf_text_soft(complaint_pdf_path)
 
     analysis_prompt = prompts.analysis_prompt(
         consumer_name=consumer_name,
@@ -133,6 +135,13 @@ def _generate_with_gemini(
         model_candidates=model_candidates,
         parts=[{"text": analysis_prompt}, _pdf_part(complaint_pdf_path)],
     )
+
+    complaint_text = _complaint_text_for_legal_guards(
+        embedded=complaint_text_embedded,
+        analysis=analysis,
+    )
+    legal_profile = resolve_defendant_legal_profile(complaint_text=complaint_text)
+    defendant_block = defendant_legal_prompt_block(legal_profile)
 
     draft, selected_model = _gemini_text_with_model_fallback(
         api_key=api_key,
