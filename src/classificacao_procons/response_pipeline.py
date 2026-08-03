@@ -22,6 +22,10 @@ from classificacao_procons.drive.reader import (
     upload_pdf_file,
     upload_text_file,
 )
+from classificacao_procons.drive.sac_summary import (
+    build_sac_summary_from_drive_files,
+    collect_sac_material_files,
+)
 from classificacao_procons.gemini import (
     GeminiClientError,
     GeminiQuotaError,
@@ -222,31 +226,20 @@ def _elaborate_case(
         )
 
     sac_summary = ""
-    if sac_context.summary_txt is not None:
-        summary_path = case_dir / sac_context.summary_txt.name
-        try:
-            download_drive_file(
-                file_id=sac_context.summary_txt.file_id,
-                destination=summary_path,
-                token_path=options.token_path,
-            )
-            sac_summary = summary_path.read_text(encoding="utf-8", errors="replace").strip()
-        except (DriveClientError, OSError) as exc:
-            return ElaboratedResponseResult(
-                status="error",
-                monday_item_id=case.item_id,
-                consumer_name=case.item_name,
-                protocol_number=case.protocol_number,
-                error=f"Falha ao ler resumo TXT do SAC: {exc}",
-            )
-
-    if not sac_summary:
+    sac_material_files = collect_sac_material_files(sac_context)
+    try:
+        sac_summary = build_sac_summary_from_drive_files(
+            files=sac_material_files,
+            work_dir=case_dir / "sac-material",
+            token_path=options.token_path,
+        )
+    except DriveClientError as exc:
         return ElaboratedResponseResult(
             status="error",
             monday_item_id=case.item_id,
             consumer_name=case.item_name,
             protocol_number=case.protocol_number,
-            error="Resumo TXT do SAC não encontrado na pasta.",
+            error=str(exc),
         )
 
     gemini_key = _resolve_gemini_key(options)

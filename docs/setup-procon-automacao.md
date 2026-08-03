@@ -128,7 +128,7 @@ Sem essas colunas, os arquivos ainda vão para o Drive; só os links no Monday p
 
 ## Drive (por caso)
 
-- Raiz: PDF `Atendimento Procon...` + pasta `Informações` com **.txt** do SAC  
+- Raiz: PDF da reclamação + pasta `Informações` com anexos do SAC (**.txt**, **PDF**, imagens na resposta unificada)  
 - Saída: `Resposta Automatica` → `resposta-completa.txt`, `resposta-resumo-1024.txt`, `resposta-unificada.pdf` (resposta + anexos SAC; **sem** o PDF da CIP do Procon)
 
 ## Disparar manualmente
@@ -141,4 +141,4 @@ gh run list --workflow="Procon automation (every 30 min)" --limit 3
 
 ## Validar após configurar secrets
 
-Aguarde um run verde em Actions. Caso com Docs SAC + TXT deve ganhar `Resposta Automatica` na próxima execução (ou na mesma, se estiver na fila).
+Aguarde um run verde em Actions. Caso com **Docs SAC** e arquivos em `Informações` deve ganhar `Resposta Automatica` na próxima execução (ou na mesma, se estiver na fila).
