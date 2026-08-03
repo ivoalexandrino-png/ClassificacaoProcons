@@ -44,6 +44,7 @@ def _fake_download(*, file_id: str, destination, token_path=None):
     return destination
 
 
+@patch("classificacao_procons.drive.sac_summary.download_drive_file")
 @patch("classificacao_procons.response_pipeline.find_existing_response_outputs", return_value=None)
 @patch("classificacao_procons.response_pipeline.generate_procon_response")
 @patch("classificacao_procons.response_pipeline.download_drive_file")
@@ -57,12 +58,14 @@ def test_should_defer_case_when_gemini_quota_exhausted(
     download_mock,
     generate_mock,
     _find_existing_mock,
+    download_sac_mock,
     tmp_path,
 ) -> None:
     """Cota do Gemini esgotada: caso adiado (não erro) e não marcado processado."""
     list_cases_mock.return_value = [_case_ready()]
     resolve_sac_mock.return_value = _sac_context()
     download_mock.side_effect = _fake_download
+    download_sac_mock.side_effect = _fake_download
     generate_mock.side_effect = GeminiQuotaError("Limite gratuito do Gemini esgotado.")
 
     state_path = tmp_path / "state.json"
@@ -81,6 +84,7 @@ def test_should_defer_case_when_gemini_quota_exhausted(
         assert "100" not in saved.get("item_ids", [])
 
 
+@patch("classificacao_procons.drive.sac_summary.download_drive_file")
 @patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
 @patch("classificacao_procons.response_pipeline.upload_pdf_file")
 @patch("classificacao_procons.response_pipeline.upload_text_file")
@@ -104,6 +108,7 @@ def test_should_elaborate_response_for_monday_case(
     upload_text_mock,
     upload_pdf_mock,
     update_monday_mock,
+    download_sac_mock,
     tmp_path,
 ) -> None:
     list_cases_mock.return_value = [
@@ -138,6 +143,7 @@ def test_should_elaborate_response_for_monday_case(
         return destination
 
     download_mock.side_effect = fake_download
+    download_sac_mock.side_effect = fake_download
     generate_mock.return_value = GeneratedResponse(
         analysis="Análise",
         draft="Rascunho",
