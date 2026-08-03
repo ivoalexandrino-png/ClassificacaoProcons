@@ -202,6 +202,11 @@ def ensure_controle_dual_tracks_for_document(
 
         target_group = jan_group_id if track == "jan" else luciano_group_id
         target_tipo = tipo_label if track == "jan" else None
+        clear_tipo = (
+            track == "jan"
+            and tipo_label is None
+            and bool(canonical.tipo and str(canonical.tipo).strip())
+        )
         target_signer = (
             CONTROLE_SIGNER_LABEL_JAN if track == "jan" else CONTROLE_SIGNER_LABEL_LUCIANO
         )
@@ -223,6 +228,7 @@ def ensure_controle_dual_tracks_for_document(
                     status_label=track_status,
                     signed_at=track_signed_at,
                     tipo_label=target_tipo,
+                    clear_tipo=clear_tipo,
                     signer_label=target_signer,
                     platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
                     inclusion_date=inclusion_date,
@@ -247,6 +253,7 @@ def ensure_controle_dual_tracks_for_document(
             status_label=track_status,
             signed_at=track_signed_at,
             tipo_label=target_tipo,
+            clear_tipo=clear_tipo,
             signer_label=target_signer,
             platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
             inclusion_date=inclusion_date,

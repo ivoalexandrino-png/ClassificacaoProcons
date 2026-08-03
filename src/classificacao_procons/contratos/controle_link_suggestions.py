@@ -126,20 +126,21 @@ class LegacyAutoLinkResult:
 def filter_unambiguous_auto_legacy_links(
     suggestions: tuple[ControleLinkSuggestion, ...] | list[ControleLinkSuggestion],
 ) -> tuple[ControleLinkSuggestion, ...]:
-    """Somente título exato (alta confiança) e par único item Monday ↔ documento."""
-    exact_high = tuple(
+    """Título exato ou match forte, com par único item Monday ↔ documento."""
+    eligible = tuple(
         row
         for row in suggestions
-        if row.confidence == "high" and row.match_reason == "exact_title"
+        if row.confidence == "high"
+        and row.match_reason in ("exact_title", "strong_title_match")
     )
-    if not exact_high:
+    if not eligible:
         return ()
 
-    by_item = Counter(row.monday_item_id for row in exact_high)
-    by_doc = Counter(row.autentique_document_id.casefold().strip() for row in exact_high)
+    by_item = Counter(row.monday_item_id for row in eligible)
+    by_doc = Counter(row.autentique_document_id.casefold().strip() for row in eligible)
     return tuple(
         row
-        for row in exact_high
+        for row in eligible
         if by_item[row.monday_item_id] == 1
         and by_doc[row.autentique_document_id.casefold().strip()] == 1
     )
@@ -166,7 +167,7 @@ def auto_link_unambiguous_legacy_controle(
         pending_documents = tuple(
             document
             for document in documents
-            if not document.is_fully_signed and index.get_item(document.document_id) is None
+            if index.get_item(document.document_id) is None
         )
 
     suggestions = suggest_legacy_controle_links(
@@ -176,7 +177,8 @@ def auto_link_unambiguous_legacy_controle(
     exact_high_count = sum(
         1
         for row in suggestions
-        if row.confidence == "high" and row.match_reason == "exact_title"
+        if row.confidence == "high"
+        and row.match_reason in ("exact_title", "strong_title_match")
     )
     to_apply = filter_unambiguous_auto_legacy_links(suggestions)
     ambiguous_skipped = exact_high_count - len(to_apply)
