@@ -872,6 +872,7 @@ def update_controle_item_fields(
     platform_name: str | None = None,
     inclusion_date: date | None = None,
     signature_link_text: str | None = None,
+    clear_tipo: bool = False,
 ) -> None:
     """Atualiza colunas do Controle sem recriar o item."""
     column_details = _load_controle_column_details(api_token=api_token)
@@ -892,7 +893,11 @@ def update_controle_item_fields(
         if data_col:
             values[data_col.id] = format_column_value(data_col.column_type, signed_at)
 
-    if tipo_label is not None:
+    if clear_tipo:
+        tipo_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_TIPO, ("tipo",))
+        if tipo_col:
+            values[tipo_col.id] = format_column_value(tipo_col.column_type, "")
+    elif tipo_label is not None:
         tipo_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_TIPO, ("tipo",))
         if tipo_col:
             values[tipo_col.id] = format_column_value(tipo_col.column_type, tipo_label)

@@ -35,6 +35,23 @@ class TestControleNameDedup:
             is False
         )
 
+    def test_should_match_brass_hill_pedido_variants_same_month(self) -> None:
+        a = "Pedido Brass Hill - ( intense, deo colônias, scrub) - jun_2026"
+        b = "Aprovar Pedido Brass Hill - Glam Nutri wiki- Junho_2026 (copy)"
+        c = "Pedido Brass Hill - ( intense, deo colônias, scrub) - jun_2026.docx"
+
+        assert controle_names_likely_same_contract(a, b) is True
+        assert controle_names_likely_same_contract(a, c) is True
+
+    def test_should_not_match_brass_hill_pedidos_different_months(self) -> None:
+        assert (
+            controle_names_likely_same_contract(
+                "Aprovar Pedido Brass Hill Abdofast",
+                "Pedido Brass Hill - jun_2026",
+            )
+            is False
+        )
+
     def test_should_match_when_one_title_is_long_substring_of_other(self) -> None:
         short = "Contrato B2B - Fornecedor XYZ"
         long = "Minuta Padrão - Contrato B2B - Fornecedor XYZ - assinatura"

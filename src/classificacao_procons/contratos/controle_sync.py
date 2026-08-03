@@ -511,7 +511,7 @@ def compare_autentique_with_controle(
     pending_for_suggestions = tuple(
         document
         for document in documents
-        if not document.is_fully_signed and index.get_item(document.document_id) is None
+        if index.get_item(document.document_id) is None
     )
     link_suggestions = suggest_legacy_controle_links(
         index=index,
@@ -576,8 +576,7 @@ def sync_controle_from_autentique(
                 pending_documents=tuple(
                     document
                     for document in documents
-                    if not document.is_fully_signed
-                    and index.get_item(document.document_id) is None
+                    if index.get_item(document.document_id) is None
                 ),
             )
         except ValueError as exc:
@@ -790,6 +789,52 @@ def sync_controle_from_autentique(
                     document_name=document.name,
                     action="would_create",
                     detail=_describe_planned_item(document=document, groups=groups),
+                ),
+            )
+            continue
+
+        likely_unlinked = find_likely_name_matches(
+            document_name=document.name,
+            items=index.all_items,
+        )
+        if likely_unlinked and document.document_id.casefold().strip() not in index.document_ids:
+            ensure_autentique_id_on_controle_items(
+                api_token=monday_token,
+                document_id=document.document_id,
+                items=likely_unlinked,
+            )
+            jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+            if jan_group_id and luciano_group_id:
+                try:
+                    ensure_controle_dual_tracks_for_document(
+                        api_token=monday_token,
+                        document=document,
+                        jan_group_id=jan_group_id,
+                        luciano_group_id=luciano_group_id,
+                        tipo_label=_resolve_tipo_label(document_name=document.name),
+                        status_label=_resolve_controle_status(document=document),
+                        signed_at=_resolve_signed_at(document=document),
+                        build_track_link=_build_track_signature_link,
+                    )
+                except MondayClientError as exc:
+                    failed += 1
+                    results.append(
+                        ControleSyncItemResult(
+                            document_id=document.document_id,
+                            document_name=document.name,
+                            action="failed",
+                            detail=f"track_repair: {exc}",
+                        ),
+                    )
+                    continue
+            already += 1
+            results.append(
+                ControleSyncItemResult(
+                    document_id=document.document_id,
+                    document_name=document.name,
+                    action="linked_existing_by_name",
+                    monday_item_id=likely_unlinked[0].item_id,
+                    detail=likely_unlinked[0].name,
                 ),
             )
             continue

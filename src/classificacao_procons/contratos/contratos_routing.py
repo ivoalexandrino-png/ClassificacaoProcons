@@ -28,6 +28,9 @@ SUPPLEMENTAL_DOCUMENT_KEYWORDS: tuple[str, ...] = (
     "dpa",
     "proposta comercial",
     "proposta ",
+    "procuracao",
+    "procuração",
+    "poderes",
 )
 
 
