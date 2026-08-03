@@ -93,11 +93,41 @@ def extract_local_file_text(path: Path) -> str:
     return ""
 
 
+def _vision_extract_local_file_text(
+    path: Path,
+    *,
+    gemini_api_key: str | None,
+    gemini_model: str | None = None,
+) -> str:
+    suffix = path.suffix.casefold()
+    if not gemini_api_key:
+        return ""
+    if suffix != ".pdf" and suffix not in _IMAGE_SUFFIXES:
+        return ""
+
+    from classificacao_procons.gemini.client import GeminiClientError
+    from classificacao_procons.llm.document_vision import gemini_extract_text_from_document
+
+    try:
+        text = gemini_extract_text_from_document(
+            path,
+            api_key=gemini_api_key,
+            model=gemini_model,
+        )
+    except GeminiClientError:
+        return ""
+    if len(text) > _MAX_CHARS_PER_FILE:
+        return text[:_MAX_CHARS_PER_FILE].rstrip()
+    return text
+
+
 def build_sac_summary_from_drive_files(
     *,
     files: tuple[DriveFileInfo, ...] | list[DriveFileInfo],
     work_dir: Path,
     token_path: str | None = None,
+    gemini_api_key: str | None = None,
+    gemini_model: str | None = None,
 ) -> str:
     """Baixa arquivos do Drive e concatena o texto extraído para o prompt de elaboração."""
     if not files:
@@ -121,6 +151,12 @@ def build_sac_summary_from_drive_files(
             continue
 
         body = extract_local_file_text(local_path)
+        if not body.strip():
+            body = _vision_extract_local_file_text(
+                local_path,
+                gemini_api_key=gemini_api_key,
+                gemini_model=gemini_model,
+            )
         if body.strip():
             extracted_any = True
             section = f"### {file_info.name}\n{body.strip()}"

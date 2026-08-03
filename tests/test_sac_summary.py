@@ -79,3 +79,31 @@ class TestBuildSacSummaryFromDriveFiles:
         assert "Cancelado.pdf" in summary
         assert "cancelamento" in summary
         assert "chargeback" in summary
+
+    @patch("classificacao_procons.drive.sac_summary.download_drive_file")
+    @patch(
+        "classificacao_procons.llm.document_vision.gemini_extract_text_from_document",
+    )
+    def test_should_use_gemini_when_sac_pdf_has_no_text_layer(
+        self,
+        vision_mock,
+        download_mock,
+        tmp_path: Path,
+    ) -> None:
+        def fake_download(*, file_id: str, destination: Path, token_path=None):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"%PDF-1.4")
+            return destination
+
+        download_mock.side_effect = fake_download
+        vision_mock.return_value = "Histórico Zendesk transcrito."
+
+        summary = build_sac_summary_from_drive_files(
+            files=(DriveFileInfo("a", "Tratativa.pdf", "application/pdf", None),),
+            work_dir=tmp_path / "sac",
+            gemini_api_key="gemini-key",
+        )
+
+        assert "Zendesk" in summary
+        vision_mock.assert_called_once()
+

@@ -227,11 +227,13 @@ def _elaborate_case(
 
     sac_summary = ""
     sac_material_files = collect_sac_material_files(sac_context)
+    gemini_key = _resolve_gemini_key(options)
     try:
         sac_summary = build_sac_summary_from_drive_files(
             files=sac_material_files,
             work_dir=case_dir / "sac-material",
             token_path=options.token_path,
+            gemini_api_key=gemini_key,
         )
     except DriveClientError as exc:
         return ElaboratedResponseResult(
@@ -242,7 +244,6 @@ def _elaborate_case(
             error=str(exc),
         )
 
-    gemini_key = _resolve_gemini_key(options)
     openai_key = options.openai_api_key or get_openai_api_key_from_env()
     if not gemini_key and not openai_key:
         return ElaboratedResponseResult(

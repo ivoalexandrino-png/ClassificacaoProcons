@@ -36,3 +36,44 @@ def extract_pdf_text(pdf_path: Path, *, max_chars: int = DEFAULT_MAX_PDF_CHARS) 
     if len(full_text) > max_chars:
         return full_text[:max_chars].rstrip()
     return full_text
+
+
+def extract_pdf_text_soft(pdf_path: Path, *, max_chars: int = DEFAULT_MAX_PDF_CHARS) -> str:
+    """Como extract_pdf_text, mas retorna string vazia se não houver camada de texto."""
+    if not pdf_path.exists():
+        return ""
+    try:
+        return extract_pdf_text(pdf_path, max_chars=max_chars)
+    except GeminiClientError:
+        return ""
+
+
+def resolve_complaint_text(
+    pdf_path: Path,
+    *,
+    gemini_api_key: str | None,
+    gemini_model: str | None = None,
+    max_chars: int = DEFAULT_MAX_PDF_CHARS,
+) -> str:
+    """
+    Texto da reclamação para perfil jurídico e guardrails.
+
+    Usa pypdf primeiro; se vazio (PDF digitalizado), Gemini multimodal no PDF.
+    """
+    embedded = extract_pdf_text_soft(pdf_path, max_chars=max_chars)
+    if embedded.strip():
+        return embedded
+
+    if not gemini_api_key:
+        raise GeminiClientError(
+            "Não foi possível extrair texto do PDF da reclamação (PDF pode ser só imagem). "
+            "Configure GEMINI_API_KEY para leitura via IA.",
+        )
+
+    from classificacao_procons.llm.document_vision import gemini_extract_text_from_document
+
+    return gemini_extract_text_from_document(
+        pdf_path,
+        api_key=gemini_api_key,
+        model=gemini_model,
+    )
