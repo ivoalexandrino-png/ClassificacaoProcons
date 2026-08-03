@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from classificacao_procons.contratos.autentique.client import (
     AutentiqueDocumentSummary,
     AutentiqueSigner,
@@ -35,7 +37,9 @@ class TestControleRegistration:
         load_groups_mock,
         fetch_mock,
         build_index_mock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        monkeypatch.setenv("CONTROLE_PAUSE_CREATE", "false")
         find_items_mock.return_value = ()
         build_index_mock.return_value = ControleAssinaturasIndex(
             document_ids=frozenset(),
@@ -92,6 +96,41 @@ class TestControleRegistration:
         assert jan_call["tipo_label"] is not None
         assert luciano_call["group_id"] == "group-luciano"
         assert luciano_call["tipo_label"] is None
+
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
+    def test_should_pause_register_when_create_disabled(
+        self,
+        create_item_mock,
+        find_items_mock,
+        fetch_mock,
+        build_index_mock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("CONTROLE_PAUSE_CREATE", "true")
+        find_items_mock.return_value = ()
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset(),
+        )
+        fetch_mock.return_value = AutentiqueDocumentSummary(
+            document_id="doc-paused",
+            name="Contrato",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(),
+        )
+
+        result = register_document_in_controle(
+            document_id="doc-paused",
+            monday_api_token="monday-token",
+        )
+
+        assert result.create_paused is True
+        assert result.monday_item_id is None
+        create_item_mock.assert_not_called()
 
     @patch("classificacao_procons.contratos.controle_sync.ensure_controle_dual_tracks_for_document")
     @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")

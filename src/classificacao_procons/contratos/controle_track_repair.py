@@ -106,6 +106,7 @@ def ensure_controle_dual_tracks_for_document(
     signed_at: date | None,
     build_track_link,
     dry_run: bool = False,
+    allow_create: bool = True,
 ) -> ControleTrackRepairResult:
     """Cria fila faltante, corrige grupo/colunas e marca ``controle_track`` nos links."""
     inclusion_date = parse_autentique_created_date(document)
@@ -125,7 +126,9 @@ def ensure_controle_dual_tracks_for_document(
     created_luciano = False
 
     if not by_track["jan"]:
-        if dry_run:
+        if not allow_create:
+            pass
+        elif dry_run:
             created_jan = True
         else:
             create_controle_assinatura_item(
@@ -147,7 +150,9 @@ def ensure_controle_dual_tracks_for_document(
             created_jan = True
 
     if not by_track["luciano"]:
-        if dry_run:
+        if not allow_create:
+            pass
+        elif dry_run:
             created_luciano = True
         else:
             create_controle_assinatura_item(

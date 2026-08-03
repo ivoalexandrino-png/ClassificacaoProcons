@@ -26,6 +26,10 @@ from classificacao_procons.contratos.constants import (
 from classificacao_procons.contratos.contratos_routing import (
     is_supplemental_document,
 )
+from classificacao_procons.contratos.controle_create_policy import (
+    controle_create_paused_message,
+    is_controle_create_paused,
+)
 from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
 from classificacao_procons.contratos.controle_link_suggestions import (
     ControleLinkSuggestion,
@@ -96,6 +100,7 @@ class ControleSyncResult:
     legacy_link_would_apply: int = 0
     legacy_link_ambiguous_skipped: int = 0
     legacy_link_failed: int = 0
+    create_paused: int = 0
 
 
 @dataclass(frozen=True)
@@ -141,6 +146,7 @@ class ControleRegistrationResult:
     status_label: str | None = None
     tipo_filled: bool = False
     mirror_monday_item_id: str | None = None
+    create_paused: bool = False
 
 
 def register_document_in_controle(
@@ -176,6 +182,7 @@ def register_document_in_controle(
                 status_label=_resolve_controle_status(document=document),
                 signed_at=_resolve_signed_at(document=document),
                 build_track_link=_build_track_signature_link,
+                allow_create=not is_controle_create_paused(),
             )
         return ControleRegistrationResult(
             document_id=document.document_id,
@@ -209,6 +216,7 @@ def register_document_in_controle(
                 status_label=_resolve_controle_status(document=document),
                 signed_at=_resolve_signed_at(document=document),
                 build_track_link=_build_track_signature_link,
+                allow_create=not is_controle_create_paused(),
             )
         return ControleRegistrationResult(
             document_id=document.document_id,
@@ -216,6 +224,15 @@ def register_document_in_controle(
             monday_item_id=likely[0].item_id if likely else None,
             monday_item_url=None,
             skipped_duplicate=True,
+        )
+
+    if is_controle_create_paused():
+        return ControleRegistrationResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=None,
+            monday_item_url=None,
+            create_paused=True,
         )
 
     groups = load_controle_board_groups(api_token=monday_token)
@@ -548,11 +565,14 @@ def sync_controle_from_autentique(
     update_existing: bool = True,
     skip_signed_documents: bool = False,
     auto_link_legacy: bool = True,
+    allow_create: bool | None = None,
 ) -> ControleSyncResult:
     """Cria ou atualiza itens no Controle Assinaturas a partir do Autentique."""
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+
+    create_allowed = not is_controle_create_paused(allow_create=allow_create)
 
     try:
         documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
@@ -596,6 +616,7 @@ def sync_controle_from_autentique(
     failed = 0
     already = 0
     deferred_signed = 0
+    create_paused = 0
 
     for document in documents:
         if not dry_run:
@@ -616,6 +637,7 @@ def sync_controle_from_autentique(
                             status_label=_resolve_controle_status(document=document),
                             signed_at=_resolve_signed_at(document=document),
                             build_track_link=_build_track_signature_link,
+                            allow_create=create_allowed,
                         )
                     except MondayClientError as exc:
                         failed += 1
@@ -782,6 +804,17 @@ def sync_controle_from_autentique(
             continue
 
         if dry_run:
+            if not create_allowed:
+                create_paused += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="create_paused",
+                        detail=controle_create_paused_message(),
+                    ),
+                )
+                continue
             created += 1
             results.append(
                 ControleSyncItemResult(
@@ -815,6 +848,7 @@ def sync_controle_from_autentique(
                         status_label=_resolve_controle_status(document=document),
                         signed_at=_resolve_signed_at(document=document),
                         build_track_link=_build_track_signature_link,
+                        allow_create=create_allowed,
                     )
                 except MondayClientError as exc:
                     failed += 1
@@ -835,6 +869,18 @@ def sync_controle_from_autentique(
                     action="linked_existing_by_name",
                     monday_item_id=likely_unlinked[0].item_id,
                     detail=likely_unlinked[0].name,
+                ),
+            )
+            continue
+
+        if not create_allowed:
+            create_paused += 1
+            results.append(
+                ControleSyncItemResult(
+                    document_id=document.document_id,
+                    document_name=document.name,
+                    action="create_paused",
+                    detail=controle_create_paused_message(),
                 ),
             )
             continue
@@ -892,6 +938,7 @@ def sync_controle_from_autentique(
         legacy_link_would_apply=legacy_link_would_apply,
         legacy_link_ambiguous_skipped=legacy_link_ambiguous_skipped,
         legacy_link_failed=legacy_link_failed,
+        create_paused=create_paused,
     )
 
 
