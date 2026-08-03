@@ -32,7 +32,7 @@ from classificacao_procons.llm.openai_client import (
 from classificacao_procons.llm.openai_client import (
     get_api_key_from_env as get_openai_api_key_from_env,
 )
-from classificacao_procons.llm.pdf_text import extract_pdf_text
+from classificacao_procons.llm.pdf_text import resolve_complaint_text
 
 _OPENAI_SYSTEM = (
     "Você é advogado(a) especializado em defesa do fornecedor em reclamações no Procon-SP. "
@@ -114,7 +114,11 @@ def _generate_with_gemini(
 
     signed = prompts.signed_date_label()
     supporting_list = "\n".join(f"- {name}" for name in supporting_file_names) or "- (nenhum)"
-    complaint_text = extract_pdf_text(complaint_pdf_path)
+    complaint_text = resolve_complaint_text(
+        complaint_pdf_path,
+        gemini_api_key=api_key,
+        gemini_model=model,
+    )
     legal_profile = resolve_defendant_legal_profile(complaint_text=complaint_text)
     defendant_block = defendant_legal_prompt_block(legal_profile)
 
@@ -193,7 +197,12 @@ def _generate_with_openai(
     model: str | None,
 ) -> GeneratedResponse:
     selected_model = resolve_openai_model(preferred=model)
-    complaint_text = extract_pdf_text(complaint_pdf_path)
+    vision_key = get_api_key_from_env()
+    complaint_text = resolve_complaint_text(
+        complaint_pdf_path,
+        gemini_api_key=vision_key,
+        gemini_model=None,
+    )
     signed = prompts.signed_date_label()
     supporting_list = "\n".join(f"- {name}" for name in supporting_file_names) or "- (nenhum)"
     legal_profile = resolve_defendant_legal_profile(complaint_text=complaint_text)
