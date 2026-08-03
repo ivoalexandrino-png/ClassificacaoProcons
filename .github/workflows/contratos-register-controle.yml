@@ -2,6 +2,7 @@ name: Registrar contrato no Controle
 
 # Cria um item no Monday Controle Assinaturas para um documento do Autentique.
 # Substitui temporariamente o webhook document.created (sem Cloud Run).
+# Enquanto CONTROLE_PAUSE_CREATE=true, o comando não cria itens (só reparo se já existir vínculo).
 on:
   workflow_dispatch:
     inputs:
@@ -43,6 +44,7 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          CONTROLE_PAUSE_CREATE: "true"
         run: |
           contratos-webhook register-controle \
             --document-id "${{ inputs.document_id }}"

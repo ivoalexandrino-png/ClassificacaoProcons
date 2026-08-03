@@ -3,6 +3,8 @@
 from datetime import date
 from unittest.mock import patch
 
+import pytest
+
 from classificacao_procons.contratos.autentique.client import (
     AutentiqueDocumentSummary,
     AutentiqueSigner,
@@ -76,6 +78,7 @@ class TestControleSync:
             monday_api_token="monday-token",
             autentique_api_token="autentique-token",
             dry_run=False,
+            allow_create=True,
         )
 
         assert result.created == 1
@@ -126,6 +129,7 @@ class TestControleSync:
             monday_api_token="monday-token",
             autentique_api_token="autentique-token",
             dry_run=False,
+            allow_create=True,
         )
 
         for call in create_item_mock.call_args_list:
@@ -174,7 +178,58 @@ class TestControleSync:
             monday_api_token="monday-token",
             autentique_api_token="autentique-token",
             dry_run=False,
+            allow_create=True,
         )
 
         assert result.created == 0
         assert result.already_in_monday == 1
+
+
+class TestControleSyncCreatePaused:
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    @patch("classificacao_procons.contratos.controle_sync.auto_link_unambiguous_legacy_controle")
+    @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.controle_sync.list_documents")
+    def test_should_not_create_when_pause_active(
+        self,
+        list_documents_mock,
+        build_index_mock,
+        load_groups_mock,
+        create_item_mock,
+        auto_link_mock,
+        find_items_mock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("CONTROLE_PAUSE_CREATE", "true")
+        find_items_mock.return_value = ()
+        auto_link_mock.return_value = _empty_legacy_link()
+        document = AutentiqueDocumentSummary(
+            document_id="doc-new",
+            name="Contrato novo",
+            created_at="2026-01-01",
+            signed_pdf_url=None,
+            signatures=(),
+        )
+        list_documents_mock.return_value = [document]
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset(),
+        )
+        load_groups_mock.return_value = {
+            "assinados": "novo_grupo",
+            "contratos pendentes de assinatura jan": "group-jan",
+            "contratos pendentes de assinatura luciano": "group-luciano",
+        }
+
+        result = sync_controle_from_autentique(
+            monday_api_token="monday-token",
+            autentique_api_token="autentique-token",
+            dry_run=False,
+        )
+
+        assert result.created == 0
+        assert result.create_paused == 1
+        create_item_mock.assert_not_called()
+        assert result.items[0].action == "create_paused"

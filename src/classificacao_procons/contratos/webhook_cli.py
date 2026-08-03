@@ -98,6 +98,7 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
             update_existing=not args.create_only,
             skip_signed_documents=args.skip_signed_documents,
             auto_link_legacy=not args.no_auto_link_legacy,
+            allow_create=True if args.allow_create else None,
         )
     except ControleSyncError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
@@ -116,6 +117,7 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
         "legacy_link_would_apply": result.legacy_link_would_apply,
         "legacy_link_ambiguous_skipped": result.legacy_link_ambiguous_skipped,
         "legacy_link_failed": result.legacy_link_failed,
+        "create_paused": result.create_paused,
         "items": [
             item.__dict__
             for item in result.items
@@ -512,6 +514,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-auto-link-legacy",
         action="store_true",
         help="Não vincula automaticamente itens legados com título exato inequívoco",
+    )
+    sync_parser.add_argument(
+        "--allow-create",
+        action="store_true",
+        help="Permite criar novos itens no Controle (padrão: criação pausada)",
     )
     sync_parser.set_defaults(func=_run_sync_controle)
 

@@ -19,6 +19,7 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 - **Pendente no Autentique** → deve existir par Jan/Luciano no Controle (ou item legado vinculado com o mesmo `Autentique ID`).
 - **Como medir:** `compare-controle` → `pending_missing_in_monday`.
 - **Como corrigir:** `sync-controle` (modo seguro: só pendentes, `create_only` / `skip_signed_documents` conforme workflow).
+- **Pausa operacional:** enquanto o quadro estiver sendo saneado, a **criação** de novos itens fica desligada por padrão (`CONTROLE_PAUSE_CREATE`). O sync ainda atualiza, repara filas e faz auto-link legado inequívoco. Reativar criação só quando `compare-controle` estiver limpo o suficiente: `--allow-create` ou `CONTROLE_PAUSE_CREATE=false`.
 
 ### 2 — Assinado no Autentique → quadro Contratos
 
@@ -46,7 +47,9 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 contratos-webhook compare-controle --max-pages 50
 
 # Corrigir pendentes faltando + vínculo legado automático (título exato único)
+# Criação pausada por padrão — use --allow-create só após saneamento do quadro
 contratos-webhook sync-controle --create-only --skip-signed-documents --max-pages 50
+contratos-webhook sync-controle --allow-create --create-only --skip-signed-documents --max-pages 50
 
 # Desligar auto-link (raro)
 contratos-webhook sync-controle --no-auto-link-legacy ...
