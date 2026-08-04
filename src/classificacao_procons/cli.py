@@ -69,11 +69,16 @@ def _run_sla_check(args: argparse.Namespace) -> int:
         return 1
 
     workflow_report = None
-    github_token = (args.github_token or os.environ.get("GITHUB_ACTIONS_PAT") or "").strip()
+    github_token = (
+        args.github_token
+        or os.environ.get("PROCON_ACTIONS_PAT")
+        or os.environ.get("GITHUB_ACTIONS_PAT")
+        or ""
+    ).strip()
     if not args.skip_github_check:
         if not github_token:
             print(
-                "Aviso: GITHUB_ACTIONS_PAT ausente — pulando checagem do workflow.",
+                "Aviso: PROCON_ACTIONS_PAT ausente — pulando checagem do workflow.",
                 file=sys.stderr,
             )
         else:
@@ -515,7 +520,7 @@ def main(argv: list[str] | None = None) -> int:
     sla_parser.add_argument(
         "--github-token",
         default=None,
-        help="PAT com Actions read (ou use GITHUB_ACTIONS_PAT).",
+        help="PAT com Actions read (ou PROCON_ACTIONS_PAT / GITHUB_ACTIONS_PAT no ambiente).",
     )
     sla_parser.add_argument(
         "--skip-github-check",
