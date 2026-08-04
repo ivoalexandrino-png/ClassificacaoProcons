@@ -100,7 +100,7 @@ Workflow **Procon SLA watchdog** (`.github/workflows/procon-sla-watchdog.yml`):
 | Agenda | `:05` e `:35` UTC (entre os crons do hourly) |
 | Gmail | Falha se houver CIP/reclamação **não lida** há mais de **90 min** (padrão) |
 | GitHub | Falha se **Procon automation** não tiver run **verde** há mais de **150 min** |
-| Correção | Dispara `Procon automation` com `skip_elaborate=true` (exige `GITHUB_ACTIONS_PAT`) |
+| Correção | Dispara `Procon automation` com `skip_elaborate=true` (exige secret **`PROCON_ACTIONS_PAT`** no repo) |
 
 Local:
 
@@ -108,7 +108,7 @@ Local:
 procon-email sla-check --max-age-minutes 90 --max-workflow-age-minutes 150
 ```
 
-Secret **`GITHUB_ACTIONS_PAT`** (Actions read/write no repo) é obrigatório para a checagem do workflow e para o reprocessamento automático. Ver [`docs/cloud-agent-autonomia.md`](cloud-agent-autonomia.md).
+No GitHub → **Settings → Secrets → Actions**, crie **`PROCON_ACTIONS_PAT`** (fine-grained PAT com **Actions: Read and write** neste repositório). O nome não pode começar com `GITHUB_`. No Cursor Cloud Agents, o mesmo token pode ficar como `GITHUB_ACTIONS_PAT` no start hook. Ver [`docs/cloud-agent-autonomia.md`](cloud-agent-autonomia.md).
 
 ## Secrets no GitHub (Settings → Secrets and variables → Actions)
 
@@ -120,7 +120,7 @@ Secret **`GITHUB_ACTIONS_PAT`** (Actions read/write no repo) é obrigatório par
 | `GEMINI_API_KEY` | Sim* | Elaboração (chave com **billing** no Google AI Studio) |
 | `OPENAI_API_KEY` | Recomendado | Fallback quando Gemini retorna 429/cota |
 | `GEMINI_MODEL` | Opcional | Ex.: `gemini-2.5-flash` |
-| `GITHUB_ACTIONS_PAT` | Recomendado | Watchdog SLA + ping Cloud Scheduler + dispatch manual |
+| `PROCON_ACTIONS_PAT` | Recomendado | Watchdog SLA + ping Cloud Scheduler + dispatch manual (no repo; não use prefixo `GITHUB_`) |
 
 \*Sem `OPENAI_API_KEY`, o fluxo depende só do Gemini; picos de cota podem atrasar respostas até a próxima hora.
 

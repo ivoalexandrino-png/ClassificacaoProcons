@@ -1,7 +1,7 @@
 name: Procon SLA watchdog
 
 # Detecta e-mails de reclamação não lidos além do SLA e gaps no GitHub Actions.
-# Em violação, dispara reprocessamento (process) quando GITHUB_ACTIONS_PAT está configurado.
+# Em violação, dispara reprocessamento (process) quando PROCON_ACTIONS_PAT está configurado.
 
 concurrency:
   group: procon-sla-watchdog
@@ -77,10 +77,11 @@ jobs:
 
       - name: SLA check (Gmail + GitHub Actions)
         env:
-          GITHUB_ACTIONS_PAT: ${{ secrets.GITHUB_ACTIONS_PAT }}
+          PROCON_ACTIONS_PAT: ${{ secrets.PROCON_ACTIONS_PAT }}
         run: |
           MAX_EMAIL="${{ github.event.inputs.max_age_minutes }}"
           MAX_WORKFLOW="${{ github.event.inputs.max_workflow_age_minutes }}"
+          export GITHUB_ACTIONS_PAT="${PROCON_ACTIONS_PAT}"
           python -m classificacao_procons.cli sla-check \
             --max-age-minutes "${MAX_EMAIL:-90}" \
             --max-workflow-age-minutes "${MAX_WORKFLOW:-150}"
@@ -98,10 +99,10 @@ jobs:
     steps:
       - name: Dispatch Procon process
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_ACTIONS_PAT }}
+          GH_TOKEN: ${{ secrets.PROCON_ACTIONS_PAT }}
         run: |
           if [ -z "${GH_TOKEN}" ]; then
-            echo "::warning::GITHUB_ACTIONS_PAT ausente — não foi possível disparar reprocessamento."
+            echo "::warning::PROCON_ACTIONS_PAT ausente — não foi possível disparar reprocessamento."
             exit 1
           fi
           gh workflow run "Procon automation (every 30 min)" -f skip_elaborate=true
