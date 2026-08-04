@@ -15,6 +15,11 @@ from classificacao_procons.email.auth import (
     save_token_from_code,
 )
 from classificacao_procons.email.gmail import GmailClientError, GmailProconFetcher
+from classificacao_procons.health.procon_sla import (
+    ProconSlaError,
+    build_procon_sla_report,
+    check_github_workflow_freshness,
+)
 from classificacao_procons.interaction_pipeline import (
     ConsumerInteractionPipelineError,
     ConsumerInteractionPipelineOptions,
@@ -46,6 +51,96 @@ def _serialize_notification(notification: object) -> dict[str, object]:
     if "received_at" in data:
         data["received_at"] = data["received_at"].isoformat()
     return data
+
+
+def _run_sla_check(args: argparse.Namespace) -> int:
+    if not has_valid_token(args.token):
+        print("Google não conectado. Rode: procon-email auth", file=sys.stderr)
+        return 1
+
+    try:
+        gmail_report = build_procon_sla_report(
+            token_path=args.token,
+            max_age_minutes=args.max_age_minutes,
+            max_results=args.max_results,
+        )
+    except ProconSlaError as exc:
+        print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        return 1
+
+    workflow_report = None
+    github_token = (args.github_token or os.environ.get("GITHUB_ACTIONS_PAT") or "").strip()
+    if not args.skip_github_check:
+        if not github_token:
+            print(
+                "Aviso: GITHUB_ACTIONS_PAT ausente — pulando checagem do workflow.",
+                file=sys.stderr,
+            )
+        else:
+            try:
+                workflow_report = check_github_workflow_freshness(
+                    token=github_token,
+                    max_age_minutes=args.max_workflow_age_minutes,
+                    workflow_file=args.workflow_file,
+                )
+            except ProconSlaError as exc:
+                print(json.dumps({"error": str(exc)}), file=sys.stderr)
+                return 1
+
+    stale_payload = [
+        {
+            "message_id": item.message_id,
+            "subject": item.subject,
+            "protocol_number": item.protocol_number,
+            "source_id": item.source_id,
+            "notification_type": item.notification_type,
+            "received_at": item.received_at.isoformat(),
+            "age_minutes": item.age_minutes,
+        }
+        for item in gmail_report.stale_notifications
+    ]
+    output: dict[str, object] = {
+        "checked_at": gmail_report.checked_at.isoformat(),
+        "gmail": {
+            "max_age_minutes": gmail_report.max_age_minutes,
+            "unread_scanned": gmail_report.unread_scanned,
+            "stale_count": len(gmail_report.stale_notifications),
+            "stale_notifications": stale_payload,
+        },
+    }
+    if workflow_report is not None:
+        output["github_workflow"] = {
+            "workflow_file": workflow_report.workflow_file,
+            "max_age_minutes": workflow_report.max_age_minutes,
+            "last_run_created_at": (
+                workflow_report.last_run_created_at.isoformat()
+                if workflow_report.last_run_created_at
+                else None
+            ),
+            "last_run_status": workflow_report.last_run_status,
+            "last_run_conclusion": workflow_report.last_run_conclusion,
+            "age_minutes": workflow_report.age_minutes,
+            "is_stale": workflow_report.is_stale,
+        }
+
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+
+    violations: list[str] = []
+    if gmail_report.stale_notifications:
+        violations.append(
+            f"{len(gmail_report.stale_notifications)} e-mail(s) não lido(s) acima do SLA "
+            f"({gmail_report.max_age_minutes} min).",
+        )
+    if workflow_report is not None and workflow_report.is_stale:
+        violations.append(
+            "Workflow Procon automation sem run bem-sucedida recente "
+            f"(limite {workflow_report.max_age_minutes} min).",
+        )
+    if violations:
+        for line in violations:
+            print(f"::error::{line}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def _run_auth(args: argparse.Namespace) -> int:
@@ -395,6 +490,39 @@ def main(argv: list[str] | None = None) -> int:
         help="Não abre o portal (só e-mail + anexos no update).",
     )
 
+    sla_parser = subparsers.add_parser(
+        "sla-check",
+        help="Verificar SLA: e-mails não lidos e última run do GitHub Actions",
+    )
+    sla_parser.add_argument(
+        "--max-age-minutes",
+        type=int,
+        default=90,
+        help="Alerta se e-mail de reclamação não lido for mais antigo que isto (padrão 90).",
+    )
+    sla_parser.add_argument(
+        "--max-workflow-age-minutes",
+        type=int,
+        default=150,
+        help="Alerta se não houver run verde do workflow há mais que isto (padrão 150).",
+    )
+    sla_parser.add_argument("--max-results", type=int, default=50)
+    sla_parser.add_argument(
+        "--workflow-file",
+        default="procon-hourly.yml",
+        help="Arquivo do workflow no repositório (padrão procon-hourly.yml).",
+    )
+    sla_parser.add_argument(
+        "--github-token",
+        default=None,
+        help="PAT com Actions read (ou use GITHUB_ACTIONS_PAT).",
+    )
+    sla_parser.add_argument(
+        "--skip-github-check",
+        action="store_true",
+        help="Só checar Gmail (sem API do GitHub).",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "auth":
@@ -409,6 +537,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_register_monday(args)
     if args.command == "process-interactions":
         return _run_process_interactions(args)
+    if args.command == "sla-check":
+        return _run_sla_check(args)
 
     parser.print_help()
     return 0
