@@ -91,6 +91,25 @@ bash scripts/setup-gcp-github-procon-scheduler.sh
 
 Cria checagem **a cada 30 min** (só `process` / Monday) + backup de **elaborate** no minuto **:15** de cada hora (horário de Brasília).
 
+### Watchdog de SLA (recomendado)
+
+Workflow **Procon SLA watchdog** (`.github/workflows/procon-sla-watchdog.yml`):
+
+| O que faz | Detalhe |
+|-----------|---------|
+| Agenda | `:05` e `:35` UTC (entre os crons do hourly) |
+| Gmail | Falha se houver CIP/reclamação **não lida** há mais de **90 min** (padrão) |
+| GitHub | Falha se **Procon automation** não tiver run **verde** há mais de **150 min** |
+| Correção | Dispara `Procon automation` com `skip_elaborate=true` (exige `GITHUB_ACTIONS_PAT`) |
+
+Local:
+
+```bash
+procon-email sla-check --max-age-minutes 90 --max-workflow-age-minutes 150
+```
+
+Secret **`GITHUB_ACTIONS_PAT`** (Actions read/write no repo) é obrigatório para a checagem do workflow e para o reprocessamento automático. Ver [`docs/cloud-agent-autonomia.md`](cloud-agent-autonomia.md).
+
 ## Secrets no GitHub (Settings → Secrets and variables → Actions)
 
 | Secret | Obrigatório | Uso |
@@ -101,6 +120,7 @@ Cria checagem **a cada 30 min** (só `process` / Monday) + backup de **elaborate
 | `GEMINI_API_KEY` | Sim* | Elaboração (chave com **billing** no Google AI Studio) |
 | `OPENAI_API_KEY` | Recomendado | Fallback quando Gemini retorna 429/cota |
 | `GEMINI_MODEL` | Opcional | Ex.: `gemini-2.5-flash` |
+| `GITHUB_ACTIONS_PAT` | Recomendado | Watchdog SLA + ping Cloud Scheduler + dispatch manual |
 
 \*Sem `OPENAI_API_KEY`, o fluxo depende só do Gemini; picos de cota podem atrasar respostas até a próxima hora.
 
