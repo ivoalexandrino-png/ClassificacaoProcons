@@ -87,3 +87,27 @@ class TestMondayCases:
 
         assert case is not None
         assert case.item_id == "102"
+
+    def test_should_include_responded_case_when_ignore_closed_status(self) -> None:
+        item = {
+            "id": "103",
+            "name": "NATHALIA",
+            "column_values": [
+                {
+                    "id": "docs",
+                    "text": "Drive",
+                    "value": '{"url":"https://drive.google.com/drive/folders/abc"}',
+                },
+                {"id": "status", "text": "Respondido", "value": None},
+            ],
+        }
+        column_lookup = {"docs": "docs_sac", "status": "status"}
+
+        case = _extract_case_from_item(
+            item,
+            column_lookup=column_lookup,
+            ignore_closed_status=True,
+        )
+
+        assert case is not None
+        assert case.item_id == "103"

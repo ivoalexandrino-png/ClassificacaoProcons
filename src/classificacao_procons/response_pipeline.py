@@ -383,6 +383,7 @@ def elaborate_pending_responses(
                 api_token=monday_token,
                 item_ids=set(options.monday_item_ids),
                 ignore_response_links=True,
+                ignore_closed_status=True,
             )
         else:
             cases = list_cases_ready_for_elaboration(
@@ -394,6 +395,22 @@ def elaborate_pending_responses(
 
     elaborated_item_ids = _load_elaborated_item_ids(options.state_path)
     results: list[ElaboratedResponseResult] = []
+
+    if options.monday_item_ids and not cases:
+        for item_id in sorted(options.monday_item_ids):
+            results.append(
+                ElaboratedResponseResult(
+                    status="error",
+                    monday_item_id=item_id,
+                    consumer_name="",
+                    protocol_number=None,
+                    error=(
+                        "Item não encontrado ou sem Docs SAC no Monday "
+                        "(use --force-reelaborate se já houver resposta no board)."
+                    ),
+                ),
+            )
+        return results
 
     for case in cases:
         if options.monday_item_ids is not None and case.item_id not in options.monday_item_ids:
