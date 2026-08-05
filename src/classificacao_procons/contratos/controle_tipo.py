@@ -235,20 +235,45 @@ def supplier_title_requires_pdf_analysis(
     return True
 
 
+def needs_document_content_for_tipo_commit(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> bool:
+    """True quando o Tipo não deve ser gravado só com base no título (priorizar PDF)."""
+    blob = _blob(document_name, metadata)
+    if _is_controle_internal_document(blob):
+        return False
+    if is_rh_document(
+        document_name=document_name,
+        contract_type=metadata.contract_type if metadata else None,
+    ):
+        return False
+    if _is_confidentiality_primary(blob):
+        return False
+    if _is_unambiguous_mp_order(blob):
+        return False
+    if metadata and metadata.company:
+        return False
+    if _is_ambiguous_pj_externo(blob):
+        return True
+    if supplier_title_requires_pdf_analysis(document_name=document_name, metadata=metadata):
+        return True
+    if _is_ambiguous_prestacao_servicos(blob):
+        return True
+    return True
+
+
 def document_requires_pdf_analysis(
     *,
     document_name: str,
     metadata: ContractMetadata | None = None,
 ) -> bool:
     """Título insuficiente: exige leitura do PDF (Gemini) antes de gravar Tipo."""
-    if metadata and metadata.company:
-        return False
-    if _is_ambiguous_pj_externo(_blob(document_name, metadata)):
-        return True
-    if supplier_title_requires_pdf_analysis(document_name=document_name, metadata=metadata):
-        return True
-    blob = _blob(document_name, metadata)
-    return _is_ambiguous_prestacao_servicos(blob)
+    return needs_document_content_for_tipo_commit(
+        document_name=document_name,
+        metadata=metadata,
+    )
 
 
 def _is_controle_internal_document(blob: str) -> bool:
@@ -467,6 +492,7 @@ def classify_accessory_follows_principal(
     principal = classify_controle_tipo_heuristic(
         document_name=principal_title,
         metadata=None,
+        skip_pdf_requirement=True,
     )
     if not principal.monday_tipo:
         return None
@@ -513,6 +539,7 @@ def classify_controle_tipo_heuristic(
     *,
     document_name: str,
     metadata: ContractMetadata | None = None,
+    skip_pdf_requirement: bool = False,
 ) -> TipoClassificationResult:
     inherited = classify_accessory_follows_principal(
         document_name=document_name,
@@ -637,7 +664,10 @@ def classify_controle_tipo_heuristic(
             rationale="Minuta padrão de parceria ou proposta comercial B2B.",
         )
 
-    if document_requires_pdf_analysis(document_name=document_name, metadata=metadata):
+    if not skip_pdf_requirement and document_requires_pdf_analysis(
+        document_name=document_name,
+        metadata=metadata,
+    ):
         return TipoClassificationResult(
             monday_tipo=None,
             confidence="low",
@@ -678,6 +708,9 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
     return (
         "Você classifica contratos da Beauty For All para a coluna Tipo do Monday.\n"
         f"monday_tipo deve ser um destes (ou null): {labels}.\n\n"
+        "O título do Autentique é apenas pista — a classificação deve vir do CONTEÚDO do PDF "
+        "(partes, objeto, cláusulas). Ignore palavras enganosas no título (MMKT, B4A, "
+        "nome de fornecedor) se o contrato disser outra coisa.\n\n"
         "Regras (ordem de prioridade):\n"
         "1. RH: colaboradores, CLT, rescisão, TCE, estágio, férias, códigos de conduta, "
         "contratos e aditivos de PJ INTERNOS (prestação para a B4A como colaborador).\n"
@@ -792,7 +825,11 @@ def resolve_controle_tipo_label(
     skip_gemini: bool = False,
     min_confidence: Confidence = "medium",
 ) -> str | None:
-    """Define o label Tipo para o Controle (None = deixar em branco / suplementar)."""
+    """Define o label Tipo para o Controle (None = deixar em branco / suplementar).
+
+    Política: título só grava Tipo em casos explícitos (RH, NDA, pedido MP, internos).
+    Demais casos exigem análise do PDF; com PDF presente, só a classificação Gemini grava Tipo.
+    """
     inherited = classify_accessory_follows_principal(
         document_name=document_name,
         metadata=metadata,
@@ -804,9 +841,10 @@ def resolve_controle_tipo_label(
         return None
 
     heuristic = classify_controle_tipo_heuristic(document_name=document_name, metadata=metadata)
+    has_pdf = pdf_path is not None and pdf_path.exists()
+    rank = {"high": 3, "medium": 2, "low": 1}
 
-    if pdf_path and pdf_path.exists() and not skip_gemini:
-        gemini: TipoClassificationResult | None = None
+    if has_pdf and not skip_gemini:
         try:
             gemini = classify_controle_tipo_with_gemini(
                 pdf_path=pdf_path,
@@ -814,13 +852,16 @@ def resolve_controle_tipo_label(
                 api_key=gemini_api_key,
             )
         except ContractExtractionError:
-            gemini = None
-        if gemini and gemini.monday_tipo:
-            rank = {"high": 3, "medium": 2, "low": 1}
-            if rank[gemini.confidence] >= rank[min_confidence]:
-                return gemini.monday_tipo
-            if heuristic.monday_tipo and heuristic.confidence == "high":
-                return heuristic.monday_tipo
+            return None
+        if gemini.monday_tipo and rank[gemini.confidence] >= rank[min_confidence]:
+            return gemini.monday_tipo
+        return None
+
+    if needs_document_content_for_tipo_commit(
+        document_name=document_name,
+        metadata=metadata,
+    ):
+        return None
 
     if heuristic.monday_tipo is None:
         return None

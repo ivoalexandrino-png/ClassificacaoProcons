@@ -12,10 +12,10 @@ class TestResolveControleTipoLabel:
             is None
         )
 
-    def test_should_keep_b2b_for_parceria_minuta(self) -> None:
+    def test_should_not_fill_tipo_from_title_for_parceria_minuta(self) -> None:
         assert (
             _resolve_tipo_label(
                 document_name="4.1 - Minuta Contrato Parceria - B4A - GE Beauty",
             )
-            == "Contratos B2B"
+            is None
         )

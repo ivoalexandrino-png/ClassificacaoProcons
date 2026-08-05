@@ -91,12 +91,12 @@ class TestControleTipoHeuristic:
             resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
         )
 
-    def test_should_classify_minuta_parceria_as_b2b(self) -> None:
+    def test_should_not_resolve_minuta_parceria_from_title_only(self) -> None:
         assert (
             _resolve_tipo_label(
                 document_name="4.1 - Minuta Contrato Parceria - B4A - GE Beauty",
             )
-            == "Contratos B2B"
+            is None
         )
 
     def test_should_return_none_for_procuracao(self) -> None:

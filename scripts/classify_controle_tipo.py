@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dry-run: classifica Tipo (heurística e opcionalmente Gemini) para títulos ou PDFs."""
+"""Dry-run: classifica Tipo (heurística como pista + Gemini no PDF para gravar Tipo)."""
 
 from __future__ import annotations
 

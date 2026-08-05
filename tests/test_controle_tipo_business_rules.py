@@ -3,6 +3,7 @@
 from classificacao_procons.contratos.constants import MONDAY_CONTROLE_TIPO_LABELS
 from classificacao_procons.contratos.controle_tipo import (
     classify_controle_tipo_heuristic,
+    document_requires_pdf_analysis,
     resolve_controle_tipo_label,
 )
 
@@ -60,3 +61,15 @@ class TestControleTipoBusinessRules:
     def test_should_require_pdf_for_contrato_pj_prestador_externo(self) -> None:
         name = "Contrato PJ - Prestador externo marketing"
         assert resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+
+    def test_should_not_resolve_b2b_minuta_from_title_without_pdf(self) -> None:
+        name = "4.1 - Minuta Contrato Parceria - B4A - GE Beauty"
+        assert document_requires_pdf_analysis(document_name=name) is True
+        assert resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+
+    def test_should_resolve_nda_from_title_without_pdf(self) -> None:
+        name = "NDA - Fornecedor XYZ"
+        assert document_requires_pdf_analysis(document_name=name) is False
+        assert (
+            resolve_controle_tipo_label(document_name=name, min_confidence="medium") == "NDA"
+        )

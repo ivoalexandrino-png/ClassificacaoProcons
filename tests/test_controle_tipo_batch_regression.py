@@ -15,6 +15,40 @@ from classificacao_procons.contratos.controle_tipo import (
     [
         ("Pedido Brass Hill - Glam Nutri wiki- Junho_2026", "Pedidos Marcas Próprias"),
         ("NDA - Fornecedor XYZ", "NDA"),
+        ("Termo de Rescisão - Karen Santos", MONDAY_TIPO_RH),
+    ],
+)
+def test_should_resolve_tipo_without_pdf_only_for_trusted_titles(
+    document_name: str,
+    expected_tipo: str,
+) -> None:
+    assert (
+        resolve_controle_tipo_label(document_name=document_name, min_confidence="medium")
+        == expected_tipo
+    )
+
+
+@pytest.mark.parametrize(
+    "document_name",
+    [
+        "4.1 - Minuta Contrato Parceria - B4A - GE Beauty",
+        "Contrato Influencer - Theulyn Reis",
+        "Fornecimento Exclusivo Marcas Próprias - Nobilis 2025",
+    ],
+)
+def test_should_not_resolve_tipo_from_title_without_pdf(document_name: str) -> None:
+    assert document_requires_pdf_analysis(document_name=document_name) is True
+    assert (
+        resolve_controle_tipo_label(document_name=document_name, min_confidence="medium")
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("document_name", "expected_tipo"),
+    [
+        ("Pedido Brass Hill - Glam Nutri wiki- Junho_2026", "Pedidos Marcas Próprias"),
+        ("NDA - Fornecedor XYZ", "NDA"),
         ("4.1 - Minuta Contrato Parceria - B4A - GE Beauty", "Contratos B2B"),
         ("Termo de Rescisão - Karen Santos", MONDAY_TIPO_RH),
         ("1º TERMO ADITIVO - 4Equity x BVI-B4A SERVIÇOS x CODEMP 2025", "Contratos Societários"),
