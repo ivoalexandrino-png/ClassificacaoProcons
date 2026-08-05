@@ -6,6 +6,7 @@ from classificacao_procons.contratos.constants import MONDAY_TIPO_RH
 from classificacao_procons.contratos.controle_sync import _resolve_tipo_label
 from classificacao_procons.contratos.controle_tipo import (
     classify_controle_tipo_heuristic,
+    document_requires_pdf_analysis,
     resolve_controle_tipo_label,
     should_omit_controle_tipo,
 )
@@ -79,6 +80,13 @@ class TestControleTipoHeuristic:
         name = "Contrato Brass Hill - fornecimento produtos 2026"
         result = classify_controle_tipo_heuristic(document_name=name)
         assert result.monday_tipo is None
+        assert (
+            resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+        )
+
+    def test_should_require_pdf_for_prestacao_servicos_pessoa_fisica(self) -> None:
+        name = "Contrato de Prestação de Serviços - Debora Duarte Ribeiro"
+        assert document_requires_pdf_analysis(document_name=name) is True
         assert (
             resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
         )

@@ -15,6 +15,7 @@ from classificacao_procons.contratos.controle_tipo import (  # noqa: E402
     classify_controle_tipo_with_gemini,
     resolve_controle_tipo_label,
     supplier_title_requires_pdf_analysis,
+    document_requires_pdf_analysis,
 )
 
 
@@ -28,7 +29,7 @@ def main() -> int:
     heuristic = classify_controle_tipo_heuristic(document_name=args.document_name)
     payload: dict[str, object] = {
         "heuristic": heuristic.__dict__,
-        "requires_pdf_analysis": supplier_title_requires_pdf_analysis(
+        "requires_pdf_analysis": document_requires_pdf_analysis(
             document_name=args.document_name,
         ),
     }

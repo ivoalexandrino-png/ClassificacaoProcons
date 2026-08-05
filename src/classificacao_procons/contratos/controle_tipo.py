@@ -191,6 +191,31 @@ def _mentions_mp_supplier_name(blob: str) -> bool:
     return any(marker in blob for marker in MP_SUPPLIER_NAME_MARKERS)
 
 
+def _is_ambiguous_prestacao_servicos(blob: str) -> bool:
+    if "prestacao de servicos" not in blob and "prestação de serviços" not in blob:
+        return False
+    if "pj interno" in blob or "contrato pj" in blob:
+        return False
+    corporate_markers = (
+        "ltda",
+        " ltda",
+        " s.a",
+        " s/a",
+        " eireli",
+        " holding",
+        " comercio",
+        " comércio",
+        " industria",
+        " indústria",
+        " consultoria",
+        " comunidade",
+        " bianco",
+    )
+    if any(marker in blob for marker in corporate_markers):
+        return False
+    return True
+
+
 def supplier_title_requires_pdf_analysis(
     *,
     document_name: str,
@@ -209,6 +234,20 @@ def supplier_title_requires_pdf_analysis(
     if _is_confidentiality_primary(blob):
         return False
     return True
+
+
+def document_requires_pdf_analysis(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> bool:
+    """Título insuficiente: exige leitura do PDF (Gemini) antes de gravar Tipo."""
+    if metadata and metadata.company:
+        return False
+    if supplier_title_requires_pdf_analysis(document_name=document_name, metadata=metadata):
+        return True
+    blob = _blob(document_name, metadata)
+    return _is_ambiguous_prestacao_servicos(blob)
 
 
 def _is_mp_order(blob: str) -> bool:
@@ -513,14 +552,14 @@ def classify_controle_tipo_heuristic(
             rationale="Minuta padrão de parceria ou proposta comercial B2B.",
         )
 
-    if supplier_title_requires_pdf_analysis(document_name=document_name, metadata=metadata):
+    if document_requires_pdf_analysis(document_name=document_name, metadata=metadata):
         return TipoClassificationResult(
             monday_tipo=None,
             confidence="low",
             source="heuristic",
             rationale=(
-                "Fornecedor pode ter contratos B2B, pedidos de marcas próprias e B4A — "
-                "classificar pelo conteúdo do PDF (não só pelo nome)."
+                "Título ambíguo (fornecedor MP, prestação de serviços PJ/B2B, etc.) — "
+                "classificar pelo conteúdo do PDF."
             ),
         )
 
