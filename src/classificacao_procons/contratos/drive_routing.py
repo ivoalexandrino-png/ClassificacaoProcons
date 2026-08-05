@@ -123,8 +123,12 @@ def infer_category(*, document_name: str, contract_type: str | None = None) -> s
         return "default"
     if "nda" in blob:
         return "default"
-    mp_pedido_keywords = ("pedido mp", "marcas proprias", "nobilis", "brass hill", "henlau")
+    mp_pedido_keywords = ("pedido mp", "pedido marcas proprias", "pedido marcas próprias")
     if any(keyword in blob for keyword in mp_pedido_keywords):
+        return "marcas_proprias"
+    if "pedido" in blob and any(
+        supplier in blob for supplier in ("brass hill", "nobilis", "henlau", "brasshill")
+    ):
         return "marcas_proprias"
     return "default"
 

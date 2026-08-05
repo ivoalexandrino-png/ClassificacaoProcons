@@ -6,6 +6,7 @@ from classificacao_procons.contratos.constants import MONDAY_TIPO_RH
 from classificacao_procons.contratos.controle_sync import _resolve_tipo_label
 from classificacao_procons.contratos.controle_tipo import (
     classify_controle_tipo_heuristic,
+    document_requires_pdf_analysis,
     resolve_controle_tipo_label,
     should_omit_controle_tipo,
 )
@@ -18,11 +19,37 @@ class TestControleTipoHeuristic:
         assert result.monday_tipo == "NDA"
         assert result.confidence == "high"
 
-    def test_should_classify_four_equity_aditivo_intercompany_as_b4a(self) -> None:
+    def test_should_classify_four_equity_aditivo_as_societario_follows_principal(self) -> None:
         name = "1º TERMO ADITIVO - 4Equity x BVI-B4A SERVIÇOS x CODEMP 2025"
         result = classify_controle_tipo_heuristic(document_name=name)
-        assert result.monday_tipo == "Contratos B4A"
-        assert "4Equity" in result.rationale or "intercompany" in result.rationale
+        assert result.monday_tipo == "Contratos Societários"
+        rationale = result.rationale.casefold()
+        assert "acessório" in rationale or "societário" in rationale
+
+    def test_should_classify_aditivo_b2b_follows_principal_title(self) -> None:
+        name = "Aditivo ao Contrato de Parceria B2B - Fornecedor ABC"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo == "Contratos B2B"
+        assert "principal" in result.rationale.casefold()
+
+    def test_should_classify_aditivo_from_metadata_parent_reference(self) -> None:
+        metadata = ContractMetadata(
+            counterparty_name="HoldCo",
+            counterparty_cnpj=None,
+            contract_type="aditivo",
+            company=None,
+            start_date=None,
+            end_date=None,
+            property_name=None,
+            summary=None,
+            parent_contract_reference="Acordo 4Equity - Stock Options Colaborador 2026",
+            is_supplemental=True,
+        )
+        result = classify_controle_tipo_heuristic(
+            document_name="1º Aditivo - HoldCo",
+            metadata=metadata,
+        )
+        assert result.monday_tipo == "Contratos Societários"
 
     def test_should_not_classify_four_equity_bvi_as_rv_bvi(self) -> None:
         name = "4Equity x BVI-B4A SERVIÇOS x CODEMP 2025"
@@ -44,12 +71,32 @@ class TestControleTipoHeuristic:
         result = classify_controle_tipo_heuristic(document_name=name)
         assert result.monday_tipo == "Pedidos Marcas Próprias"
 
-    def test_should_classify_minuta_parceria_as_b2b(self) -> None:
+    def test_should_classify_brass_hill_minuta_parceria_as_b2b(self) -> None:
+        name = "Minuta Contrato Parceria B2B - Brass Hill Industria"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo == "Contratos B2B"
+
+    def test_should_not_guess_tipo_for_brass_hill_without_object_in_title(self) -> None:
+        name = "Contrato Brass Hill - fornecimento produtos 2026"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo is None
+        assert (
+            resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+        )
+
+    def test_should_require_pdf_for_prestacao_servicos_pessoa_fisica(self) -> None:
+        name = "Contrato de Prestação de Serviços - Debora Duarte Ribeiro"
+        assert document_requires_pdf_analysis(document_name=name) is True
+        assert (
+            resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+        )
+
+    def test_should_not_resolve_minuta_parceria_from_title_only(self) -> None:
         assert (
             _resolve_tipo_label(
                 document_name="4.1 - Minuta Contrato Parceria - B4A - GE Beauty",
             )
-            == "Contratos B2B"
+            is None
         )
 
     def test_should_return_none_for_procuracao(self) -> None:

@@ -8,7 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from classificacao_procons.contratos.constants import MONDAY_TIPO_RH
+from classificacao_procons.contratos.constants import (
+    MONDAY_CONTROLE_TIPO_LABELS,
+    MONDAY_TIPO_RH,
+)
 from classificacao_procons.contratos.contratos_routing import is_supplemental_document
 from classificacao_procons.contratos.drive_routing import (
     _matches_rh_clt,
@@ -24,23 +27,7 @@ from classificacao_procons.contratos.gemini_extractor import (
 Confidence = Literal["high", "medium", "low"]
 
 # Labels exatos da coluna Tipo no Monday (Controle Assinaturas).
-MONDAY_TIPO_LABELS: frozenset[str] = frozenset(
-    {
-        MONDAY_TIPO_RH,
-        "Contratos B4A",
-        "Contratos MMKT",
-        "Contratos Itaro",
-        "Contratos RV BVI",
-        "Contratos Aurora",
-        "Contratos Societários",
-        "Contratos B2B",
-        "Contratos de Câmbio",
-        "NDA",
-        "Contratos Influencers (Queens)",
-        "Contratos Jan",
-        "Pedidos Marcas Próprias",
-    }
-)
+MONDAY_TIPO_LABELS = MONDAY_CONTROLE_TIPO_LABELS
 
 ENTITY_TO_TIPO: dict[str, str] = {
     "b4a": "Contratos B4A",
@@ -80,7 +67,16 @@ MP_ORDER_KEYWORDS: tuple[str, ...] = (
     "pedido conforto",
     "pedido nobilis",
     "pedido henlau",
-    "brass hill -",
+    "pedido marcas proprias",
+    "pedido marcas próprias",
+)
+
+# Fornecedores MP: B2B, pedido ou B4A — não inferir só pelo nome.
+MP_SUPPLIER_NAME_MARKERS: tuple[str, ...] = (
+    "brass hill",
+    "brasshill",
+    "nobilis",
+    "henlau",
     "glam nutri wiki",
 )
 
@@ -136,6 +132,18 @@ FOUR_EQUITY_INTERCO_KEYWORDS: tuple[str, ...] = (
     "b4a servicos",
 )
 
+B2B_PARTNER_MARKERS: tuple[str, ...] = (
+    "korres",
+    "bfluence",
+    "abelha rainha",
+)
+
+CESSAO_ESPACO_B4A_MARKERS: tuple[str, ...] = (
+    "cessao onerosa espaco",
+    "cessão onerosa espaço",
+    "purodigital",
+)
+
 
 @dataclass(frozen=True)
 class TipoClassificationResult:
@@ -172,12 +180,140 @@ def _is_confidentiality_primary(blob: str) -> bool:
     return True
 
 
-def _is_mp_order(blob: str) -> bool:
-    if any(k in blob for k in MP_ORDER_KEYWORDS):
+def _is_unambiguous_mp_order(blob: str) -> bool:
+    if re.search(r"\bpedido\b", blob):
         return True
-    if "pedido" in blob and ("brass hill" in blob or "nobilis" in blob or "henlau" in blob):
+    return any(k in blob for k in MP_ORDER_KEYWORDS)
+
+
+def _mentions_mp_supplier_name(blob: str) -> bool:
+    return any(marker in blob for marker in MP_SUPPLIER_NAME_MARKERS)
+
+
+def _is_ambiguous_prestacao_servicos(blob: str) -> bool:
+    if "prestacao de servicos" not in blob and "prestação de serviços" not in blob:
+        return False
+    if "pj interno" in blob or "contrato pj" in blob:
+        return False
+    corporate_markers = (
+        "ltda",
+        " ltda",
+        " s.a",
+        " s/a",
+        " eireli",
+        " holding",
+        " comercio",
+        " comércio",
+        " industria",
+        " indústria",
+        " consultoria",
+        " comunidade",
+        " bianco",
+    )
+    if any(marker in blob for marker in corporate_markers):
+        return False
+    return True
+
+
+def supplier_title_requires_pdf_analysis(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> bool:
+    """Título cita fornecedor MP sem objeto claro (pedido vs parceria vs B4A)."""
+    blob = _blob(document_name, metadata)
+    if not _mentions_mp_supplier_name(blob):
+        return False
+    if _is_unambiguous_mp_order(blob):
+        return False
+    if any(k in blob for k in B2B_KEYWORDS) or "b2b" in blob:
+        return False
+    if _is_mp_supply_contract(blob):
+        return False
+    if _is_confidentiality_primary(blob):
+        return False
+    return True
+
+
+def needs_document_content_for_tipo_commit(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> bool:
+    """True quando o Tipo não deve ser gravado só com base no título (priorizar PDF)."""
+    blob = _blob(document_name, metadata)
+    if _is_controle_internal_document(blob):
+        return False
+    if is_rh_document(
+        document_name=document_name,
+        contract_type=metadata.contract_type if metadata else None,
+    ):
+        return False
+    if _is_confidentiality_primary(blob):
+        return False
+    if _is_unambiguous_mp_order(blob):
+        return False
+    if metadata and metadata.company:
+        return False
+    if _is_ambiguous_pj_externo(blob):
+        return True
+    if supplier_title_requires_pdf_analysis(document_name=document_name, metadata=metadata):
+        return True
+    if _is_ambiguous_prestacao_servicos(blob):
+        return True
+    return True
+
+
+def document_requires_pdf_analysis(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> bool:
+    """Título insuficiente: exige leitura do PDF (Gemini) antes de gravar Tipo."""
+    return needs_document_content_for_tipo_commit(
+        document_name=document_name,
+        metadata=metadata,
+    )
+
+
+def _is_controle_internal_document(blob: str) -> bool:
+    """Sem coluna Tipo no Controle (documentos internos ou tipo só no quadro Contratos)."""
+    if "requerimento de parcelamento" in blob:
+        return True
+    if "circularizacao" in blob and ("fornecedor" in blob or "advogado" in blob):
+        return True
+    if "cambio" in blob:
         return True
     return False
+
+
+def _is_mp_supplier_fornecimento_exclusivo_b4a(blob: str) -> bool:
+    if not any(k in blob for k in MP_CONTRACT_KEYWORDS):
+        return False
+    return _mentions_mp_supplier_name(blob)
+
+
+def _is_cessao_espaco_b4a(blob: str) -> bool:
+    if "cessao onerosa" in blob or "cessão onerosa" in blob:
+        if "participacao" in blob or "participação" in blob or "societaria" in blob:
+            return False
+        if any(m in blob for m in CESSAO_ESPACO_B4A_MARKERS):
+            return True
+        if "espaco" in blob or "espaço" in blob:
+            return True
+    return False
+
+
+def _is_ambiguous_pj_externo(blob: str) -> bool:
+    if "contrato pj" not in blob and "prestador" not in blob:
+        return False
+    if "interno" in blob or "pj interno" in blob:
+        return False
+    return "prestador" in blob or "marketing" in blob
+
+
+def _is_mp_order(blob: str) -> bool:
+    return _is_unambiguous_mp_order(blob)
 
 
 def _is_mp_supply_contract(blob: str) -> bool:
@@ -207,15 +343,20 @@ def _classify_four_equity(
             source="heuristic",
             rationale="4Equity com objeto societário (equity/token/opções/quotas).",
         )
-    if any(k in blob for k in FOUR_EQUITY_INTERCO_KEYWORDS):
-        entity = _resolve_entity_from_metadata(metadata) or "b4a"
+    if _is_aditivo_blob(blob):
         return TipoClassificationResult(
-            monday_tipo=ENTITY_TO_TIPO.get(entity, "Contratos B4A"),
-            confidence="medium",
+            monday_tipo="Contratos Societários",
+            confidence="high",
+            source="heuristic",
+            rationale="Aditivo 4Equity segue contrato societário principal.",
+        )
+    if any(k in blob for k in FOUR_EQUITY_INTERCO_KEYWORDS):
+        return TipoClassificationResult(
+            monday_tipo="Contratos Societários",
+            confidence="high",
             source="heuristic",
             rationale=(
-                "4Equity em aditivo/contrato intercompany (ex. BVI-B4A/CODEMP): "
-                "entidade operacional B4A salvo PDF indicando outra contratante."
+                "4Equity intercompany (ex. BVI-B4A/CODEMP): contrato societário do grupo."
             ),
         )
     return TipoClassificationResult(
@@ -259,13 +400,122 @@ def _is_jan_pf_contract(blob: str, metadata: ContractMetadata | None) -> bool:
     return False
 
 
+def _is_aditivo_blob(blob: str) -> bool:
+    return any(
+        marker in blob
+        for marker in (
+            "aditivo",
+            "termo aditivo",
+            "distrato",
+            "anexo",
+            "prorrogacao",
+            "prorrogação",
+            "renovacao",
+            "renovação",
+        )
+    )
+
+
+def _is_accessory_document(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None,
+) -> bool:
+    if metadata is not None and metadata.is_supplemental is True:
+        return True
+    if metadata is not None and metadata.is_supplemental is False:
+        return False
+    return _is_aditivo_blob(_blob(document_name, metadata))
+
+
+def _derive_principal_document_title(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None,
+) -> str | None:
+    if metadata and metadata.parent_contract_reference:
+        cleaned = metadata.parent_contract_reference.strip()
+        if cleaned:
+            return cleaned
+
+    stripped = document_name.strip()
+    patterns = (
+        r"^(?:\d+º\s+)?termo\s+aditivo\s*[-–:]\s*",
+        r"^(?:\d+º\s+)?aditivo\s*[-–:]\s*",
+        r"^aditivo\s+(?:ao|à|a)\s+(?:contrato\s+)?",
+        r"^distrato\s*[-–:]\s*",
+        r"^anexo\s*[-–:]\s*",
+    )
+    for pattern in patterns:
+        candidate = re.sub(pattern, "", stripped, count=1, flags=re.IGNORECASE).strip()
+        if candidate and candidate.casefold() != stripped.casefold() and len(candidate) >= 8:
+            return candidate
+    return None
+
+
+def classify_accessory_follows_principal(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> TipoClassificationResult | None:
+    """Regra acessório segue o principal (aditivo/anexo herda Tipo do contrato base)."""
+    if not _is_accessory_document(document_name=document_name, metadata=metadata):
+        return None
+
+    blob = _blob(document_name, metadata)
+    if ("4equity" in blob or "4 equity" in blob) and _is_aditivo_blob(blob):
+        return TipoClassificationResult(
+            monday_tipo="Contratos Societários",
+            confidence="high",
+            source="heuristic",
+            rationale=(
+                "Aditivo 4Equity: acessório segue contrato societário principal "
+                "(ecossistema 4Equity)."
+            ),
+        )
+
+    if _is_aditivo_blob(blob) and any(m in blob for m in B2B_PARTNER_MARKERS):
+        return TipoClassificationResult(
+            monday_tipo="Contratos B2B",
+            confidence="high",
+            source="heuristic",
+            rationale="Aditivo a contrato de parceria B2B (ex. Korres/Bfluence).",
+        )
+
+    principal_title = _derive_principal_document_title(
+        document_name=document_name,
+        metadata=metadata,
+    )
+    if not principal_title:
+        return None
+
+    principal = classify_controle_tipo_heuristic(
+        document_name=principal_title,
+        metadata=None,
+        skip_pdf_requirement=True,
+    )
+    if not principal.monday_tipo:
+        return None
+    confidence: Confidence = "high" if principal.confidence == "high" else "medium"
+    return TipoClassificationResult(
+        monday_tipo=principal.monday_tipo,
+        confidence=confidence,
+        source="heuristic",
+        rationale=f"Acessório segue contrato principal: {principal_title[:80]}.",
+    )
+
+
 def should_omit_controle_tipo(
     *,
     document_name: str,
     metadata: ContractMetadata | None = None,
 ) -> bool:
     """Documentos complementares sem categoria RH explícita ficam sem Tipo (subitem/pai)."""
+    if classify_accessory_follows_principal(document_name=document_name, metadata=metadata):
+        return False
     blob = _blob(document_name, metadata)
+    if _is_controle_internal_document(blob):
+        return True
     if _matches_rh_pj(blob) or _matches_rh_clt(blob):
         if "aditivo" in blob or "distrato" in blob:
             return False
@@ -289,8 +539,48 @@ def classify_controle_tipo_heuristic(
     *,
     document_name: str,
     metadata: ContractMetadata | None = None,
+    skip_pdf_requirement: bool = False,
 ) -> TipoClassificationResult:
+    inherited = classify_accessory_follows_principal(
+        document_name=document_name,
+        metadata=metadata,
+    )
+    if inherited:
+        return inherited
+
     blob = _blob(document_name, metadata)
+
+    if _is_controle_internal_document(blob):
+        return TipoClassificationResult(
+            monday_tipo=None,
+            confidence="high",
+            source="heuristic",
+            rationale="Documento interno ou tipo só no quadro Contratos (sem Tipo no Controle).",
+        )
+
+    if _is_cessao_espaco_b4a(blob):
+        return TipoClassificationResult(
+            monday_tipo="Contratos B4A",
+            confidence="high",
+            source="heuristic",
+            rationale="Cessão onerosa de espaço (operacional B4A).",
+        )
+
+    if "abelha rainha" in blob:
+        return TipoClassificationResult(
+            monday_tipo="Contratos B2B",
+            confidence="high",
+            source="heuristic",
+            rationale="Contrato de parceria B2B (fornecedor Abelha Rainha).",
+        )
+
+    if _is_ambiguous_pj_externo(blob):
+        return TipoClassificationResult(
+            monday_tipo=None,
+            confidence="low",
+            source="heuristic",
+            rationale="Contrato PJ externo: distinguir RH (PJ interno) vs B2B pelo PDF.",
+        )
 
     if is_rh_document(
         document_name=document_name,
@@ -320,6 +610,14 @@ def classify_controle_tipo_heuristic(
             confidence="high",
             source="heuristic",
             rationale="Pedido a fornecedor de produto com marca própria.",
+        )
+
+    if _is_mp_supplier_fornecimento_exclusivo_b4a(blob):
+        return TipoClassificationResult(
+            monday_tipo="Contratos B4A",
+            confidence="high",
+            source="heuristic",
+            rationale="Fornecimento exclusivo com fornecedor MP (Nobilis/Brass Hill) como B4A.",
         )
 
     if _is_mp_supply_contract(blob):
@@ -366,12 +664,18 @@ def classify_controle_tipo_heuristic(
             rationale="Minuta padrão de parceria ou proposta comercial B2B.",
         )
 
-    if "cambio" in blob or "câmbio" in document_name.casefold():
+    if not skip_pdf_requirement and document_requires_pdf_analysis(
+        document_name=document_name,
+        metadata=metadata,
+    ):
         return TipoClassificationResult(
-            monday_tipo="Contratos de Câmbio",
-            confidence="high",
+            monday_tipo=None,
+            confidence="low",
             source="heuristic",
-            rationale="Contrato de câmbio.",
+            rationale=(
+                "Título ambíguo (fornecedor MP, prestação de serviços PJ/B2B, etc.) — "
+                "classificar pelo conteúdo do PDF."
+            ),
         )
 
     entity_key = _resolve_entity_from_metadata(metadata) or _resolve_entity_fallback(blob)
@@ -404,12 +708,15 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
     return (
         "Você classifica contratos da Beauty For All para a coluna Tipo do Monday.\n"
         f"monday_tipo deve ser um destes (ou null): {labels}.\n\n"
+        "O título do Autentique é apenas pista — a classificação deve vir do CONTEÚDO do PDF "
+        "(partes, objeto, cláusulas). Ignore palavras enganosas no título (MMKT, B4A, "
+        "nome de fornecedor) se o contrato disser outra coisa.\n\n"
         "Regras (ordem de prioridade):\n"
         "1. RH: colaboradores, CLT, rescisão, TCE, estágio, férias, códigos de conduta, "
         "contratos e aditivos de PJ INTERNOS (prestação para a B4A como colaborador).\n"
         "2. NDA: acordo de confidencialidade como OBJETO principal (não cláusula em parceria).\n"
-        "3. Pedidos Marcas Próprias: pedidos a fornecedores de produtos com nossa marca "
-        "(ex. Brass Hill, pedido MP). NÃO confundir com contrato de fornecimento exclusivo.\n"
+        "3. Pedidos MP: pedido de produção/compra com nossa marca. "
+        "Não use só o nome do fornecedor (Brass Hill, Nobilis): pode ser B2B, MP ou B4A.\n"
         "4. Contratos Societários: tokenização, stock options, convertible notes, 4Equity, "
         "acordos de quotas/sócios, cessão onerosa de participação societária.\n"
         "5. Contratos Influencers (Queens): campanhas com influencers.\n"
@@ -421,7 +728,13 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
         "(BVI-B4A, CODEMP) → B4A salvo outra contratante.\n"
         "10. NÃO use Contratos RV BVI só porque aparece 'BVI' no nome (ex. 4Equity x BVI-B4A).\n"
         "11. Aditivos/distratos que só alteram contrato RH/PJ interno → monday_tipo RH.\n"
-        "12. Aditivos B2B/societários sem novo tipo → null e is_supplemental true no racional.\n"
+        "12. Aditivos/anexos: mesmo monday_tipo do contrato principal.\n"
+        "13. Aditivo 4Equity a contrato societário → Contratos Societários.\n"
+        "14. Aditivos B2B/societários sem tipo novo → null se o principal não for identificável.\n"
+        "15. Leia o PDF: objeto do contrato prevalece sobre o nome do fornecedor no título.\n"
+        "16. Documentos internos (circularização de fornecedores ou advogados, "
+        "requerimento de parcelamento, câmbio) → monday_tipo null "
+        "(sem Tipo no Controle; roteamento no quadro Contratos quando aplicável).\n"
         f"Nome no Autentique: {document_name}\n"
     )
 
@@ -512,14 +825,26 @@ def resolve_controle_tipo_label(
     skip_gemini: bool = False,
     min_confidence: Confidence = "medium",
 ) -> str | None:
-    """Define o label Tipo para o Controle (None = deixar em branco / suplementar)."""
+    """Define o label Tipo para o Controle (None = deixar em branco / suplementar).
+
+    Política: título só grava Tipo em casos explícitos (RH, NDA, pedido MP, internos).
+    Demais casos exigem análise do PDF; com PDF presente, só a classificação Gemini grava Tipo.
+    """
+    inherited = classify_accessory_follows_principal(
+        document_name=document_name,
+        metadata=metadata,
+    )
+    if inherited and inherited.monday_tipo:
+        return inherited.monday_tipo
+
     if should_omit_controle_tipo(document_name=document_name, metadata=metadata):
         return None
 
     heuristic = classify_controle_tipo_heuristic(document_name=document_name, metadata=metadata)
+    has_pdf = pdf_path is not None and pdf_path.exists()
+    rank = {"high": 3, "medium": 2, "low": 1}
 
-    if pdf_path and pdf_path.exists() and not skip_gemini:
-        gemini: TipoClassificationResult | None = None
+    if has_pdf and not skip_gemini:
         try:
             gemini = classify_controle_tipo_with_gemini(
                 pdf_path=pdf_path,
@@ -527,13 +852,19 @@ def resolve_controle_tipo_label(
                 api_key=gemini_api_key,
             )
         except ContractExtractionError:
-            gemini = None
-        if gemini and gemini.monday_tipo:
-            rank = {"high": 3, "medium": 2, "low": 1}
-            if rank[gemini.confidence] >= rank[min_confidence]:
-                return gemini.monday_tipo
-            if heuristic.confidence == "high":
-                return heuristic.monday_tipo
+            return None
+        if gemini.monday_tipo and rank[gemini.confidence] >= rank[min_confidence]:
+            return gemini.monday_tipo
+        return None
+
+    if needs_document_content_for_tipo_commit(
+        document_name=document_name,
+        metadata=metadata,
+    ):
+        return None
+
+    if heuristic.monday_tipo is None:
+        return None
 
     if heuristic.confidence == "low" and min_confidence != "low":
         return None

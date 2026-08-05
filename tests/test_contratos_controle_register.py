@@ -87,13 +87,13 @@ class TestControleRegistration:
         assert result.monday_item_id == "111"
         assert result.mirror_monday_item_id == "222"
         assert result.group_id == "group-jan"
-        assert result.tipo_filled is True
+        assert result.tipo_filled is False
         assert result.status_label == CONTROLE_STATUS_AGUARDANDO_ASSINATURA
         assert create_item_mock.call_count == 2
         jan_call = create_item_mock.call_args_list[0].kwargs
         luciano_call = create_item_mock.call_args_list[1].kwargs
         assert jan_call["group_id"] == "group-jan"
-        assert jan_call["tipo_label"] is not None
+        assert jan_call["tipo_label"] is None
         assert luciano_call["group_id"] == "group-luciano"
         assert luciano_call["tipo_label"] is None
 
@@ -305,7 +305,7 @@ class TestControleGroupAndTipoRules:
 
         assert group_id == "g-luciano"
 
-    def test_should_fill_tipo_in_luciano_group_when_inferring_label(self) -> None:
+    def test_should_not_fill_tipo_from_title_for_generic_b2b(self) -> None:
         groups = {
             "contratos pendentes de assinatura luciano": "g-luciano",
         }
@@ -316,7 +316,7 @@ class TestControleGroupAndTipoRules:
             groups=groups,
         )
 
-        assert tipo is not None
+        assert tipo is None
 
     def test_should_not_fill_tipo_for_aditivo(self) -> None:
         groups = {"contratos pendentes de assinatura jan": "g-jan"}

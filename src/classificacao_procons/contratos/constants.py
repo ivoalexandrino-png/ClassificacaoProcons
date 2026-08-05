@@ -78,6 +78,15 @@ CONTRATOS_GROUP_BY_TIPO: dict[str, str] = {
     MONDAY_GROUP_CONTRATOS_PJ: MONDAY_GROUP_RH,
 }
 
+# Coluna Tipo no Controle Assinaturas — espelha o dropdown do Controle (não todos os grupos
+# do quadro Contratos). Grupos só no Contratos (sem label no Controle): Câmbio, Procurações,
+# Encerradas, Sindicato, Políticas Internas, Ferramentas; documentos internos ficam sem Tipo.
+MONDAY_CONTROLE_TIPO_LABELS: frozenset[str] = frozenset(
+    label
+    for label in CONTRATOS_GROUP_BY_TIPO
+    if label != "Contratos de Câmbio"
+)
+
 # Grupos criados dinamicamente no Monday (título = chave de lookup)
 DYNAMIC_CONTRATOS_GROUP_TITLES = frozenset(
     {
