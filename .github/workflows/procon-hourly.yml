@@ -27,6 +27,11 @@ on:
         description: "Opcional — só elaborar estes IDs do Monday (vírgula)"
         required: false
         type: string
+      force_reelaborate:
+        description: "Com elaborate_item_ids — regenerar resposta (ignora cache/Drive antigo)"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   process:
@@ -202,6 +207,9 @@ jobs:
                 CMD+=(--item-id "$id")
               fi
             done
+          fi
+          if [ "${{ inputs.force_reelaborate }}" = "true" ]; then
+            CMD+=(--force-reelaborate)
           fi
           "${CMD[@]}"
 

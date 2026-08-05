@@ -33,6 +33,7 @@ def _extract_case_from_item(
     item: dict,
     *,
     column_lookup: dict[str, str],
+    ignore_response_links: bool = False,
 ) -> MondayCaseReady | None:
     values: dict[str, str | None] = {
         FIELD_DOCS_SAC: None,
@@ -58,7 +59,9 @@ def _extract_case_from_item(
     if not docs_sac_url:
         return None
 
-    if values.get(FIELD_RESPONSE_FULL) or values.get(FIELD_RESPONSE_UNIFIED_PDF):
+    if not ignore_response_links and (
+        values.get(FIELD_RESPONSE_FULL) or values.get(FIELD_RESPONSE_UNIFIED_PDF)
+    ):
         return None
 
     status = values.get(FIELD_STATUS)
@@ -128,5 +131,57 @@ def list_cases_ready_for_elaboration(
             case = _extract_case_from_item(item, column_lookup=column_lookup)
             if case is not None:
                 cases.append(case)
+
+    return cases
+
+
+def load_cases_for_elaboration_by_item_ids(
+    *,
+    api_token: str,
+    item_ids: set[str],
+    board_name: str = DEFAULT_BOARD_NAME,
+    ignore_response_links: bool = False,
+) -> list[MondayCaseReady]:
+    """Carrega casos pelo ID do Monday (para re-elaboração com --force-reelaborate)."""
+    if not item_ids:
+        return []
+
+    token = api_token or get_api_token_from_env()
+    if not token:
+        return []
+
+    context = load_board_metadata(
+        api_token=token,
+        board_name=board_name,
+    )
+    column_lookup = _build_column_lookup(context.columns)
+
+    data = _graphql_request(
+        api_token=token,
+        query="""
+        query ($itemIds: [ID!]) {
+          items(ids: $itemIds) {
+            id
+            name
+            column_values {
+              id
+              text
+              value
+            }
+          }
+        }
+        """,
+        variables={"itemIds": sorted(item_ids)},
+    )
+
+    cases: list[MondayCaseReady] = []
+    for item in data.get("items", []) or []:
+        case = _extract_case_from_item(
+            item,
+            column_lookup=column_lookup,
+            ignore_response_links=ignore_response_links,
+        )
+        if case is not None:
+            cases.append(case)
 
     return cases

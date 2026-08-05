@@ -38,7 +38,10 @@ from classificacao_procons.llm.openai_client import (
     get_api_key_from_env as get_openai_api_key_from_env,
 )
 from classificacao_procons.models import ElaboratedResponseResult, MondayCaseReady
-from classificacao_procons.monday.cases import list_cases_ready_for_elaboration
+from classificacao_procons.monday.cases import (
+    list_cases_ready_for_elaboration,
+    load_cases_for_elaboration_by_item_ids,
+)
 from classificacao_procons.monday.client import (
     MondayClientError,
     get_api_token_from_env,
@@ -65,6 +68,7 @@ class ResponsePipelineOptions:
     max_cases: int = 20
     dry_run: bool = False
     monday_item_ids: frozenset[str] | None = None
+    force_reelaborate: bool = False
 
 
 def _load_elaborated_item_ids(state_path: Path) -> set[str]:
@@ -167,7 +171,7 @@ def _elaborate_case(
     options: ResponsePipelineOptions,
     elaborated_item_ids: set[str],
 ) -> ElaboratedResponseResult:
-    if case.item_id in elaborated_item_ids:
+    if not options.force_reelaborate and case.item_id in elaborated_item_ids:
         return ElaboratedResponseResult(
             status="skipped_duplicate",
             monday_item_id=case.item_id,
@@ -200,10 +204,12 @@ def _elaborate_case(
             error=str(exc),
         )
 
-    existing_outputs = find_existing_response_outputs(
-        consumer_folder_id=sac_context.consumer_folder_id,
-        token_path=options.token_path,
-    )
+    existing_outputs = None
+    if not options.force_reelaborate:
+        existing_outputs = find_existing_response_outputs(
+            consumer_folder_id=sac_context.consumer_folder_id,
+            token_path=options.token_path,
+        )
     if existing_outputs is not None:
         return _mark_case_as_elaborated(
             case,
@@ -372,10 +378,17 @@ def elaborate_pending_responses(
         raise ResponsePipelineError("MONDAY_API_TOKEN não configurada.")
 
     try:
-        cases = list_cases_ready_for_elaboration(
-            api_token=monday_token,
-            limit=options.max_cases,
-        )
+        if options.monday_item_ids and options.force_reelaborate:
+            cases = load_cases_for_elaboration_by_item_ids(
+                api_token=monday_token,
+                item_ids=set(options.monday_item_ids),
+                ignore_response_links=True,
+            )
+        else:
+            cases = list_cases_ready_for_elaboration(
+                api_token=monday_token,
+                limit=options.max_cases,
+            )
     except MondayClientError as exc:
         raise ResponsePipelineError(str(exc)) from exc
 

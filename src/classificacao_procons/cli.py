@@ -291,6 +291,7 @@ def _run_elaborate(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
         token_path=args.token,
         monday_item_ids=frozenset(args.item_id) if args.item_id else None,
+        force_reelaborate=args.force_reelaborate,
     )
 
     try:
@@ -454,6 +455,14 @@ def main(argv: list[str] | None = None) -> int:
         dest="item_id",
         metavar="MONDAY_ITEM_ID",
         help="Elaborar só estes itens do Monday (pode repetir a flag).",
+    )
+    elaborate_parser.add_argument(
+        "--force-reelaborate",
+        action="store_true",
+        help=(
+            "Com --item-id: ignora cache, links no Monday e arquivos antigos no Drive; "
+            "gera nova resposta."
+        ),
     )
     elaborate_parser.add_argument("--work-dir", default="downloads/elaboration")
     elaborate_parser.add_argument(

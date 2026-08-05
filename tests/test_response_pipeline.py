@@ -233,3 +233,70 @@ def test_should_skip_when_response_files_already_exist_on_drive(
     assert results[0].status == "skipped_existing"
     generate_mock.assert_not_called()
     update_monday_mock.assert_called_once()
+
+
+@patch("classificacao_procons.drive.sac_summary.download_drive_file")
+@patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
+@patch("classificacao_procons.response_pipeline.upload_pdf_file", return_value="https://drive/unified")
+@patch("classificacao_procons.response_pipeline.upload_text_file", return_value="https://drive/text")
+@patch("classificacao_procons.response_pipeline.ensure_output_folder", return_value="out-folder")
+@patch("classificacao_procons.response_pipeline.build_unified_response_pdf")
+@patch("classificacao_procons.response_pipeline.generate_procon_response")
+@patch("classificacao_procons.response_pipeline.find_existing_response_outputs")
+@patch("classificacao_procons.response_pipeline.download_drive_file")
+@patch("classificacao_procons.response_pipeline.resolve_sac_folder_context")
+@patch("classificacao_procons.response_pipeline.load_cases_for_elaboration_by_item_ids")
+@patch("classificacao_procons.response_pipeline.has_valid_token", return_value=True)
+def test_should_regenerate_when_force_reelaborate(
+    _token_mock,
+    load_by_id_mock,
+    resolve_sac_mock,
+    download_mock,
+    find_existing_mock,
+    generate_mock,
+    _build_pdf_mock,
+    _ensure_folder_mock,
+    _upload_text_mock,
+    _upload_pdf_mock,
+    update_monday_mock,
+    download_sac_mock,
+    tmp_path,
+) -> None:
+    load_by_id_mock.return_value = [_case_ready()]
+    resolve_sac_mock.return_value = _sac_context()
+    download_mock.side_effect = _fake_download
+    download_sac_mock.side_effect = _fake_download
+    find_existing_mock.return_value = ExistingResponseOutputs(
+        full_response_url="https://drive/old-full",
+        summary_response_url="https://drive/old-summary",
+        unified_pdf_url="https://drive/old-unified",
+    )
+    generate_mock.return_value = GeneratedResponse(
+        analysis="Análise.",
+        draft="Rascunho.",
+        final_response="Resposta alinhada ao SAC.",
+        portal_summary="Resumo.",
+    )
+
+    state_path = tmp_path / "state.json"
+    state_path.write_text(
+        json.dumps({"monday_item_ids": ["100"]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    results = elaborate_pending_responses(
+        ResponsePipelineOptions(
+            work_dir=tmp_path / "work",
+            state_path=state_path,
+            monday_api_token="token-test",
+            gemini_api_key="gemini-test",
+            monday_item_ids=frozenset({"100"}),
+            force_reelaborate=True,
+        ),
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "success"
+    find_existing_mock.assert_not_called()
+    generate_mock.assert_called_once()
+    update_monday_mock.assert_called_once()
