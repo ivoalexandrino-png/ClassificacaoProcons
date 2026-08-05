@@ -25,6 +25,10 @@ from classificacao_procons.interaction_pipeline import (
     ConsumerInteractionPipelineOptions,
     process_consumer_interactions,
 )
+from classificacao_procons.llm.stale_elaboration import (
+    DEFAULT_PRE_SAC_ALIGNMENT_CUTOFF,
+    parse_utc_cutoff,
+)
 from classificacao_procons.pipeline import (
     PipelineError,
     PipelineOptions,
@@ -285,14 +289,23 @@ def _run_elaborate(args: argparse.Namespace) -> int:
         print("Google não conectado. Rode: procon-email auth", file=sys.stderr)
         return 1
 
+    stale_before = None
+    if args.reelaborate_stale_before:
+        stale_before = parse_utc_cutoff(args.reelaborate_stale_before)
+
     options = ResponsePipelineOptions(
         work_dir=Path(args.work_dir),
         max_cases=args.max_results,
         dry_run=args.dry_run,
         token_path=args.token,
         monday_item_ids=frozenset(args.item_id) if args.item_id else None,
-        force_reelaborate=args.force_reelaborate or args.reelaborate_existing,
+        force_reelaborate=(
+            args.force_reelaborate
+            or args.reelaborate_existing
+            or stale_before is not None
+        ),
         reelaborate_existing=args.reelaborate_existing,
+        reelaborate_stale_before=stale_before,
     )
 
     try:
@@ -471,6 +484,16 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Só casos que já têm Resposta completa ou PDF unificado no Monday "
             "(re-gera com alinhamento SAC atual; use --max-results para lotes)."
+        ),
+    )
+    elaborate_parser.add_argument(
+        "--reelaborate-stale-before",
+        metavar="ISO-8601",
+        default=None,
+        help=(
+            "Só respostas automáticas geradas no Drive antes deste instante UTC "
+            f"(padrão implícito no workflow: {DEFAULT_PRE_SAC_ALIGNMENT_CUTOFF.isoformat()}). "
+            "Use para refazer elaborações pré-alinhamento SAC (#122)."
         ),
     )
     elaborate_parser.add_argument("--work-dir", default="downloads/elaboration")

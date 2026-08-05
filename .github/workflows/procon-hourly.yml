@@ -39,6 +39,18 @@ on:
         required: false
         type: boolean
         default: false
+      reelaborate_stale_sac_responses:
+        description: >-
+          Re-elaborar só respostas geradas ANTES do alinhamento SAC (#122) — data no Drive
+          anterior ao corte (evita Nathalia e demais já corrigidos)
+        required: false
+        type: boolean
+        default: false
+      reelaborate_stale_before:
+        description: "Instante UTC ISO-8601 (ex. 2026-08-05T19:54:00Z) — usado com reelaborate_stale_sac_responses"
+        required: false
+        type: string
+        default: "2026-08-05T19:54:00Z"
       elaborate_max_results:
         description: "Limite de casos na etapa elaborate deste run"
         required: false
@@ -155,7 +167,8 @@ jobs:
       - name: Process Procon complaints
         if: >-
           (github.event_name != 'workflow_dispatch'
-            || inputs.reelaborate_existing_responses != true)
+            || (inputs.reelaborate_existing_responses != true
+              && inputs.reelaborate_stale_sac_responses != true))
         continue-on-error: true
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
@@ -164,7 +177,8 @@ jobs:
       - name: Process consumer interactions (Procon-SP)
         if: >-
           (github.event_name != 'workflow_dispatch'
-            || inputs.reelaborate_existing_responses != true)
+            || (inputs.reelaborate_existing_responses != true
+              && inputs.reelaborate_stale_sac_responses != true))
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
         run: python -m classificacao_procons.cli process-interactions --max-results 20
@@ -233,6 +247,11 @@ jobs:
           fi
           if [ "${{ inputs.reelaborate_existing_responses }}" = "true" ]; then
             CMD+=(--reelaborate-existing --force-reelaborate)
+          fi
+          if [ "${{ inputs.reelaborate_stale_sac_responses }}" = "true" ]; then
+            BEFORE="${{ inputs.reelaborate_stale_before }}"
+            if [ -z "$BEFORE" ]; then BEFORE="2026-08-05T19:54:00Z"; fi
+            CMD+=(--reelaborate-stale-before "$BEFORE" --force-reelaborate)
           fi
           "${CMD[@]}"
 
