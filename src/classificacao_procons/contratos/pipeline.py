@@ -16,14 +16,12 @@ from classificacao_procons.contratos.autentique.client import (
 from classificacao_procons.contratos.autentique.webhook import AutentiqueWebhookEvent
 from classificacao_procons.contratos.constants import CONTROLE_STATUS_ASSINADO
 from classificacao_procons.contratos.contratos_routing import (
-    is_supplemental_document,
     resolve_contratos_registration_mode,
 )
+from classificacao_procons.contratos.controle_tipo import resolve_controle_tipo_label
 from classificacao_procons.contratos.drive_routing import (
     build_contract_pdf_filename,
     format_drive_folder_path,
-    infer_category,
-    infer_monday_tipo,
     resolve_drive_destination,
 )
 from classificacao_procons.contratos.gemini_extractor import (
@@ -201,12 +199,14 @@ def process_finished_document(
 
     tipo_label = controle_item.tipo if controle_item else None
     if monday_token and controle_item and controle_item.status != CONTROLE_STATUS_ASSINADO:
-        if not (tipo_label and str(tipo_label).strip()) and not is_supplemental_document(
-            document_name=document.name,
-        ):
-            inferred_tipo = infer_monday_tipo(
+        if not (tipo_label and str(tipo_label).strip()):
+            inferred_tipo = resolve_controle_tipo_label(
                 document_name=document.name,
-                category=infer_category(document_name=document.name),
+                metadata=metadata,
+                pdf_path=pdf_path,
+                gemini_api_key=opts.gemini_api_key,
+                skip_gemini=opts.skip_gemini,
+                min_confidence="medium",
             )
             if inferred_tipo:
                 update_controle_tipo(

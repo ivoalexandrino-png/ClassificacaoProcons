@@ -14,7 +14,6 @@ from classificacao_procons.contratos.constants import (
     DRIVE_SUBFOLDER_RH_CLT,
     DRIVE_SUBFOLDER_RH_PJ,
     MINUTAS_SUBFOLDER_BY_CATEGORY,
-    MONDAY_TIPO_RH,
 )
 
 RH_PJ_KEYWORDS: tuple[str, ...] = (
@@ -130,40 +129,34 @@ def infer_category(*, document_name: str, contract_type: str | None = None) -> s
     return "default"
 
 
-def infer_monday_tipo(*, document_name: str, category: str) -> str:
+def infer_monday_tipo(
+    *,
+    document_name: str,
+    category: str,
+    contract_type: str | None = None,
+) -> str:
     """Mapeia categoria para label Tipo do Monday (Controle Assinaturas / Contratos)."""
-    if category in {"rh_clt", "rh_pj"}:
-        return MONDAY_TIPO_RH
-    if is_rh_document(document_name=document_name):
-        return MONDAY_TIPO_RH
-    if category == "influencer":
-        return "Contratos Influencers (Queens)"
-    if category == "nda":
-        return "NDA"
-    if category == "marcas_proprias":
-        return "Pedidos Marcas Próprias"
-    if category == "b2b":
-        return "Contratos B2B"
-    if category == "locacao":
-        return "Contratos B4A"
+    from classificacao_procons.contratos.controle_tipo import classify_controle_tipo_heuristic
+    from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 
-    blob = _normalize_text(document_name)
-    if "b2b" in blob:
-        return "Contratos B2B"
-    if "influencer" in blob:
-        return "Contratos Influencers (Queens)"
-    if "mmkt" in blob:
-        return "Contratos MMKT"
-    if "itaro" in blob:
-        return "Contratos Itaro"
-    if "aurora" in blob:
-        return "Contratos Aurora"
-    if "rv bvi" in blob or "bvi" in blob:
-        return "Contratos RV BVI"
-    if "societ" in blob:
-        return "Contratos Societários"
-    if "cambio" in blob or "câmbio" in document_name.lower():
-        return "Contratos de Câmbio"
+    del category  # legado: classificador unificado ignora categoria isolada
+    metadata = (
+        ContractMetadata(
+            counterparty_name=document_name,
+            counterparty_cnpj=None,
+            contract_type=contract_type,
+            company=None,
+            start_date=None,
+            end_date=None,
+            property_name=None,
+            summary=None,
+        )
+        if contract_type
+        else None
+    )
+    result = classify_controle_tipo_heuristic(document_name=document_name, metadata=metadata)
+    if result.monday_tipo:
+        return result.monday_tipo
     return "Contratos B4A"
 
 
