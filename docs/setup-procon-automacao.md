@@ -150,6 +150,7 @@ Sem essas colunas, os arquivos ainda vão para o Drive; só os links no Monday p
 
 - Raiz: PDF da reclamação + pasta `Informações` com anexos do SAC (**.txt**, **PDF**, imagens na resposta unificada)  
 - PDF **digitalizado** (sem camada de texto) e imagens: texto extraído via **Gemini** antes da elaboração  
+- A elaboração **prioriza o relato do SAC** na pasta `Informações`; a resposta não pode contradizer o posicionamento do SAC (ex.: negar brinde se o SAC negou)  
 - Saída: `Resposta Automatica` → `resposta-completa.txt`, `resposta-resumo-1024.txt`, `resposta-unificada.pdf` (resposta + anexos SAC; **sem** o PDF da CIP do Procon)
 
 ## Disparar manualmente
