@@ -34,6 +34,7 @@ def _extract_case_from_item(
     *,
     column_lookup: dict[str, str],
     ignore_response_links: bool = False,
+    ignore_closed_status: bool = False,
 ) -> MondayCaseReady | None:
     values: dict[str, str | None] = {
         FIELD_DOCS_SAC: None,
@@ -65,7 +66,11 @@ def _extract_case_from_item(
         return None
 
     status = values.get(FIELD_STATUS)
-    if status and any(keyword in _normalize_name(status) for keyword in CLOSED_STATUS_KEYWORDS):
+    if (
+        not ignore_closed_status
+        and status
+        and any(keyword in _normalize_name(status) for keyword in CLOSED_STATUS_KEYWORDS)
+    ):
         return None
 
     return MondayCaseReady(
@@ -141,6 +146,7 @@ def load_cases_for_elaboration_by_item_ids(
     item_ids: set[str],
     board_name: str = DEFAULT_BOARD_NAME,
     ignore_response_links: bool = False,
+    ignore_closed_status: bool = False,
 ) -> list[MondayCaseReady]:
     """Carrega casos pelo ID do Monday (para re-elaboração com --force-reelaborate)."""
     if not item_ids:
@@ -180,6 +186,7 @@ def load_cases_for_elaboration_by_item_ids(
             item,
             column_lookup=column_lookup,
             ignore_response_links=ignore_response_links,
+            ignore_closed_status=ignore_closed_status,
         )
         if case is not None:
             cases.append(case)
