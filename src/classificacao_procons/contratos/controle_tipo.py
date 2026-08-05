@@ -207,6 +207,13 @@ def _classify_four_equity(
             source="heuristic",
             rationale="4Equity com objeto societário (equity/token/opções/quotas).",
         )
+    if _is_aditivo_blob(blob):
+        return TipoClassificationResult(
+            monday_tipo="Contratos Societários",
+            confidence="high",
+            source="heuristic",
+            rationale="Aditivo 4Equity segue contrato societário principal.",
+        )
     if any(k in blob for k in FOUR_EQUITY_INTERCO_KEYWORDS):
         entity = _resolve_entity_from_metadata(metadata) or "b4a"
         return TipoClassificationResult(
@@ -259,12 +266,110 @@ def _is_jan_pf_contract(blob: str, metadata: ContractMetadata | None) -> bool:
     return False
 
 
+def _is_aditivo_blob(blob: str) -> bool:
+    return any(
+        marker in blob
+        for marker in (
+            "aditivo",
+            "termo aditivo",
+            "distrato",
+            "anexo",
+            "prorrogacao",
+            "prorrogação",
+            "renovacao",
+            "renovação",
+        )
+    )
+
+
+def _is_accessory_document(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None,
+) -> bool:
+    if metadata is not None and metadata.is_supplemental is True:
+        return True
+    if metadata is not None and metadata.is_supplemental is False:
+        return False
+    return _is_aditivo_blob(_blob(document_name, metadata))
+
+
+def _derive_principal_document_title(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None,
+) -> str | None:
+    if metadata and metadata.parent_contract_reference:
+        cleaned = metadata.parent_contract_reference.strip()
+        if cleaned:
+            return cleaned
+
+    stripped = document_name.strip()
+    patterns = (
+        r"^(?:\d+º\s+)?termo\s+aditivo\s*[-–:]\s*",
+        r"^(?:\d+º\s+)?aditivo\s*[-–:]\s*",
+        r"^aditivo\s+(?:ao|à|a)\s+(?:contrato\s+)?",
+        r"^distrato\s*[-–:]\s*",
+        r"^anexo\s*[-–:]\s*",
+    )
+    for pattern in patterns:
+        candidate = re.sub(pattern, "", stripped, count=1, flags=re.IGNORECASE).strip()
+        if candidate and candidate.casefold() != stripped.casefold() and len(candidate) >= 8:
+            return candidate
+    return None
+
+
+def classify_accessory_follows_principal(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> TipoClassificationResult | None:
+    """Regra acessório segue o principal (aditivo/anexo herda Tipo do contrato base)."""
+    if not _is_accessory_document(document_name=document_name, metadata=metadata):
+        return None
+
+    blob = _blob(document_name, metadata)
+    if ("4equity" in blob or "4 equity" in blob) and _is_aditivo_blob(blob):
+        return TipoClassificationResult(
+            monday_tipo="Contratos Societários",
+            confidence="high",
+            source="heuristic",
+            rationale=(
+                "Aditivo 4Equity: acessório segue contrato societário principal "
+                "(ecossistema 4Equity)."
+            ),
+        )
+
+    principal_title = _derive_principal_document_title(
+        document_name=document_name,
+        metadata=metadata,
+    )
+    if not principal_title:
+        return None
+
+    principal = classify_controle_tipo_heuristic(
+        document_name=principal_title,
+        metadata=None,
+    )
+    if not principal.monday_tipo:
+        return None
+    confidence: Confidence = "high" if principal.confidence == "high" else "medium"
+    return TipoClassificationResult(
+        monday_tipo=principal.monday_tipo,
+        confidence=confidence,
+        source="heuristic",
+        rationale=f"Acessório segue contrato principal: {principal_title[:80]}.",
+    )
+
+
 def should_omit_controle_tipo(
     *,
     document_name: str,
     metadata: ContractMetadata | None = None,
 ) -> bool:
     """Documentos complementares sem categoria RH explícita ficam sem Tipo (subitem/pai)."""
+    if classify_accessory_follows_principal(document_name=document_name, metadata=metadata):
+        return False
     blob = _blob(document_name, metadata)
     if _matches_rh_pj(blob) or _matches_rh_clt(blob):
         if "aditivo" in blob or "distrato" in blob:
@@ -290,6 +395,13 @@ def classify_controle_tipo_heuristic(
     document_name: str,
     metadata: ContractMetadata | None = None,
 ) -> TipoClassificationResult:
+    inherited = classify_accessory_follows_principal(
+        document_name=document_name,
+        metadata=metadata,
+    )
+    if inherited:
+        return inherited
+
     blob = _blob(document_name, metadata)
 
     if is_rh_document(
@@ -421,7 +533,9 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
         "(BVI-B4A, CODEMP) → B4A salvo outra contratante.\n"
         "10. NÃO use Contratos RV BVI só porque aparece 'BVI' no nome (ex. 4Equity x BVI-B4A).\n"
         "11. Aditivos/distratos que só alteram contrato RH/PJ interno → monday_tipo RH.\n"
-        "12. Aditivos B2B/societários sem novo tipo → null e is_supplemental true no racional.\n"
+        "12. Aditivos/anexos: mesmo monday_tipo do contrato principal.\n"
+        "13. Aditivo 4Equity a contrato societário → Contratos Societários.\n"
+        "14. Aditivos B2B/societários sem tipo novo → null se o principal não for identificável.\n"
         f"Nome no Autentique: {document_name}\n"
     )
 
@@ -513,6 +627,13 @@ def resolve_controle_tipo_label(
     min_confidence: Confidence = "medium",
 ) -> str | None:
     """Define o label Tipo para o Controle (None = deixar em branco / suplementar)."""
+    inherited = classify_accessory_follows_principal(
+        document_name=document_name,
+        metadata=metadata,
+    )
+    if inherited and inherited.monday_tipo:
+        return inherited.monday_tipo
+
     if should_omit_controle_tipo(document_name=document_name, metadata=metadata):
         return None
 

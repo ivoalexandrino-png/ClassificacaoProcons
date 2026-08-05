@@ -18,11 +18,37 @@ class TestControleTipoHeuristic:
         assert result.monday_tipo == "NDA"
         assert result.confidence == "high"
 
-    def test_should_classify_four_equity_aditivo_intercompany_as_b4a(self) -> None:
+    def test_should_classify_four_equity_aditivo_as_societario_follows_principal(self) -> None:
         name = "1º TERMO ADITIVO - 4Equity x BVI-B4A SERVIÇOS x CODEMP 2025"
         result = classify_controle_tipo_heuristic(document_name=name)
-        assert result.monday_tipo == "Contratos B4A"
-        assert "4Equity" in result.rationale or "intercompany" in result.rationale
+        assert result.monday_tipo == "Contratos Societários"
+        rationale = result.rationale.casefold()
+        assert "acessório" in rationale or "societário" in rationale
+
+    def test_should_classify_aditivo_b2b_follows_principal_title(self) -> None:
+        name = "Aditivo ao Contrato de Parceria B2B - Fornecedor ABC"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo == "Contratos B2B"
+        assert "principal" in result.rationale.casefold()
+
+    def test_should_classify_aditivo_from_metadata_parent_reference(self) -> None:
+        metadata = ContractMetadata(
+            counterparty_name="HoldCo",
+            counterparty_cnpj=None,
+            contract_type="aditivo",
+            company=None,
+            start_date=None,
+            end_date=None,
+            property_name=None,
+            summary=None,
+            parent_contract_reference="Acordo 4Equity - Stock Options Colaborador 2026",
+            is_supplemental=True,
+        )
+        result = classify_controle_tipo_heuristic(
+            document_name="1º Aditivo - HoldCo",
+            metadata=metadata,
+        )
+        assert result.monday_tipo == "Contratos Societários"
 
     def test_should_not_classify_four_equity_bvi_as_rv_bvi(self) -> None:
         name = "4Equity x BVI-B4A SERVIÇOS x CODEMP 2025"
