@@ -35,6 +35,7 @@ def _extract_case_from_item(
     column_lookup: dict[str, str],
     ignore_response_links: bool = False,
     ignore_closed_status: bool = False,
+    only_with_existing_response: bool = False,
 ) -> MondayCaseReady | None:
     values: dict[str, str | None] = {
         FIELD_DOCS_SAC: None,
@@ -60,9 +61,13 @@ def _extract_case_from_item(
     if not docs_sac_url:
         return None
 
-    if not ignore_response_links and (
-        values.get(FIELD_RESPONSE_FULL) or values.get(FIELD_RESPONSE_UNIFIED_PDF)
-    ):
+    has_response_link = bool(
+        values.get(FIELD_RESPONSE_FULL) or values.get(FIELD_RESPONSE_UNIFIED_PDF),
+    )
+    if only_with_existing_response:
+        if not has_response_link:
+            return None
+    elif not ignore_response_links and has_response_link:
         return None
 
     status = values.get(FIELD_STATUS)
@@ -136,6 +141,79 @@ def list_cases_ready_for_elaboration(
             case = _extract_case_from_item(item, column_lookup=column_lookup)
             if case is not None:
                 cases.append(case)
+
+    return cases
+
+
+def list_cases_with_elaborated_responses(
+    *,
+    api_token: str | None = None,
+    board_name: str = DEFAULT_BOARD_NAME,
+    limit: int | None = None,
+    page_size: int = 100,
+    max_pages: int = 50,
+) -> list[MondayCaseReady]:
+    """Lista casos com Docs SAC e link de resposta automática já preenchido no Monday."""
+    token = api_token or get_api_token_from_env()
+    if not token:
+        return []
+
+    context = load_board_metadata(
+        api_token=token,
+        board_name=board_name,
+    )
+    column_lookup = _build_column_lookup(context.columns)
+
+    cases: list[MondayCaseReady] = []
+    cursor: str | None = None
+
+    for _ in range(max_pages):
+        data = _graphql_request(
+            api_token=token,
+            query="""
+            query ($boardId: ID!, $limit: Int!, $cursor: String) {
+              boards(ids: [$boardId]) {
+                items_page(limit: $limit, cursor: $cursor) {
+                  cursor
+                  items {
+                    id
+                    name
+                    column_values {
+                      id
+                      text
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            """,
+            variables={
+                "boardId": context.board_id,
+                "limit": page_size,
+                "cursor": cursor,
+            },
+        )
+        boards = data.get("boards", [])
+        if not boards:
+            break
+
+        page = boards[0].get("items_page", {})
+        for item in page.get("items", []):
+            case = _extract_case_from_item(
+                item,
+                column_lookup=column_lookup,
+                ignore_closed_status=True,
+                only_with_existing_response=True,
+            )
+            if case is not None:
+                cases.append(case)
+                if limit is not None and len(cases) >= limit:
+                    return cases
+
+        cursor = page.get("cursor")
+        if not cursor:
+            break
 
     return cases
 

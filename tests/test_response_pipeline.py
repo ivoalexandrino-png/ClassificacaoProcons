@@ -235,6 +235,10 @@ def test_should_skip_when_response_files_already_exist_on_drive(
     update_monday_mock.assert_called_once()
 
 
+@patch(
+    "classificacao_procons.response_pipeline.clear_automatic_response_output_files",
+    return_value=0,
+)
 @patch("classificacao_procons.drive.sac_summary.download_drive_file")
 @patch("classificacao_procons.response_pipeline.update_elaborated_response_links")
 @patch("classificacao_procons.response_pipeline.upload_pdf_file", return_value="https://drive/unified")
@@ -260,6 +264,7 @@ def test_should_regenerate_when_force_reelaborate(
     _upload_pdf_mock,
     update_monday_mock,
     download_sac_mock,
+    clear_outputs_mock,
     tmp_path,
 ) -> None:
     load_by_id_mock.return_value = [_case_ready()]
@@ -298,5 +303,31 @@ def test_should_regenerate_when_force_reelaborate(
     assert len(results) == 1
     assert results[0].status == "success"
     find_existing_mock.assert_not_called()
+    clear_outputs_mock.assert_called_once()
     generate_mock.assert_called_once()
     update_monday_mock.assert_called_once()
+
+
+@patch("classificacao_procons.response_pipeline.list_cases_with_elaborated_responses")
+@patch("classificacao_procons.response_pipeline.has_valid_token", return_value=True)
+def test_should_use_existing_list_when_reelaborate_existing_dry_run(
+    _token_mock,
+    list_existing_mock,
+    tmp_path,
+) -> None:
+    list_existing_mock.return_value = [_case_ready()]
+
+    results = elaborate_pending_responses(
+        ResponsePipelineOptions(
+            work_dir=tmp_path / "work",
+            state_path=tmp_path / "state.json",
+            monday_api_token="token-test",
+            reelaborate_existing=True,
+            force_reelaborate=True,
+            dry_run=True,
+        ),
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "dry_run"
+    list_existing_mock.assert_called_once()

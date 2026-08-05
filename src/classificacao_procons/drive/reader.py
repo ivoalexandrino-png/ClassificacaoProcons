@@ -367,6 +367,46 @@ def find_existing_response_outputs(
     )
 
 
+def _resolve_automatic_response_output_folder_id(
+    service,
+    *,
+    consumer_folder_id: str,
+) -> str | None:
+    children = _list_children(service, folder_id=consumer_folder_id)
+    for child in children:
+        if child.mime_type == DRIVE_FOLDER_MIME and child.name == RESPONSE_OUTPUT_FOLDER:
+            return child.file_id
+    return None
+
+
+def clear_automatic_response_output_files(
+    *,
+    consumer_folder_id: str,
+    token_path: str | None = None,
+) -> int:
+    """Remove todos os arquivos em ``Resposta Automatica`` (mantém a pasta)."""
+    service = _build_drive_service(token_path)
+    output_folder_id = _resolve_automatic_response_output_folder_id(
+        service,
+        consumer_folder_id=consumer_folder_id,
+    )
+    if output_folder_id is None:
+        return 0
+
+    removed = 0
+    for child in _list_children(service, folder_id=output_folder_id):
+        if child.mime_type == DRIVE_FOLDER_MIME:
+            continue
+        try:
+            service.files().delete(fileId=child.file_id, supportsAllDrives=True).execute()
+        except HttpError as exc:
+            raise DriveClientError(
+                f"Falha ao remover arquivo antigo da resposta automática ({child.name}): {exc}",
+            ) from exc
+        removed += 1
+    return removed
+
+
 def upload_text_file(
     *,
     folder_id: str,

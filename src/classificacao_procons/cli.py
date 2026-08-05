@@ -291,7 +291,8 @@ def _run_elaborate(args: argparse.Namespace) -> int:
         dry_run=args.dry_run,
         token_path=args.token,
         monday_item_ids=frozenset(args.item_id) if args.item_id else None,
-        force_reelaborate=args.force_reelaborate,
+        force_reelaborate=args.force_reelaborate or args.reelaborate_existing,
+        reelaborate_existing=args.reelaborate_existing,
     )
 
     try:
@@ -460,8 +461,16 @@ def main(argv: list[str] | None = None) -> int:
         "--force-reelaborate",
         action="store_true",
         help=(
-            "Com --item-id: ignora cache, links no Monday e arquivos antigos no Drive; "
-            "gera nova resposta."
+            "Ignora cache e short-circuit do Drive; apaga arquivos em Resposta Automatica "
+            "e gera nova resposta. Obrigatório com --reelaborate-existing."
+        ),
+    )
+    elaborate_parser.add_argument(
+        "--reelaborate-existing",
+        action="store_true",
+        help=(
+            "Só casos que já têm Resposta completa ou PDF unificado no Monday "
+            "(re-gera com alinhamento SAC atual; use --max-results para lotes)."
         ),
     )
     elaborate_parser.add_argument("--work-dir", default="downloads/elaboration")
