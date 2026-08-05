@@ -255,7 +255,7 @@ def _is_controle_internal_document(blob: str) -> bool:
     """Sem coluna Tipo no Controle (documentos internos ou tipo só no quadro Contratos)."""
     if "requerimento de parcelamento" in blob:
         return True
-    if "carta de circularizacao" in blob and "advogado" in blob:
+    if "circularizacao" in blob and ("fornecedor" in blob or "advogado" in blob):
         return True
     if "cambio" in blob:
         return True
@@ -699,6 +699,9 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
         "13. Aditivo 4Equity a contrato societário → Contratos Societários.\n"
         "14. Aditivos B2B/societários sem tipo novo → null se o principal não for identificável.\n"
         "15. Leia o PDF: objeto do contrato prevalece sobre o nome do fornecedor no título.\n"
+        "16. Documentos internos (circularização de fornecedores ou advogados, "
+        "requerimento de parcelamento, câmbio) → monday_tipo null "
+        "(sem Tipo no Controle; roteamento no quadro Contratos quando aplicável).\n"
         f"Nome no Autentique: {document_name}\n"
     )
 

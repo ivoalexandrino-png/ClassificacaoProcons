@@ -36,6 +36,18 @@ class TestControleTipoBusinessRules:
         name = "Carta de Circularização - Advogados - Ub"
         assert resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
 
+    def test_should_omit_tipo_for_circularizacao_fornecedores_mmkt(self) -> None:
+        name = "Circularização de Fornecedores MMKT - Q3 2026"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo is None
+        assert resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+
+    def test_should_classify_aditivo_locacao_follows_principal_mmkt_tipo(self) -> None:
+        name = "1º TERMO ADITIVO - Contrato de Locação Comercial MMKT 2024"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo == "Contratos MMKT"
+        assert "principal" in result.rationale.casefold()
+
     def test_should_omit_tipo_for_requerimento_parcelamento(self) -> None:
         name = "REQUERIMENTO DE PARCELAMENTO"
         assert resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
