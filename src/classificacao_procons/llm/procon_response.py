@@ -33,9 +33,11 @@ from classificacao_procons.llm.openai_client import (
     get_api_key_from_env as get_openai_api_key_from_env,
 )
 from classificacao_procons.llm.pdf_text import extract_pdf_text_soft, resolve_complaint_text
+from classificacao_procons.llm.sac_alignment import should_run_sac_consistency_pass
 
 _OPENAI_SYSTEM = (
-    "Você é advogado(a) especializado em defesa do fornecedor em reclamações no Procon-SP. "
+    "Você é advogado(a) especializado em respostas da EMPRESA (fornecedora) ao Procon-SP. "
+    "O relato do SAC define a posição da empresa; nunca contradiga o SAC. "
     "Siga instruções de formato à risca."
 )
 
@@ -93,6 +95,31 @@ def _complaint_text_for_legal_guards(*, embedded: str, analysis: str) -> str:
     return ""
 
 
+def _apply_sac_consistency_pass(
+    *,
+    response_text: str,
+    sac_summary: str,
+    api_key: str,
+    model_candidates: list[str],
+    selected_model: str,
+) -> str:
+    if not should_run_sac_consistency_pass(sac_summary):
+        return response_text
+    revised, _ = _gemini_text_with_model_fallback(
+        api_key=api_key,
+        model_candidates=[selected_model, *model_candidates],
+        parts=[
+            {
+                "text": prompts.sac_consistency_prompt(
+                    sac_summary=sac_summary,
+                    response_text=response_text,
+                ),
+            },
+        ],
+    )
+    return revised
+
+
 def _generate_with_gemini(
     *,
     complaint_pdf_path: Path,
@@ -129,6 +156,7 @@ def _generate_with_gemini(
         protocol_number=protocol_number,
         complaint_excerpt="",
         use_pdf_attachment=True,
+        sac_summary=sac_summary,
     )
     analysis, selected_model = _gemini_text_with_model_fallback(
         api_key=api_key,
@@ -170,12 +198,22 @@ def _generate_with_gemini(
                     draft=draft,
                     signed_date=signed,
                     defendant_legal_block=defendant_block,
+                    sac_summary=sac_summary,
                 ),
             },
         ],
     )
     final_response = finalize_procon_response_text(final_response)
     final_response = apply_multa_replacement(final_response)
+    final_response = _apply_defendant_legal_guards(final_response, complaint_text=complaint_text)
+    final_response = _apply_sac_consistency_pass(
+        response_text=final_response,
+        sac_summary=sac_summary,
+        api_key=api_key,
+        model_candidates=model_candidates,
+        selected_model=selected_model,
+    )
+    final_response = finalize_procon_response_text(final_response)
     final_response = _apply_defendant_legal_guards(final_response, complaint_text=complaint_text)
 
     portal_summary, _ = _gemini_text_with_model_fallback(
@@ -226,6 +264,7 @@ def _generate_with_openai(
             protocol_number=protocol_number,
             complaint_excerpt=complaint_text,
             use_pdf_attachment=False,
+            sac_summary=sac_summary,
         ),
     )
 
@@ -252,6 +291,7 @@ def _generate_with_openai(
             draft=draft,
             signed_date=signed,
             defendant_legal_block=defendant_block,
+            sac_summary=sac_summary,
         ),
     )
     final_response = finalize_procon_response_text(final_response)
