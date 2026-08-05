@@ -2,12 +2,12 @@
 
 import pytest
 
+from classificacao_procons.contratos.constants import MONDAY_TIPO_RH
 from classificacao_procons.contratos.controle_tipo import (
     classify_controle_tipo_heuristic,
     document_requires_pdf_analysis,
     resolve_controle_tipo_label,
 )
-from classificacao_procons.contratos.constants import MONDAY_TIPO_RH
 
 
 @pytest.mark.parametrize(
@@ -20,7 +20,6 @@ from classificacao_procons.contratos.constants import MONDAY_TIPO_RH
         ("1º TERMO ADITIVO - 4Equity x BVI-B4A SERVIÇOS x CODEMP 2025", "Contratos Societários"),
         ("Contrato Influencer - Theulyn Reis", "Contratos Influencers (Queens)"),
         ("Contrato Societário - Tokenização ativos", "Contratos Societários"),
-        ("Contrato de Câmbio - Banco X", "Contratos de Câmbio"),
         ("Minuta Contrato Parceria B2B - Brass Hill", "Contratos B2B"),
         ("Cessão onerosa de participação societária - HoldCo", "Contratos Societários"),
     ],
