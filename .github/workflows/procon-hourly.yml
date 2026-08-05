@@ -32,6 +32,18 @@ on:
         required: false
         type: boolean
         default: false
+      reelaborate_existing_responses:
+        description: >-
+          Re-elaborar só casos que já têm resposta automática no Monday
+          (apaga arquivos antigos no Drive e gera novos; ignora e-mails neste run)
+        required: false
+        type: boolean
+        default: false
+      elaborate_max_results:
+        description: "Limite de casos na etapa elaborate deste run"
+        required: false
+        type: number
+        default: 15
 
 jobs:
   process:
@@ -141,12 +153,18 @@ jobs:
           PY
 
       - name: Process Procon complaints
+        if: >-
+          (github.event_name != 'workflow_dispatch'
+            || inputs.reelaborate_existing_responses != true)
         continue-on-error: true
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
         run: python -m classificacao_procons.cli process --max-results 30 --sources sp,sc,alerj,campinas,uberlandia
 
       - name: Process consumer interactions (Procon-SP)
+        if: >-
+          (github.event_name != 'workflow_dispatch'
+            || inputs.reelaborate_existing_responses != true)
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
         run: python -m classificacao_procons.cli process-interactions --max-results 20
@@ -198,7 +216,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          CMD=(python -m classificacao_procons.cli elaborate --max-results 50)
+          MAX="${{ inputs.elaborate_max_results }}"
+          if [ -z "$MAX" ] || [ "$MAX" = "0" ]; then MAX=15; fi
+          CMD=(python -m classificacao_procons.cli elaborate --max-results "$MAX")
           if [ -n "${{ inputs.elaborate_item_ids }}" ]; then
             IFS=',' read -ra IDS <<< "${{ inputs.elaborate_item_ids }}"
             for id in "${IDS[@]}"; do
@@ -210,6 +230,9 @@ jobs:
           fi
           if [ "${{ inputs.force_reelaborate }}" = "true" ]; then
             CMD+=(--force-reelaborate)
+          fi
+          if [ "${{ inputs.reelaborate_existing_responses }}" = "true" ]; then
+            CMD+=(--reelaborate-existing --force-reelaborate)
           fi
           "${CMD[@]}"
 

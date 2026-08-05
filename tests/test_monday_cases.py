@@ -111,3 +111,26 @@ class TestMondayCases:
 
         assert case is not None
         assert case.item_id == "103"
+
+    def test_should_skip_case_without_response_when_only_with_existing(self) -> None:
+        item = {
+            "id": "104",
+            "name": "PENDENTE",
+            "column_values": [
+                {
+                    "id": "docs",
+                    "text": "Drive",
+                    "value": '{"url":"https://drive.google.com/drive/folders/abc"}',
+                },
+            ],
+        }
+        column_lookup = {"docs": "docs_sac"}
+
+        assert (
+            _extract_case_from_item(
+                item,
+                column_lookup=column_lookup,
+                only_with_existing_response=True,
+            )
+            is None
+        )

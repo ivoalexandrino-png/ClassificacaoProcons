@@ -14,6 +14,7 @@ from classificacao_procons.drive.pdf_builder import (
 )
 from classificacao_procons.drive.reader import (
     ExistingResponseOutputs,
+    clear_automatic_response_output_files,
     download_drive_file,
     ensure_output_folder,
     find_existing_response_outputs,
@@ -40,6 +41,7 @@ from classificacao_procons.llm.openai_client import (
 from classificacao_procons.models import ElaboratedResponseResult, MondayCaseReady
 from classificacao_procons.monday.cases import (
     list_cases_ready_for_elaboration,
+    list_cases_with_elaborated_responses,
     load_cases_for_elaboration_by_item_ids,
 )
 from classificacao_procons.monday.client import (
@@ -69,6 +71,7 @@ class ResponsePipelineOptions:
     dry_run: bool = False
     monday_item_ids: frozenset[str] | None = None
     force_reelaborate: bool = False
+    reelaborate_existing: bool = False
 
 
 def _load_elaborated_item_ids(state_path: Path) -> set[str]:
@@ -203,6 +206,21 @@ def _elaborate_case(
             protocol_number=case.protocol_number,
             error=str(exc),
         )
+
+    if options.force_reelaborate:
+        try:
+            clear_automatic_response_output_files(
+                consumer_folder_id=sac_context.consumer_folder_id,
+                token_path=options.token_path,
+            )
+        except DriveClientError as exc:
+            return ElaboratedResponseResult(
+                status="error",
+                monday_item_id=case.item_id,
+                consumer_name=case.item_name,
+                protocol_number=case.protocol_number,
+                error=str(exc),
+            )
 
     existing_outputs = None
     if not options.force_reelaborate:
@@ -378,7 +396,12 @@ def elaborate_pending_responses(
         raise ResponsePipelineError("MONDAY_API_TOKEN não configurada.")
 
     try:
-        if options.monday_item_ids and options.force_reelaborate:
+        if options.reelaborate_existing:
+            cases = list_cases_with_elaborated_responses(
+                api_token=monday_token,
+                limit=options.max_cases,
+            )
+        elif options.monday_item_ids and options.force_reelaborate:
             cases = load_cases_for_elaboration_by_item_ids(
                 api_token=monday_token,
                 item_ids=set(options.monday_item_ids),
@@ -393,10 +416,16 @@ def elaborate_pending_responses(
     except MondayClientError as exc:
         raise ResponsePipelineError(str(exc)) from exc
 
+    if options.reelaborate_existing and not options.force_reelaborate:
+        raise ResponsePipelineError(
+            "--reelaborate-existing exige --force-reelaborate "
+            "(substitui arquivos antigos no Drive).",
+        )
+
     elaborated_item_ids = _load_elaborated_item_ids(options.state_path)
     results: list[ElaboratedResponseResult] = []
 
-    if options.monday_item_ids and not cases:
+    if options.monday_item_ids and not cases and not options.reelaborate_existing:
         for item_id in sorted(options.monday_item_ids):
             results.append(
                 ElaboratedResponseResult(
