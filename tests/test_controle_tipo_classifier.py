@@ -70,6 +70,19 @@ class TestControleTipoHeuristic:
         result = classify_controle_tipo_heuristic(document_name=name)
         assert result.monday_tipo == "Pedidos Marcas Próprias"
 
+    def test_should_classify_brass_hill_minuta_parceria_as_b2b(self) -> None:
+        name = "Minuta Contrato Parceria B2B - Brass Hill Industria"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo == "Contratos B2B"
+
+    def test_should_not_guess_tipo_for_brass_hill_without_object_in_title(self) -> None:
+        name = "Contrato Brass Hill - fornecimento produtos 2026"
+        result = classify_controle_tipo_heuristic(document_name=name)
+        assert result.monday_tipo is None
+        assert (
+            resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+        )
+
     def test_should_classify_minuta_parceria_as_b2b(self) -> None:
         assert (
             _resolve_tipo_label(

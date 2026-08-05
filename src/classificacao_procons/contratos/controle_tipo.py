@@ -80,7 +80,16 @@ MP_ORDER_KEYWORDS: tuple[str, ...] = (
     "pedido conforto",
     "pedido nobilis",
     "pedido henlau",
-    "brass hill -",
+    "pedido marcas proprias",
+    "pedido marcas próprias",
+)
+
+# Fornecedores MP: B2B, pedido ou B4A — não inferir só pelo nome.
+MP_SUPPLIER_NAME_MARKERS: tuple[str, ...] = (
+    "brass hill",
+    "brasshill",
+    "nobilis",
+    "henlau",
     "glam nutri wiki",
 )
 
@@ -172,12 +181,38 @@ def _is_confidentiality_primary(blob: str) -> bool:
     return True
 
 
+def _is_unambiguous_mp_order(blob: str) -> bool:
+    if re.search(r"\bpedido\b", blob):
+        return True
+    return any(k in blob for k in MP_ORDER_KEYWORDS)
+
+
+def _mentions_mp_supplier_name(blob: str) -> bool:
+    return any(marker in blob for marker in MP_SUPPLIER_NAME_MARKERS)
+
+
+def supplier_title_requires_pdf_analysis(
+    *,
+    document_name: str,
+    metadata: ContractMetadata | None = None,
+) -> bool:
+    """Título cita fornecedor MP sem objeto claro (pedido vs parceria vs B4A)."""
+    blob = _blob(document_name, metadata)
+    if not _mentions_mp_supplier_name(blob):
+        return False
+    if _is_unambiguous_mp_order(blob):
+        return False
+    if any(k in blob for k in B2B_KEYWORDS) or "b2b" in blob:
+        return False
+    if _is_mp_supply_contract(blob):
+        return False
+    if _is_confidentiality_primary(blob):
+        return False
+    return True
+
+
 def _is_mp_order(blob: str) -> bool:
-    if any(k in blob for k in MP_ORDER_KEYWORDS):
-        return True
-    if "pedido" in blob and ("brass hill" in blob or "nobilis" in blob or "henlau" in blob):
-        return True
-    return False
+    return _is_unambiguous_mp_order(blob)
 
 
 def _is_mp_supply_contract(blob: str) -> bool:
@@ -478,6 +513,17 @@ def classify_controle_tipo_heuristic(
             rationale="Minuta padrão de parceria ou proposta comercial B2B.",
         )
 
+    if supplier_title_requires_pdf_analysis(document_name=document_name, metadata=metadata):
+        return TipoClassificationResult(
+            monday_tipo=None,
+            confidence="low",
+            source="heuristic",
+            rationale=(
+                "Fornecedor pode ter contratos B2B, pedidos de marcas próprias e B4A — "
+                "classificar pelo conteúdo do PDF (não só pelo nome)."
+            ),
+        )
+
     if "cambio" in blob or "câmbio" in document_name.casefold():
         return TipoClassificationResult(
             monday_tipo="Contratos de Câmbio",
@@ -520,8 +566,8 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
         "1. RH: colaboradores, CLT, rescisão, TCE, estágio, férias, códigos de conduta, "
         "contratos e aditivos de PJ INTERNOS (prestação para a B4A como colaborador).\n"
         "2. NDA: acordo de confidencialidade como OBJETO principal (não cláusula em parceria).\n"
-        "3. Pedidos Marcas Próprias: pedidos a fornecedores de produtos com nossa marca "
-        "(ex. Brass Hill, pedido MP). NÃO confundir com contrato de fornecimento exclusivo.\n"
+        "3. Pedidos MP: pedido de produção/compra com nossa marca. "
+        "Não use só o nome do fornecedor (Brass Hill, Nobilis): pode ser B2B, MP ou B4A.\n"
         "4. Contratos Societários: tokenização, stock options, convertible notes, 4Equity, "
         "acordos de quotas/sócios, cessão onerosa de participação societária.\n"
         "5. Contratos Influencers (Queens): campanhas com influencers.\n"
@@ -536,6 +582,7 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
         "12. Aditivos/anexos: mesmo monday_tipo do contrato principal.\n"
         "13. Aditivo 4Equity a contrato societário → Contratos Societários.\n"
         "14. Aditivos B2B/societários sem tipo novo → null se o principal não for identificável.\n"
+        "15. Leia o PDF: objeto do contrato prevalece sobre o nome do fornecedor no título.\n"
         f"Nome no Autentique: {document_name}\n"
     )
 
@@ -653,8 +700,11 @@ def resolve_controle_tipo_label(
             rank = {"high": 3, "medium": 2, "low": 1}
             if rank[gemini.confidence] >= rank[min_confidence]:
                 return gemini.monday_tipo
-            if heuristic.confidence == "high":
+            if heuristic.monday_tipo and heuristic.confidence == "high":
                 return heuristic.monday_tipo
+
+    if heuristic.monday_tipo is None:
+        return None
 
     if heuristic.confidence == "low" and min_confidence != "low":
         return None
