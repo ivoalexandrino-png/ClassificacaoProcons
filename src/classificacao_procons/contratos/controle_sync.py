@@ -7,6 +7,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 
 from classificacao_procons.contratos.autentique.client import (
     AutentiqueClientError,
@@ -22,9 +23,6 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_LINK_TRACK_JAN,
     CONTROLE_LINK_TRACK_LUCIANO,
     CONTROLE_STATUS_ASSINADO,
-)
-from classificacao_procons.contratos.contratos_routing import (
-    is_supplemental_document,
 )
 from classificacao_procons.contratos.controle_create_policy import (
     controle_create_paused_message,
@@ -48,6 +46,7 @@ from classificacao_procons.contratos.controle_status import (
     resolve_signed_at_document,
     resolve_signed_at_for_track,
 )
+from classificacao_procons.contratos.controle_tipo import resolve_controle_tipo_label
 from classificacao_procons.contratos.controle_track_repair import (
     CONTROLE_PLATFORM_AUTENTIQUE,
     CONTROLE_SIGNER_LABEL_JAN,
@@ -55,7 +54,7 @@ from classificacao_procons.contratos.controle_track_repair import (
     ensure_controle_dual_tracks_for_document,
     parse_autentique_created_date,
 )
-from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
+from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     build_controle_assinaturas_index,
@@ -1254,13 +1253,19 @@ def _resolve_tipo_label(
     document_name: str,
     group_id: str | None = None,
     groups: dict[str, str] | None = None,
+    metadata: ContractMetadata | None = None,
+    pdf_path: Path | None = None,
+    gemini_api_key: str | None = None,
+    skip_gemini: bool = False,
 ) -> str | None:
     del group_id, groups
-    if is_supplemental_document(document_name=document_name):
-        return None
-    return infer_monday_tipo(
+    return resolve_controle_tipo_label(
         document_name=document_name,
-        category=infer_category(document_name=document_name),
+        metadata=metadata,
+        pdf_path=pdf_path,
+        gemini_api_key=gemini_api_key,
+        skip_gemini=skip_gemini,
+        min_confidence="low" if pdf_path is None else "medium",
     )
 
 

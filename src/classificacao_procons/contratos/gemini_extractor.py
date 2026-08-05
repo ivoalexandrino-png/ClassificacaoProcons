@@ -102,7 +102,7 @@ def extract_contract_metadata(
         '  "counterparty_name": "razão social ou nome da contraparte",\n'
         '  "counterparty_cnpj": "CNPJ ou CPF da contraparte ou null",\n'
         '  "contract_type": "tipo resumido do contrato",\n'
-        '  "company": "empresa B4A contratante (B4A, MMKT, Itaro, Aurora, RV BVI ou null)",\n'
+        '  "company": "contratante B4A: B4A, MMKT, Itaro, Aurora, RV BVI, Jan PF ou null",\n'
         '  "start_date": "YYYY-MM-DD ou null",\n'
         '  "end_date": "YYYY-MM-DD ou null",\n'
         '  "property_name": "nome do imóvel se for locação, senão null",\n'
