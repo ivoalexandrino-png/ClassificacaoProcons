@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from classificacao_procons.drive.client import DriveClientError
@@ -38,6 +39,7 @@ from classificacao_procons.google_auth import has_valid_token
 from classificacao_procons.llm.openai_client import (
     get_api_key_from_env as get_openai_api_key_from_env,
 )
+from classificacao_procons.llm.stale_elaboration import list_cases_with_stale_automatic_responses
 from classificacao_procons.models import ElaboratedResponseResult, MondayCaseReady
 from classificacao_procons.monday.cases import (
     list_cases_ready_for_elaboration,
@@ -72,6 +74,7 @@ class ResponsePipelineOptions:
     monday_item_ids: frozenset[str] | None = None
     force_reelaborate: bool = False
     reelaborate_existing: bool = False
+    reelaborate_stale_before: datetime | None = None
 
 
 def _load_elaborated_item_ids(state_path: Path) -> set[str]:
@@ -396,7 +399,14 @@ def elaborate_pending_responses(
         raise ResponsePipelineError("MONDAY_API_TOKEN não configurada.")
 
     try:
-        if options.reelaborate_existing:
+        if options.reelaborate_stale_before is not None:
+            cases = list_cases_with_stale_automatic_responses(
+                before=options.reelaborate_stale_before,
+                api_token=monday_token,
+                token_path=options.token_path,
+                max_cases=options.max_cases,
+            )
+        elif options.reelaborate_existing:
             cases = list_cases_with_elaborated_responses(
                 api_token=monday_token,
                 limit=options.max_cases,
@@ -415,6 +425,12 @@ def elaborate_pending_responses(
             )
     except MondayClientError as exc:
         raise ResponsePipelineError(str(exc)) from exc
+
+    if options.reelaborate_stale_before is not None and not options.force_reelaborate:
+        raise ResponsePipelineError(
+            "--reelaborate-stale-before exige --force-reelaborate "
+            "(substitui arquivos antigos no Drive).",
+        )
 
     if options.reelaborate_existing and not options.force_reelaborate:
         raise ResponsePipelineError(

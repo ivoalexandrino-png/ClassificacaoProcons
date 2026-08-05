@@ -367,6 +367,34 @@ def find_existing_response_outputs(
     )
 
 
+def newest_automatic_response_generated_at(
+    *,
+    consumer_folder_id: str,
+    token_path: str | None = None,
+) -> datetime | None:
+    """Instante da versão mais recente entre completa, resumo e PDF unificado."""
+    service = _build_drive_service(token_path)
+    output_folder_id = _resolve_automatic_response_output_folder_id(
+        service,
+        consumer_folder_id=consumer_folder_id,
+    )
+    if output_folder_id is None:
+        return None
+
+    output_children = _list_children(service, folder_id=output_folder_id)
+    complete = _find_newest_file_by_name(output_children, RESPONSE_FULL_TEXT_NAME)
+    summary = _find_newest_file_by_name(output_children, RESPONSE_SUMMARY_FILE)
+    unified = _find_newest_file_by_name(output_children, RESPONSE_UNIFIED_PDF_NAME)
+    timestamps = [
+        item.created_time
+        for item in (complete, summary, unified)
+        if item is not None and item.created_time is not None
+    ]
+    if not timestamps:
+        return None
+    return max(timestamps)
+
+
 def _resolve_automatic_response_output_folder_id(
     service,
     *,
