@@ -255,6 +255,8 @@ def needs_document_content_for_tipo_commit(
         return False
     if metadata and metadata.company:
         return False
+    if _is_accessory_document(document_name=document_name, metadata=metadata):
+        return True
     if _is_ambiguous_pj_externo(blob):
         return True
     if supplier_title_requires_pdf_analysis(document_name=document_name, metadata=metadata):
@@ -511,8 +513,6 @@ def should_omit_controle_tipo(
     metadata: ContractMetadata | None = None,
 ) -> bool:
     """Documentos complementares sem categoria RH explícita ficam sem Tipo (subitem/pai)."""
-    if classify_accessory_follows_principal(document_name=document_name, metadata=metadata):
-        return False
     blob = _blob(document_name, metadata)
     if _is_controle_internal_document(blob):
         return True
@@ -728,7 +728,8 @@ def _build_gemini_tipo_prompt(*, document_name: str) -> str:
         "(BVI-B4A, CODEMP) → B4A salvo outra contratante.\n"
         "10. NÃO use Contratos RV BVI só porque aparece 'BVI' no nome (ex. 4Equity x BVI-B4A).\n"
         "11. Aditivos/distratos que só alteram contrato RH/PJ interno → monday_tipo RH.\n"
-        "12. Aditivos/anexos: mesmo monday_tipo do contrato principal.\n"
+        "12. Aditivos/anexos/distratos (exceto RH): mesmo monday_tipo do contrato principal "
+        "identificado no PDF (referência, partes, objeto) — não use só o título do Autentique.\n"
         "13. Aditivo 4Equity a contrato societário → Contratos Societários.\n"
         "14. Aditivos B2B/societários sem tipo novo → null se o principal não for identificável.\n"
         "15. Leia o PDF: objeto do contrato prevalece sobre o nome do fornecedor no título.\n"
@@ -756,6 +757,7 @@ def classify_controle_tipo_with_gemini(
     *,
     pdf_path: Path,
     document_name: str,
+    metadata: ContractMetadata | None = None,
     api_key: str | None = None,
     model: str | None = None,
 ) -> TipoClassificationResult:
@@ -773,7 +775,7 @@ def classify_controle_tipo_with_gemini(
     if not key:
         raise ContractExtractionError("GEMINI_API_KEY não configurada.")
 
-    metadata = extract_contract_metadata(
+    metadata = metadata or extract_contract_metadata(
         pdf_path=pdf_path,
         document_name=document_name,
         api_key=key,
@@ -792,7 +794,8 @@ def classify_controle_tipo_with_gemini(
     context = (
         f"Metadados já extraídos: company={metadata.company}, "
         f"contract_type={metadata.contract_type}, summary={metadata.summary}, "
-        f"is_supplemental={metadata.is_supplemental}\n"
+        f"is_supplemental={metadata.is_supplemental}, "
+        f"parent_contract_reference={metadata.parent_contract_reference}\n"
     )
 
     response = _gemini_request(
@@ -828,20 +831,17 @@ def resolve_controle_tipo_label(
     """Define o label Tipo para o Controle (None = deixar em branco / suplementar).
 
     Política: título só grava Tipo em casos explícitos (RH, NDA, pedido MP, internos).
-    Demais casos exigem análise do PDF; com PDF presente, só a classificação Gemini grava Tipo.
+    Aditivos/anexos exigem PDF (mesmo tipo do principal vem do conteúdo, via Gemini).
+    Com PDF presente, só a classificação Gemini grava Tipo.
     """
-    inherited = classify_accessory_follows_principal(
-        document_name=document_name,
-        metadata=metadata,
-    )
-    if inherited and inherited.monday_tipo:
-        return inherited.monday_tipo
+    has_pdf = pdf_path is not None and pdf_path.exists()
+    is_accessory = _is_accessory_document(document_name=document_name, metadata=metadata)
 
     if should_omit_controle_tipo(document_name=document_name, metadata=metadata):
-        return None
+        if not (has_pdf and is_accessory and not skip_gemini):
+            return None
 
     heuristic = classify_controle_tipo_heuristic(document_name=document_name, metadata=metadata)
-    has_pdf = pdf_path is not None and pdf_path.exists()
     rank = {"high": 3, "medium": 2, "low": 1}
 
     if has_pdf and not skip_gemini:
@@ -849,6 +849,7 @@ def resolve_controle_tipo_label(
             gemini = classify_controle_tipo_with_gemini(
                 pdf_path=pdf_path,
                 document_name=document_name,
+                metadata=metadata,
                 api_key=gemini_api_key,
             )
         except ContractExtractionError:

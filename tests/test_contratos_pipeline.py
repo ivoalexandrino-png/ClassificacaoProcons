@@ -82,6 +82,7 @@ class TestContractPipeline:
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert "doc-1" in state["document_ids"]
 
+    @patch("classificacao_procons.contratos.controle_tipo.classify_controle_tipo_with_gemini")
     @patch("classificacao_procons.contratos.pipeline.find_controle_items_by_autentique_id")
     @patch("classificacao_procons.contratos.pipeline.register_contrato_subitem")
     @patch("classificacao_procons.contratos.pipeline.resolve_parent_contrato_item")
@@ -100,14 +101,23 @@ class TestContractPipeline:
         resolve_parent_mock,
         register_subitem_mock,
         find_items_mock,
+        gemini_tipo_mock,
         tmp_path: Path,
     ) -> None:
+        from classificacao_procons.contratos.controle_tipo import TipoClassificationResult
         from classificacao_procons.contratos.gemini_extractor import ContractMetadata
         from classificacao_procons.contratos.monday_contracts import (
             ControleAssinaturasItem,
             MondayContractRegistrationResult,
         )
         from classificacao_procons.contratos.parent_resolver import ParentResolutionResult
+
+        gemini_tipo_mock.return_value = TipoClassificationResult(
+            monday_tipo=None,
+            confidence="high",
+            source="gemini",
+            rationale="Aditivo: tipo segue contrato pai no quadro Contratos.",
+        )
 
         pdf_path = tmp_path / "downloads" / "contratos" / "doc-2.pdf"
         pdf_path.parent.mkdir(parents=True)
