@@ -29,6 +29,7 @@ from classificacao_procons.contratos.controle_sync import (
     compare_autentique_with_controle,
     process_document_created_webhook_event,
     process_signature_accepted_webhook_event,
+    process_signature_rejected_webhook_event,
     register_document_in_controle,
     sync_controle_from_autentique,
 )
@@ -80,6 +81,13 @@ def _dispatch_autentique_event(
         return
     if event.event_type == "signature.accepted":
         process_signature_accepted_webhook_event(
+            event,
+            monday_api_token=options.monday_api_token,
+            autentique_api_token=options.autentique_api_token,
+        )
+        return
+    if event.event_type == "signature.rejected":
+        process_signature_rejected_webhook_event(
             event,
             monday_api_token=options.monday_api_token,
             autentique_api_token=options.autentique_api_token,
@@ -359,7 +367,12 @@ def _make_handler(*, options: ContractPipelineOptions, webhook_secret: str | Non
             self.end_headers()
             self.wfile.write(b'{"received":true}')
 
-            supported_events = ("document.created", "signature.accepted", "document.finished")
+            supported_events = (
+                "document.created",
+                "signature.accepted",
+                "signature.rejected",
+                "document.finished",
+            )
             if event.event_type not in supported_events:
                 return
 

@@ -24,11 +24,17 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_LINK_TRACK_LUCIANO,
     CONTROLE_STATUS_ASSINADO,
 )
+from classificacao_procons.contratos.controle_autentique_terminal import (
+    document_is_refused_or_blocked,
+)
 from classificacao_procons.contratos.controle_create_policy import (
     controle_create_paused_message,
     is_controle_create_paused,
 )
-from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
+from classificacao_procons.contratos.controle_dedup import (
+    find_exact_title_matches,
+    find_likely_name_matches,
+)
 from classificacao_procons.contratos.controle_link_suggestions import (
     ControleLinkSuggestion,
     auto_link_unambiguous_legacy_controle,
@@ -193,15 +199,16 @@ def register_document_in_controle(
 
     index = build_controle_assinaturas_index(api_token=monday_token)
     if index.matches_document(document):
-        likely = find_likely_name_matches(
+        title_pool = index.pending_track_items or index.all_items
+        exact_matches = find_exact_title_matches(
             document_name=document.name,
-            items=index.all_items,
+            items=title_pool,
         )
-        if likely and document.document_id.casefold().strip() not in index.document_ids:
+        if exact_matches and document.document_id.casefold().strip() not in index.document_ids:
             ensure_autentique_id_on_controle_items(
                 api_token=monday_token,
                 document_id=document.document_id,
-                items=likely,
+                items=exact_matches,
             )
         groups = load_controle_board_groups(api_token=monday_token)
         jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
@@ -220,7 +227,7 @@ def register_document_in_controle(
         return ControleRegistrationResult(
             document_id=document.document_id,
             document_name=document.name,
-            monday_item_id=likely[0].item_id if likely else None,
+            monday_item_id=exact_matches[0].item_id if exact_matches else None,
             monday_item_url=None,
             skipped_duplicate=True,
         )
@@ -290,6 +297,36 @@ def process_signature_accepted_webhook_event(
     if event.event_type != "signature.accepted":
         raise ControleSyncError(f"Evento não suportado: {event.event_type}")
 
+    return _process_signature_progress_webhook_event(
+        event,
+        monday_api_token=monday_api_token,
+        autentique_api_token=autentique_api_token,
+    )
+
+
+def process_signature_rejected_webhook_event(
+    event: AutentiqueWebhookEvent,
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+) -> ControleReconcileResult | ControleRegistrationResult:
+    """Processa evento signature.rejected do Autentique (status Recusado no Monday)."""
+    if event.event_type != "signature.rejected":
+        raise ControleSyncError(f"Evento não suportado: {event.event_type}")
+
+    return _process_signature_progress_webhook_event(
+        event,
+        monday_api_token=monday_api_token,
+        autentique_api_token=autentique_api_token,
+    )
+
+
+def _process_signature_progress_webhook_event(
+    event: AutentiqueWebhookEvent,
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+) -> ControleReconcileResult | ControleRegistrationResult:
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
@@ -371,14 +408,15 @@ def reconcile_controle_item_from_document(
 ) -> ControleReconcileResult:
     """Alinha status e grupo do item Monday com o estado atual no Autentique."""
     if _status_matches(controle_item.status, CONTROLE_STATUS_ASSINADO):
-        return ControleReconcileResult(
-            document_id=document.document_id,
-            document_name=document.name,
-            monday_item_id=controle_item.item_id,
-            updated=False,
-            skipped=True,
-            skip_reason="already_assinado",
-        )
+        if not document_is_refused_or_blocked(document):
+            return ControleReconcileResult(
+                document_id=document.document_id,
+                document_name=document.name,
+                monday_item_id=controle_item.item_id,
+                updated=False,
+                skipped=True,
+                skip_reason="already_assinado",
+            )
 
     if document.is_fully_signed:
         planned_status = CONTROLE_STATUS_ASSINADO

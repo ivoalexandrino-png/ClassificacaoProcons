@@ -37,6 +37,7 @@ CONTROLE_COL_TIPO = "status_1__1"
 CONTROLE_STATUS_AGUARDANDO_ASSINATURA = "Aguardando Assinatura"
 CONTROLE_STATUS_ASSINADO = "Assinado"
 CONTROLE_STATUS_AGUARDANDO_OUTROS = "Aguardando outros"
+CONTROLE_STATUS_RECUSADO = "Recusado"
 
 # Marcadores no link Autentique (duas filas Jan/Luciano no mesmo documento)
 CONTROLE_LINK_TRACK_JAN = "controle_track: jan"
