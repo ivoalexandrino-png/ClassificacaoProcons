@@ -1,0 +1,40 @@
+name: Controle exclusion analysis (Jan/Luciano × Autentique)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install .
+
+      - name: Validate secrets
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          for name in MONDAY_API_TOKEN AUTENTIQUE_API_TOKEN; do
+            if [ -z "${!name}" ]; then
+              echo "Secret ausente: $name"
+              exit 1
+            fi
+          done
+
+      - name: Run exclusion analysis
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: python3 scripts/controle_jan_luciano_exclusion_analysis.py > exclusion-report.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: controle-exclusion-report
+          path: exclusion-report.json
