@@ -310,7 +310,7 @@ def process_signature_rejected_webhook_event(
     monday_api_token: str | None = None,
     autentique_api_token: str | None = None,
 ) -> ControleReconcileResult | ControleRegistrationResult:
-    """Processa evento signature.rejected do Autentique (status Recusado no Monday)."""
+    """Processa evento signature.rejected do Autentique (coluna Status = Recusado)."""
     if event.event_type != "signature.rejected":
         raise ControleSyncError(f"Evento não suportado: {event.event_type}")
 
