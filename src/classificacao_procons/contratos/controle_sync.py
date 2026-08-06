@@ -27,9 +27,9 @@ from classificacao_procons.contratos.constants import (
 from classificacao_procons.contratos.controle_autentique_terminal import (
     document_is_refused_or_blocked,
 )
+from classificacao_procons.contratos.controle_create_allowlist import controle_may_create_new_item
 from classificacao_procons.contratos.controle_create_policy import (
     controle_create_paused_message,
-    is_controle_create_paused,
 )
 from classificacao_procons.contratos.controle_dedup import (
     find_exact_title_matches,
@@ -187,7 +187,7 @@ def register_document_in_controle(
                 status_label=_resolve_controle_status(document=document),
                 signed_at=_resolve_signed_at(document=document),
                 build_track_link=_build_track_signature_link,
-                allow_create=not is_controle_create_paused(),
+                allow_create=controle_may_create_new_item(document_name=document.name),
             )
         return ControleRegistrationResult(
             document_id=document.document_id,
@@ -222,7 +222,7 @@ def register_document_in_controle(
                 status_label=_resolve_controle_status(document=document),
                 signed_at=_resolve_signed_at(document=document),
                 build_track_link=_build_track_signature_link,
-                allow_create=not is_controle_create_paused(),
+                allow_create=controle_may_create_new_item(document_name=document.name),
             )
         return ControleRegistrationResult(
             document_id=document.document_id,
@@ -232,7 +232,7 @@ def register_document_in_controle(
             skipped_duplicate=True,
         )
 
-    if is_controle_create_paused():
+    if not controle_may_create_new_item(document_name=document.name):
         return ControleRegistrationResult(
             document_id=document.document_id,
             document_name=document.name,
@@ -609,8 +609,6 @@ def sync_controle_from_autentique(
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
 
-    create_allowed = not is_controle_create_paused(allow_create=allow_create)
-
     try:
         documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
     except AutentiqueClientError as exc:
@@ -656,6 +654,10 @@ def sync_controle_from_autentique(
     create_paused = 0
 
     for document in documents:
+        doc_may_create = controle_may_create_new_item(
+            document_name=document.name,
+            allow_create=allow_create,
+        )
         if not dry_run:
             linked_items = find_controle_items_by_autentique_id(
                 api_token=monday_token,
@@ -674,7 +676,7 @@ def sync_controle_from_autentique(
                             status_label=_resolve_controle_status(document=document),
                             signed_at=_resolve_signed_at(document=document),
                             build_track_link=_build_track_signature_link,
-                            allow_create=create_allowed,
+                            allow_create=doc_may_create,
                         )
                     except MondayClientError as exc:
                         failed += 1
@@ -841,7 +843,7 @@ def sync_controle_from_autentique(
             continue
 
         if dry_run:
-            if not create_allowed:
+            if not doc_may_create:
                 create_paused += 1
                 results.append(
                     ControleSyncItemResult(
@@ -885,7 +887,7 @@ def sync_controle_from_autentique(
                         status_label=_resolve_controle_status(document=document),
                         signed_at=_resolve_signed_at(document=document),
                         build_track_link=_build_track_signature_link,
-                        allow_create=create_allowed,
+                        allow_create=doc_may_create,
                     )
                 except MondayClientError as exc:
                     failed += 1
@@ -910,7 +912,7 @@ def sync_controle_from_autentique(
             )
             continue
 
-        if not create_allowed:
+        if not doc_may_create:
             create_paused += 1
             results.append(
                 ControleSyncItemResult(

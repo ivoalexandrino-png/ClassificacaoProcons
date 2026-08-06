@@ -24,6 +24,7 @@ from classificacao_procons.contratos.contratos_enrichment import (
     process_contratos_item_created,
 )
 from classificacao_procons.contratos.controle_link_suggestions import apply_controle_link_suggestion
+from classificacao_procons.contratos.controle_pilot_bruno import run_bruno_distrato_controle_pilot
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
     compare_autentique_with_controle,
@@ -260,6 +261,21 @@ def _run_link_controle(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_pilot_bruno_distrato(args: argparse.Namespace) -> int:
+    try:
+        result = run_bruno_distrato_controle_pilot(
+            v2_document_id=args.document_id,
+            max_pages=args.max_pages,
+            dry_run=args.dry_run,
+        )
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(result.__dict__, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_register_autentique_webhook(args: argparse.Namespace) -> int:
     try:
         result = ensure_contratos_autentique_webhooks(base_service_url=args.base_url)
@@ -276,6 +292,14 @@ def _run_register_autentique_webhook(args: argparse.Namespace) -> int:
         ),
         "signature_endpoint": (
             result.signature_endpoint.__dict__ if result.signature_endpoint else None
+        ),
+        "signature_missing_rejected_event": result.signature_missing_rejected_event,
+        "signature_missing_rejected_hint": (
+            "No painel Autentique, edite o endpoint de assinaturas e inclua o evento "
+            "signature.rejected (SIGNATURE_REJECTED), ou recrie o endpoint com "
+            "contratos-webhook register-autentique-webhook."
+            if result.signature_missing_rejected_event
+            else None
         ),
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -576,6 +600,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     register_parser.add_argument("--document-id", required=True)
     register_parser.set_defaults(func=_run_register_controle)
+
+    pilot_parser = subparsers.add_parser(
+        "pilot-controle-bruno-distrato",
+        help="Piloto: criar par Jan/Luciano só do distrato Bruno (2) e atualizar v1 bloqueado",
+    )
+    pilot_parser.add_argument(
+        "--document-id",
+        default=None,
+        help="UUID do distrato (2) no Autentique; se omitido, busca pelo título",
+    )
+    pilot_parser.add_argument("--dry-run", action="store_true")
+    pilot_parser.add_argument("--max-pages", type=int, default=50)
+    pilot_parser.set_defaults(func=_run_pilot_bruno_distrato)
 
     autentique_wh_parser = subparsers.add_parser(
         "register-autentique-webhook",

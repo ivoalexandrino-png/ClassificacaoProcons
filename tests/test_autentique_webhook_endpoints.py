@@ -54,6 +54,8 @@ class TestEnsureContratosAutentiqueWebhooks:
         assert result.webhook_url == "https://svc/webhooks/autentique"
         assert result.webhook_secret == "sec-doc"
         assert create_mock.call_count == 2
+        sig_call = create_mock.call_args_list[1]
+        assert sig_call.kwargs["events"] == ["SIGNATURE_ACCEPTED", "SIGNATURE_REJECTED"]
 
     @patch("classificacao_procons.contratos.autentique.webhook_endpoints._create_endpoint")
     @patch("classificacao_procons.contratos.autentique.webhook_endpoints._list_endpoints")

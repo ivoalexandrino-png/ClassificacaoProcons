@@ -14,6 +14,7 @@ from classificacao_procons.contratos.autentique.client import (
 ENV_ORGANIZATION_ID = "AUTENTIQUE_ORGANIZATION_ID"
 WEBHOOK_NAME_DOCUMENT = "B4A Contratos (documentos)"
 WEBHOOK_NAME_SIGNATURE = "B4A Contratos (assinaturas)"
+SIGNATURE_WEBHOOK_EVENTS = ("SIGNATURE_ACCEPTED", "SIGNATURE_REJECTED")
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class AutentiqueWebhookRegistrationResult:
     document_endpoint: AutentiqueWebhookEndpointInfo | None
     signature_endpoint: AutentiqueWebhookEndpointInfo | None
     webhook_secret: str | None
+    signature_missing_rejected_event: bool = False
 
 
 def _resolve_organization_id(*, api_token: str, organization_id: int | None) -> int:
@@ -154,6 +156,14 @@ def _find_existing(
     return None
 
 
+def _signature_endpoint_needs_rejected_event(endpoint: dict) -> bool:
+    raw_events = endpoint.get("events")
+    if not isinstance(raw_events, list):
+        return True
+    normalized = {str(item).upper() for item in raw_events}
+    return "SIGNATURE_REJECTED" not in normalized
+
+
 def ensure_contratos_autentique_webhooks(
     *,
     base_service_url: str,
@@ -173,6 +183,8 @@ def ensure_contratos_autentique_webhooks(
     document_info: AutentiqueWebhookEndpointInfo | None = None
     signature_info: AutentiqueWebhookEndpointInfo | None = None
     secrets: list[str] = []
+
+    signature_missing_rejected = False
 
     doc_existing = _find_existing(existing, url=webhook_url, name=WEBHOOK_NAME_DOCUMENT)
     if doc_existing:
@@ -204,6 +216,7 @@ def ensure_contratos_autentique_webhooks(
             secret=None,
             created=False,
         )
+        signature_missing_rejected = _signature_endpoint_needs_rejected_event(sig_existing)
     else:
         signature_info = _create_endpoint(
             api_token=token,
@@ -211,7 +224,7 @@ def ensure_contratos_autentique_webhooks(
             url=webhook_url,
             name=WEBHOOK_NAME_SIGNATURE,
             endpoint_type="SIGNATURE",
-            events=["SIGNATURE_ACCEPTED"],
+            events=list(SIGNATURE_WEBHOOK_EVENTS),
         )
         if signature_info.secret:
             secrets.append(signature_info.secret)
@@ -223,4 +236,5 @@ def ensure_contratos_autentique_webhooks(
         document_endpoint=document_info,
         signature_endpoint=signature_info,
         webhook_secret=webhook_secret,
+        signature_missing_rejected_event=signature_missing_rejected,
     )
