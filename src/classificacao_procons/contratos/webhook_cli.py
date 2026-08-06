@@ -24,6 +24,10 @@ from classificacao_procons.contratos.contratos_enrichment import (
     process_contratos_item_created,
 )
 from classificacao_procons.contratos.controle_link_suggestions import apply_controle_link_suggestion
+from classificacao_procons.contratos.controle_monday_status import (
+    CONTROLE_STATUS_LABELS_REQUIRED,
+    load_controle_status_labels_report,
+)
 from classificacao_procons.contratos.controle_pilot_bruno import run_bruno_distrato_controle_pilot
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
@@ -47,7 +51,7 @@ from classificacao_procons.contratos.pipeline import (
     process_finished_document,
     process_finished_webhook_event,
 )
-from classificacao_procons.monday.client import get_api_token_from_env
+from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
 
 ENV_WEBHOOK_SECRET = "AUTENTIQUE_WEBHOOK_SECRET"
 DEFAULT_PORT = 8080
@@ -136,6 +140,30 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if result.failed == 0 else 1
+
+
+def _run_validate_controle_status_labels(args: argparse.Namespace) -> int:
+    monday_token = get_api_token_from_env()
+    if not monday_token:
+        print("MONDAY_API_TOKEN ausente", file=sys.stderr)
+        return 1
+    try:
+        report = load_controle_status_labels_report(api_token=monday_token)
+    except MondayClientError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "board_id": report.board_id,
+        "status_column_id": report.status_column_id,
+        "status_column_title": report.status_column_title,
+        "monday_labels": list(report.monday_labels),
+        "required_by_code": list(CONTROLE_STATUS_LABELS_REQUIRED),
+        "missing_required_labels": list(report.missing_required_labels),
+        "ok": report.ok,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if report.ok else 1
 
 
 def _run_compare_controle(args: argparse.Namespace) -> int:
@@ -565,6 +593,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     compare_parser.add_argument("--max-pages", type=int, default=50)
     compare_parser.set_defaults(func=_run_compare_controle)
+
+    validate_status_parser = subparsers.add_parser(
+        "validate-controle-status-labels",
+        help="Confere rótulos da coluna Status no Monday vs o que o sync grava",
+    )
+    validate_status_parser.set_defaults(func=_run_validate_controle_status_labels)
 
     link_parser = subparsers.add_parser(
         "link-controle",
