@@ -13,7 +13,7 @@ Guia para o agente rodar **sozinho** sincronizações e workflows, sem depender 
 
 ## Secrets obrigatórios no Cursor (Cloud Agents → Secrets)
 
-Cadastre em https://cursor.com/dashboard (aba **Secrets**):
+Cadastre em https://cursor.com/dashboard (aba **Secrets** do ambiente Cloud Agent):
 
 | Nome do secret | Onde obter | Para quê |
 |----------------|------------|----------|
@@ -47,6 +47,8 @@ O arquivo `.cursor/environment.json`:
 3. Monta `credentials/gmail-*.json` a partir dos secrets
 
 Depois de cadastrar os secrets, **inicie um novo Cloud Agent** (runs antigos não recebem secrets novos).
+
+O Cursor injeta `MONDAY_API_TOKEN`, `AUTENTIQUE_API_TOKEN`, `GEMINI_API_KEY` etc. como **variáveis de ambiente** no pod (não é necessário `export` no `environment.json`). Se `AUTENTIQUE_API_TOKEN` estiver ausente, compare/sync local falham; o GitHub Actions continua funcionando com os secrets do repositório.
 
 ## Comandos que o agente deve usar
 
