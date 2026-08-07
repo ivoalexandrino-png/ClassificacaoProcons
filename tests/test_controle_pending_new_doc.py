@@ -34,6 +34,11 @@ class TestBrunoDistratoNewVersion:
         rescisao = "Rescisão SOP 2024 - Bruno Santos de Castro - 25.06.2026 (1)"
         assert controle_names_likely_same_contract(distrato, rescisao) is False
 
+    def test_should_not_fuzzy_match_rescisao_clt_to_prestacao_servicos_same_person(self) -> None:
+        rescisao = "Termo de Rescisão CLT - Matheus de Lima Ramos 05 2026"
+        prestacao = "Contrato de Prestação de Serviços - Matheus de Lima Ramos"
+        assert controle_names_likely_same_contract(prestacao, rescisao) is False
+
     def test_index_should_not_match_new_version_against_pending_only_exact(self) -> None:
         pending = ControleAssinaturasItem(
             item_id="1",
