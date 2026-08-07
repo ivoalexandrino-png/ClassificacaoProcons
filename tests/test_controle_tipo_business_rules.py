@@ -1,10 +1,14 @@
 """Regras de negócio acordadas para Tipo no Controle Assinaturas."""
 
-from classificacao_procons.contratos.constants import MONDAY_CONTROLE_TIPO_LABELS
+from classificacao_procons.contratos.constants import (
+    MONDAY_CONTROLE_TIPO_LABELS,
+    MONDAY_TIPO_RH,
+)
 from classificacao_procons.contratos.controle_tipo import (
     classify_controle_tipo_heuristic,
     document_requires_pdf_analysis,
     resolve_controle_tipo_label,
+    should_omit_controle_tipo,
 )
 
 
@@ -72,4 +76,18 @@ class TestControleTipoBusinessRules:
         assert document_requires_pdf_analysis(document_name=name) is False
         assert (
             resolve_controle_tipo_label(document_name=name, min_confidence="medium") == "NDA"
+        )
+
+    def test_should_not_resolve_aditivo_from_title_without_pdf(self) -> None:
+        name = "Aditivo - Korres Bfluence - 21.07.2026.docx"
+        assert document_requires_pdf_analysis(document_name=name) is True
+        assert should_omit_controle_tipo(document_name=name) is True
+        assert resolve_controle_tipo_label(document_name=name, min_confidence="medium") is None
+
+    def test_should_still_resolve_rh_aditivo_from_title_without_pdf(self) -> None:
+        name = "Aditivo Contrato PJ Interno - Maria Souza 2026"
+        assert should_omit_controle_tipo(document_name=name) is False
+        assert (
+            resolve_controle_tipo_label(document_name=name, min_confidence="medium")
+            == MONDAY_TIPO_RH
         )

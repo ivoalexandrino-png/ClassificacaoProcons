@@ -72,13 +72,22 @@ _DATE_DMY = re.compile(r"^\d{1,2}[./]\d{1,2}[./]\d{2,4}$")
 _PERIOD_YYYYMM = re.compile(r"^20\d{4}$")
 _PERIOD_YYMMDD = re.compile(r"^\d{6}$")
 _SUFFIX_COPY = re.compile(r"\(\s*copy\s*\)$", re.IGNORECASE)
-_SUFFIX_NUMERIC_COPY = re.compile(r"\(\d+\)$")
+# Só ``(1)`` (cópia Monday/Autentique); ``(2)``+ são versões novas do mesmo tema.
+_SUFFIX_NUMERIC_COPY = re.compile(r"\(1\)$")
 _MIN_SUBSTRING_LEN = 18
+_VERSION_SUFFIX = re.compile(r"\((\d+)\)$")
 _MONTH_TOKEN = re.compile(
     r"^(jan|janeiro|fev|fevereiro|mar|marco|março|abr|abril|mai|maio|jun|junho|jul|julho|"
     r"ago|agosto|set|setembro|out|outubro|nov|novembro|dez|dezembro)$",
     re.IGNORECASE,
 )
+
+
+def _version_suffix(normalized_name: str) -> int | None:
+    match = _VERSION_SUFFIX.search(normalized_name.strip())
+    if not match:
+        return None
+    return int(match.group(1))
 
 
 def normalize_controle_title(value: str) -> str:
@@ -216,6 +225,21 @@ def extract_pedido_lot_key(document_name: str) -> tuple[str, str] | None:
     return None
 
 
+def _title_kind_conflict(left_norm: str, right_norm: str) -> bool:
+    """Distrato vs rescisão/admissão no mesmo colaborador não são o mesmo documento."""
+    conflict_pairs = (
+        ("distrato", "rescis"),
+        ("distrato", "admiss"),
+        ("rescis", "admiss"),
+    )
+    for a, b in conflict_pairs:
+        if a in left_norm and b in right_norm:
+            return True
+        if b in left_norm and a in right_norm:
+            return True
+    return False
+
+
 def controle_names_likely_same_contract(
     autentique_name: str,
     monday_item_name: str,
@@ -223,6 +247,13 @@ def controle_names_likely_same_contract(
     """Indica se títulos diferentes são o mesmo contrato (não só o mesmo fornecedor)."""
     if normalized_controle_titles_equal(autentique_name, monday_item_name):
         return True
+
+    left_norm = _normalize_controle_name(autentique_name)
+    right_norm = _normalize_controle_name(monday_item_name)
+    if _title_kind_conflict(left_norm, right_norm):
+        return False
+    if _version_suffix(left_norm) != _version_suffix(right_norm):
+        return False
 
     left_lot = extract_pedido_lot_key(autentique_name)
     right_lot = extract_pedido_lot_key(monday_item_name)
@@ -251,6 +282,17 @@ def controle_names_likely_same_contract(
             return True
 
     return False
+
+
+def find_exact_title_matches(
+    *,
+    document_name: str,
+    items: tuple[ControleAssinaturasItem, ...] | list[ControleAssinaturasItem],
+) -> tuple[ControleAssinaturasItem, ...]:
+    """Mesmo título normalizado (sem heurística fuzzy) — vínculo legado seguro."""
+    return tuple(
+        item for item in items if normalized_controle_titles_equal(document_name, item.name)
+    )
 
 
 def find_likely_name_matches(

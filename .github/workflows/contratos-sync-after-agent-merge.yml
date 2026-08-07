@@ -74,13 +74,9 @@ jobs:
             fi
           done
 
-      - name: Sync Controle Assinaturas (reparo Jan/Luciano)
+      - name: Compare Autentique x Controle (pós-merge)
         if: steps.paths.outputs.touched == 'true'
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
-          CONTROLE_PAUSE_CREATE: "true"
-        run: |
-          contratos-webhook sync-controle \
-            --max-pages 50 \
-            --skip-signed-documents
+        run: contratos-webhook compare-controle --max-pages 50

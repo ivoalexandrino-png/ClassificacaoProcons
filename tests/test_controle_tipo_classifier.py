@@ -1,10 +1,13 @@
 """Testes do classificador Tipo (Controle Assinaturas)."""
 
+from unittest.mock import patch
+
 import pytest
 
 from classificacao_procons.contratos.constants import MONDAY_TIPO_RH
 from classificacao_procons.contratos.controle_sync import _resolve_tipo_label
 from classificacao_procons.contratos.controle_tipo import (
+    TipoClassificationResult,
     classify_controle_tipo_heuristic,
     document_requires_pdf_analysis,
     resolve_controle_tipo_label,
@@ -113,6 +116,31 @@ class TestControleTipoHeuristic:
         assert should_omit_controle_tipo(document_name=name) is False
         result = classify_controle_tipo_heuristic(document_name=name)
         assert result.monday_tipo == MONDAY_TIPO_RH
+
+    @patch("classificacao_procons.contratos.controle_tipo.classify_controle_tipo_with_gemini")
+    def test_should_resolve_aditivo_tipo_from_pdf_via_gemini(
+        self,
+        gemini_mock,
+        tmp_path,
+    ) -> None:
+        pdf_path = tmp_path / "aditivo.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 minimal")
+        gemini_mock.return_value = TipoClassificationResult(
+            monday_tipo="Contratos B2B",
+            confidence="high",
+            source="gemini",
+            rationale="Aditivo ao contrato de parceria B2B identificado no PDF.",
+        )
+        name = "Aditivo - Korres Bfluence - 21.07.2026.docx"
+        assert should_omit_controle_tipo(document_name=name) is True
+        resolved = resolve_controle_tipo_label(
+            document_name=name,
+            pdf_path=pdf_path,
+            skip_gemini=False,
+            min_confidence="medium",
+        )
+        assert resolved == "Contratos B2B"
+        gemini_mock.assert_called_once()
 
     def test_should_use_metadata_company_for_entity(self) -> None:
         metadata = ContractMetadata(

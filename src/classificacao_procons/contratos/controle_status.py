@@ -13,6 +13,9 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_STATUS_AGUARDANDO_OUTROS,
     CONTROLE_STATUS_ASSINADO,
 )
+from classificacao_procons.contratos.controle_autentique_terminal import (
+    resolve_controle_terminal_status,
+)
 from classificacao_procons.contratos.signer_identity import (
     find_jan_signer,
     find_luciano_signer,
@@ -52,6 +55,9 @@ def resolve_controle_status_for_track(
     track: str,
 ) -> str:
     """Status do item Monday da fila ``jan`` ou ``luciano`` conforme o Autentique."""
+    terminal = resolve_controle_terminal_status(document)
+    if terminal is not None:
+        return terminal
     if document.is_fully_signed:
         return CONTROLE_STATUS_ASSINADO
     if track not in ("jan", "luciano"):
@@ -80,6 +86,9 @@ def resolve_signed_at_for_track(
 
 def resolve_controle_status_document(document: AutentiqueDocumentSummary) -> str:
     """Status agregado (legado) quando a fila não está identificada."""
+    terminal = resolve_controle_terminal_status(document)
+    if terminal is not None:
+        return terminal
     if document.is_fully_signed:
         return CONTROLE_STATUS_ASSINADO
     signed_count = sum(1 for signer in document.signatures if signer.signed_at)

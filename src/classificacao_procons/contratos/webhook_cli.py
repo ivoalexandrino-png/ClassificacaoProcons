@@ -24,11 +24,17 @@ from classificacao_procons.contratos.contratos_enrichment import (
     process_contratos_item_created,
 )
 from classificacao_procons.contratos.controle_link_suggestions import apply_controle_link_suggestion
+from classificacao_procons.contratos.controle_monday_status import (
+    CONTROLE_STATUS_LABELS_REQUIRED,
+    load_controle_status_labels_report,
+)
+from classificacao_procons.contratos.controle_pilot_bruno import run_bruno_distrato_controle_pilot
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
     compare_autentique_with_controle,
     process_document_created_webhook_event,
     process_signature_accepted_webhook_event,
+    process_signature_rejected_webhook_event,
     register_document_in_controle,
     sync_controle_from_autentique,
 )
@@ -45,7 +51,7 @@ from classificacao_procons.contratos.pipeline import (
     process_finished_document,
     process_finished_webhook_event,
 )
-from classificacao_procons.monday.client import get_api_token_from_env
+from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
 
 ENV_WEBHOOK_SECRET = "AUTENTIQUE_WEBHOOK_SECRET"
 DEFAULT_PORT = 8080
@@ -80,6 +86,13 @@ def _dispatch_autentique_event(
         return
     if event.event_type == "signature.accepted":
         process_signature_accepted_webhook_event(
+            event,
+            monday_api_token=options.monday_api_token,
+            autentique_api_token=options.autentique_api_token,
+        )
+        return
+    if event.event_type == "signature.rejected":
+        process_signature_rejected_webhook_event(
             event,
             monday_api_token=options.monday_api_token,
             autentique_api_token=options.autentique_api_token,
@@ -127,6 +140,30 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if result.failed == 0 else 1
+
+
+def _run_validate_controle_status_labels(args: argparse.Namespace) -> int:
+    monday_token = get_api_token_from_env()
+    if not monday_token:
+        print("MONDAY_API_TOKEN ausente", file=sys.stderr)
+        return 1
+    try:
+        report = load_controle_status_labels_report(api_token=monday_token)
+    except MondayClientError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "board_id": report.board_id,
+        "status_column_id": report.status_column_id,
+        "status_column_title": report.status_column_title,
+        "monday_labels": list(report.monday_labels),
+        "required_by_code": list(CONTROLE_STATUS_LABELS_REQUIRED),
+        "missing_required_labels": list(report.missing_required_labels),
+        "ok": report.ok,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if report.ok else 1
 
 
 def _run_compare_controle(args: argparse.Namespace) -> int:
@@ -252,6 +289,21 @@ def _run_link_controle(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_pilot_bruno_distrato(args: argparse.Namespace) -> int:
+    try:
+        result = run_bruno_distrato_controle_pilot(
+            v2_document_id=args.document_id,
+            max_pages=args.max_pages,
+            dry_run=args.dry_run,
+        )
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(result.__dict__, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _run_register_autentique_webhook(args: argparse.Namespace) -> int:
     try:
         result = ensure_contratos_autentique_webhooks(base_service_url=args.base_url)
@@ -268,6 +320,14 @@ def _run_register_autentique_webhook(args: argparse.Namespace) -> int:
         ),
         "signature_endpoint": (
             result.signature_endpoint.__dict__ if result.signature_endpoint else None
+        ),
+        "signature_missing_rejected_event": result.signature_missing_rejected_event,
+        "signature_missing_rejected_hint": (
+            "No painel Autentique, edite o endpoint de assinaturas e inclua o evento "
+            "signature.rejected (SIGNATURE_REJECTED), ou recrie o endpoint com "
+            "contratos-webhook register-autentique-webhook."
+            if result.signature_missing_rejected_event
+            else None
         ),
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -359,7 +419,12 @@ def _make_handler(*, options: ContractPipelineOptions, webhook_secret: str | Non
             self.end_headers()
             self.wfile.write(b'{"received":true}')
 
-            supported_events = ("document.created", "signature.accepted", "document.finished")
+            supported_events = (
+                "document.created",
+                "signature.accepted",
+                "signature.rejected",
+                "document.finished",
+            )
             if event.event_type not in supported_events:
                 return
 
@@ -529,6 +594,12 @@ def main(argv: list[str] | None = None) -> int:
     compare_parser.add_argument("--max-pages", type=int, default=50)
     compare_parser.set_defaults(func=_run_compare_controle)
 
+    validate_status_parser = subparsers.add_parser(
+        "validate-controle-status-labels",
+        help="Confere rótulos da coluna Status no Monday vs o que o sync grava",
+    )
+    validate_status_parser.set_defaults(func=_run_validate_controle_status_labels)
+
     link_parser = subparsers.add_parser(
         "link-controle",
         help="Grava Autentique ID em item legado do Controle (confirmação humana)",
@@ -563,6 +634,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     register_parser.add_argument("--document-id", required=True)
     register_parser.set_defaults(func=_run_register_controle)
+
+    pilot_parser = subparsers.add_parser(
+        "pilot-controle-bruno-distrato",
+        help="Piloto: criar par Jan/Luciano só do distrato Bruno (2) e atualizar v1 bloqueado",
+    )
+    pilot_parser.add_argument(
+        "--document-id",
+        default=None,
+        help="UUID do distrato (2) no Autentique; se omitido, busca pelo título",
+    )
+    pilot_parser.add_argument("--dry-run", action="store_true")
+    pilot_parser.add_argument("--max-pages", type=int, default=50)
+    pilot_parser.set_defaults(func=_run_pilot_bruno_distrato)
 
     autentique_wh_parser = subparsers.add_parser(
         "register-autentique-webhook",

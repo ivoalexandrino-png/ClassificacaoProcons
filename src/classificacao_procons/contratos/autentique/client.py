@@ -7,6 +7,7 @@ import os
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 AUTENTIQUE_API_URL = "https://api.autentique.com.br/v2/graphql"
@@ -24,6 +25,7 @@ class AutentiqueSigner:
     email: str | None
     short_link: str | None
     signed_at: str | None
+    rejected_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,7 @@ class AutentiqueDocumentSummary:
     created_at: str | None
     signed_pdf_url: str | None
     signatures: tuple[AutentiqueSigner, ...]
+    deadline_at: str | None = None
 
     @property
     def is_fully_signed(self) -> bool:
@@ -40,6 +43,29 @@ class AutentiqueDocumentSummary:
             signed_pdf_url=self.signed_pdf_url,
             signatures=self.signatures,
         )
+
+    @property
+    def is_signature_refused(self) -> bool:
+        return any(signer.rejected_at for signer in self.signatures)
+
+    @property
+    def is_signing_blocked(self) -> bool:
+        """Prazo encerrado no Autentique (bloqueio operacional, ex. deadline_at no passado)."""
+        if self.is_fully_signed:
+            return False
+        if not self.deadline_at:
+            return False
+        normalized = self.deadline_at.strip().replace("Z", "+00:00")
+        try:
+            deadline = datetime.fromisoformat(normalized)
+        except ValueError:
+            return False
+        from datetime import UTC
+
+        now = datetime.now(UTC)
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=UTC)
+        return deadline <= now
 
     def primary_signature_link(self) -> str | None:
         for signer in self.signatures:
@@ -186,6 +212,7 @@ def _parse_signatures(raw_signatures: list[dict] | None) -> tuple[AutentiqueSign
                 email=_nullable_str(signature.get("email")),
                 short_link=_nullable_str(link.get("short_link")),
                 signed_at=_nullable_str(signed.get("created_at")),
+                rejected_at=_nullable_str((signature.get("rejected") or {}).get("created_at")),
             ),
         )
     return tuple(signers)
@@ -199,6 +226,7 @@ def _parse_document_summary(document: dict) -> AutentiqueDocumentSummary:
         created_at=document.get("created_at"),
         signed_pdf_url=files.get("signed"),
         signatures=_parse_signatures(document.get("signatures")),
+        deadline_at=_nullable_str(document.get("deadline_at")),
     )
 
 
@@ -231,6 +259,7 @@ def list_documents(
                   id
                   name
                   created_at
+                  deadline_at
                   files { signed }
                   signatures {
                     public_id
@@ -238,6 +267,7 @@ def list_documents(
                     email
                     link { short_link }
                     signed { created_at }
+                    rejected { created_at }
                   }
                 }
               }
@@ -273,6 +303,7 @@ def fetch_document_summary(
             id
             name
             created_at
+            deadline_at
             files { signed }
             signatures {
               public_id
@@ -280,6 +311,7 @@ def fetch_document_summary(
               email
               link { short_link }
               signed { created_at }
+              rejected { created_at }
             }
           }
         }

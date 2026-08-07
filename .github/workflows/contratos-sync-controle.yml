@@ -1,7 +1,7 @@
 name: Sync Controle Assinaturas (Autentique)
 
 # Sincroniza somente Autentique → Monday Controle Assinaturas (sem Drive/Contratos).
-# Agendado + push em main (contratos): reparo Jan/Luciano, reconcile conservador, sem import em massa de assinados.
+# Agendado + push em main: somente comparação (sem writes). Sync explícito via workflow_dispatch.
 on:
   schedule:
     - cron: "15 * * * *"
@@ -41,6 +41,16 @@ on:
         required: false
         type: boolean
         default: true
+      pilot_bruno_distrato:
+        description: "Após sync: rodar pilot-controle-bruno-distrato (título com (2))"
+        required: false
+        type: boolean
+        default: false
+      validate_status_labels:
+        description: "Validar labels da coluna Status no Monday"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: contratos-sync-controle
@@ -56,10 +66,10 @@ jobs:
         id: params
         run: |
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "push" ]; then
-            echo "mode=sync" >> "$GITHUB_OUTPUT"
-            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+            echo "mode=compare" >> "$GITHUB_OUTPUT"
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
             echo "max_pages=50" >> "$GITHUB_OUTPUT"
-            echo "create_only=false" >> "$GITHUB_OUTPUT"
+            echo "create_only=true" >> "$GITHUB_OUTPUT"
             echo "skip_signed_documents=true" >> "$GITHUB_OUTPUT"
           else
             echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
@@ -118,3 +128,21 @@ jobs:
             ARGS="$ARGS --skip-signed-documents"
           fi
           contratos-webhook sync-controle $ARGS
+
+      - name: Validate Controle status labels
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.validate_status_labels == true
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+        run: contratos-webhook validate-controle-status-labels
+
+      - name: Pilot Bruno distrato (2)
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          inputs.pilot_bruno_distrato == true
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          CONTROLE_PAUSE_CREATE: "false"
+        run: contratos-webhook pilot-controle-bruno-distrato

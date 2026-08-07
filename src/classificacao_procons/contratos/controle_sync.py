@@ -24,11 +24,17 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_LINK_TRACK_LUCIANO,
     CONTROLE_STATUS_ASSINADO,
 )
+from classificacao_procons.contratos.controle_autentique_terminal import (
+    document_is_refused_or_blocked,
+)
+from classificacao_procons.contratos.controle_create_allowlist import controle_may_create_new_item
 from classificacao_procons.contratos.controle_create_policy import (
     controle_create_paused_message,
-    is_controle_create_paused,
 )
-from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
+from classificacao_procons.contratos.controle_dedup import (
+    find_exact_title_matches,
+    find_likely_name_matches,
+)
 from classificacao_procons.contratos.controle_link_suggestions import (
     ControleLinkSuggestion,
     auto_link_unambiguous_legacy_controle,
@@ -39,6 +45,9 @@ from classificacao_procons.contratos.controle_reconcile import (
     find_duplicate_normalized_names,
     find_monday_status_behind_autentique,
     find_monday_track_status_mismatch,
+)
+from classificacao_procons.contratos.controle_required_tracks import (
+    document_required_controle_tracks,
 )
 from classificacao_procons.contratos.controle_status import (
     resolve_controle_status_document,
@@ -181,7 +190,7 @@ def register_document_in_controle(
                 status_label=_resolve_controle_status(document=document),
                 signed_at=_resolve_signed_at(document=document),
                 build_track_link=_build_track_signature_link,
-                allow_create=not is_controle_create_paused(),
+                allow_create=controle_may_create_new_item(document_name=document.name),
             )
         return ControleRegistrationResult(
             document_id=document.document_id,
@@ -193,15 +202,16 @@ def register_document_in_controle(
 
     index = build_controle_assinaturas_index(api_token=monday_token)
     if index.matches_document(document):
-        likely = find_likely_name_matches(
+        title_pool = index.pending_track_items or index.all_items
+        exact_matches = find_exact_title_matches(
             document_name=document.name,
-            items=index.all_items,
+            items=title_pool,
         )
-        if likely and document.document_id.casefold().strip() not in index.document_ids:
+        if exact_matches and document.document_id.casefold().strip() not in index.document_ids:
             ensure_autentique_id_on_controle_items(
                 api_token=monday_token,
                 document_id=document.document_id,
-                items=likely,
+                items=exact_matches,
             )
         groups = load_controle_board_groups(api_token=monday_token)
         jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
@@ -215,17 +225,17 @@ def register_document_in_controle(
                 status_label=_resolve_controle_status(document=document),
                 signed_at=_resolve_signed_at(document=document),
                 build_track_link=_build_track_signature_link,
-                allow_create=not is_controle_create_paused(),
+                allow_create=controle_may_create_new_item(document_name=document.name),
             )
         return ControleRegistrationResult(
             document_id=document.document_id,
             document_name=document.name,
-            monday_item_id=likely[0].item_id if likely else None,
+            monday_item_id=exact_matches[0].item_id if exact_matches else None,
             monday_item_url=None,
             skipped_duplicate=True,
         )
 
-    if is_controle_create_paused():
+    if not controle_may_create_new_item(document_name=document.name):
         return ControleRegistrationResult(
             document_id=document.document_id,
             document_name=document.name,
@@ -248,7 +258,15 @@ def register_document_in_controle(
     except (MondayClientError, AutentiqueClientError) as exc:
         raise ControleSyncError(str(exc)) from exc
 
-    jan_group_id, _ = _resolve_signer_group_ids(groups)
+    jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+    required = document_required_controle_tracks(document)
+    primary_group_id = (
+        jan_group_id
+        if "jan" in required
+        else luciano_group_id
+        if "luciano" in required
+        else jan_group_id
+    )
 
     return ControleRegistrationResult(
         document_id=document.document_id,
@@ -256,7 +274,7 @@ def register_document_in_controle(
         monday_item_id=item_id,
         monday_item_url=item_url,
         mirror_monday_item_id=mirror_id,
-        group_id=jan_group_id,
+        group_id=primary_group_id,
         status_label=_resolve_controle_status(document=document),
         tipo_filled=tipo_label is not None,
     )
@@ -290,6 +308,36 @@ def process_signature_accepted_webhook_event(
     if event.event_type != "signature.accepted":
         raise ControleSyncError(f"Evento não suportado: {event.event_type}")
 
+    return _process_signature_progress_webhook_event(
+        event,
+        monday_api_token=monday_api_token,
+        autentique_api_token=autentique_api_token,
+    )
+
+
+def process_signature_rejected_webhook_event(
+    event: AutentiqueWebhookEvent,
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+) -> ControleReconcileResult | ControleRegistrationResult:
+    """Processa evento signature.rejected do Autentique (coluna Status = Recusado)."""
+    if event.event_type != "signature.rejected":
+        raise ControleSyncError(f"Evento não suportado: {event.event_type}")
+
+    return _process_signature_progress_webhook_event(
+        event,
+        monday_api_token=monday_api_token,
+        autentique_api_token=autentique_api_token,
+    )
+
+
+def _process_signature_progress_webhook_event(
+    event: AutentiqueWebhookEvent,
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+) -> ControleReconcileResult | ControleRegistrationResult:
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
@@ -371,14 +419,15 @@ def reconcile_controle_item_from_document(
 ) -> ControleReconcileResult:
     """Alinha status e grupo do item Monday com o estado atual no Autentique."""
     if _status_matches(controle_item.status, CONTROLE_STATUS_ASSINADO):
-        return ControleReconcileResult(
-            document_id=document.document_id,
-            document_name=document.name,
-            monday_item_id=controle_item.item_id,
-            updated=False,
-            skipped=True,
-            skip_reason="already_assinado",
-        )
+        if not document_is_refused_or_blocked(document):
+            return ControleReconcileResult(
+                document_id=document.document_id,
+                document_name=document.name,
+                monday_item_id=controle_item.item_id,
+                updated=False,
+                skipped=True,
+                skip_reason="already_assinado",
+            )
 
     if document.is_fully_signed:
         planned_status = CONTROLE_STATUS_ASSINADO
@@ -571,8 +620,6 @@ def sync_controle_from_autentique(
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
 
-    create_allowed = not is_controle_create_paused(allow_create=allow_create)
-
     try:
         documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
     except AutentiqueClientError as exc:
@@ -618,6 +665,10 @@ def sync_controle_from_autentique(
     create_paused = 0
 
     for document in documents:
+        doc_may_create = controle_may_create_new_item(
+            document_name=document.name,
+            allow_create=allow_create,
+        )
         if not dry_run:
             linked_items = find_controle_items_by_autentique_id(
                 api_token=monday_token,
@@ -636,7 +687,7 @@ def sync_controle_from_autentique(
                             status_label=_resolve_controle_status(document=document),
                             signed_at=_resolve_signed_at(document=document),
                             build_track_link=_build_track_signature_link,
-                            allow_create=create_allowed,
+                            allow_create=doc_may_create,
                         )
                     except MondayClientError as exc:
                         failed += 1
@@ -803,7 +854,7 @@ def sync_controle_from_autentique(
             continue
 
         if dry_run:
-            if not create_allowed:
+            if not doc_may_create:
                 create_paused += 1
                 results.append(
                     ControleSyncItemResult(
@@ -847,7 +898,7 @@ def sync_controle_from_autentique(
                         status_label=_resolve_controle_status(document=document),
                         signed_at=_resolve_signed_at(document=document),
                         build_track_link=_build_track_signature_link,
-                        allow_create=create_allowed,
+                        allow_create=doc_may_create,
                     )
                 except MondayClientError as exc:
                     failed += 1
@@ -872,7 +923,7 @@ def sync_controle_from_autentique(
             )
             continue
 
-        if not create_allowed:
+        if not doc_may_create:
             create_paused += 1
             results.append(
                 ControleSyncItemResult(
@@ -975,8 +1026,12 @@ def _reconcile_dual_track_items(
             controle_items[0],
         )
         any_updated = False
+        required = document_required_controle_tracks(document)
         for item in controle_items:
             if _status_matches(item.status, CONTROLE_STATUS_ASSINADO):
+                continue
+            track = infer_controle_signer_track(item)
+            if track in ("jan", "luciano") and track not in required:
                 continue
             track = infer_controle_signer_track(item)
             signed_at = (
@@ -1016,6 +1071,10 @@ def _reconcile_dual_track_items(
             continue
 
         track = infer_controle_signer_track(item)
+        required = document_required_controle_tracks(document)
+        if track in ("jan", "luciano") and track not in required:
+            continue
+
         if track == "jan":
             target_group = jan_group_id or item.group_id or ""
         elif track == "luciano":
@@ -1068,52 +1127,70 @@ def _create_controle_track_pair(
     document: AutentiqueDocumentSummary,
     groups: dict[str, str],
     tipo_label: str | None,
-) -> tuple[str, str | None, str]:
-    """Cria par Jan (com Tipo) + Luciano (sem Tipo) no Controle Assinaturas."""
+) -> tuple[str, str | None, str | None]:
+    """Cria itens Jan e/ou Luciano conforme signatários no Autentique."""
     jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
     if not jan_group_id or not luciano_group_id:
         raise ControleSyncError(
             "Grupos Jan e Luciano não encontrados no quadro Controle Assinaturas.",
         )
 
+    required = document_required_controle_tracks(document)
+    if not required:
+        raise ControleSyncError(
+            f"Documento {document.document_id} não tem signatário Jan nem Luciano no Autentique.",
+        )
+
     short_link = _resolve_signature_link(document=document, api_token=autentique_api_token)
     inclusion_date = parse_autentique_created_date(document)
 
-    jan_id, jan_url = create_controle_assinatura_item(
-        api_token=api_token,
-        item_name=document.name,
-        group_id=jan_group_id,
-        signature_link_text=_build_track_signature_link(
-            document=document,
-            track="jan",
-            short_link=short_link,
-        ),
-        status_label=resolve_controle_status_for_track(document, track="jan"),
-        tipo_label=tipo_label,
-        signed_at=resolve_signed_at_for_track(document, track="jan"),
-        signed_pdf_url=None,
-        signer_label=CONTROLE_SIGNER_LABEL_JAN,
-        platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
-        inclusion_date=inclusion_date,
-    )
-    luciano_id, _luciano_url = create_controle_assinatura_item(
-        api_token=api_token,
-        item_name=document.name,
-        group_id=luciano_group_id,
-        signature_link_text=_build_track_signature_link(
-            document=document,
-            track="luciano",
-            short_link=short_link,
-        ),
-        status_label=resolve_controle_status_for_track(document, track="luciano"),
-        tipo_label=None,
-        signed_at=resolve_signed_at_for_track(document, track="luciano"),
-        signed_pdf_url=None,
-        signer_label=CONTROLE_SIGNER_LABEL_LUCIANO,
-        platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
-        inclusion_date=inclusion_date,
-    )
-    return jan_id, jan_url, luciano_id
+    jan_id: str | None = None
+    jan_url: str | None = None
+    luciano_id: str | None = None
+
+    if "jan" in required:
+        jan_id, jan_url = create_controle_assinatura_item(
+            api_token=api_token,
+            item_name=document.name,
+            group_id=jan_group_id,
+            signature_link_text=_build_track_signature_link(
+                document=document,
+                track="jan",
+                short_link=short_link,
+            ),
+            status_label=resolve_controle_status_for_track(document, track="jan"),
+            tipo_label=tipo_label,
+            signed_at=resolve_signed_at_for_track(document, track="jan"),
+            signed_pdf_url=None,
+            signer_label=CONTROLE_SIGNER_LABEL_JAN,
+            platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
+            inclusion_date=inclusion_date,
+        )
+    if "luciano" in required:
+        luciano_id, _luciano_url = create_controle_assinatura_item(
+            api_token=api_token,
+            item_name=document.name,
+            group_id=luciano_group_id,
+            signature_link_text=_build_track_signature_link(
+                document=document,
+                track="luciano",
+                short_link=short_link,
+            ),
+            status_label=resolve_controle_status_for_track(document, track="luciano"),
+            tipo_label=None,
+            signed_at=resolve_signed_at_for_track(document, track="luciano"),
+            signed_pdf_url=None,
+            signer_label=CONTROLE_SIGNER_LABEL_LUCIANO,
+            platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
+            inclusion_date=inclusion_date,
+        )
+
+    primary_id = jan_id or luciano_id
+    primary_url = jan_url
+    mirror_id = luciano_id if jan_id else None
+    if primary_id is None:
+        raise ControleSyncError("Falha ao criar itens no Controle Assinaturas.")
+    return primary_id, primary_url, mirror_id
 
 
 def _resolve_signer_group_ids(groups: dict[str, str]) -> tuple[str | None, str | None]:

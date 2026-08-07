@@ -26,7 +26,9 @@ from classificacao_procons.contratos.constants import (
     MONDAY_CONTRATOS_BOARD_ID,
     MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
 )
-from classificacao_procons.contratos.controle_dedup import find_likely_name_matches
+from classificacao_procons.contratos.controle_board_scope import (
+    is_controle_pending_track_group_title,
+)
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.contratos.models import ControleAssinaturasItem
@@ -270,6 +272,12 @@ class ControleAssinaturasIndex:
     exact_names: frozenset[str]
     items_by_document_id: tuple[tuple[str, ControleAssinaturasItem], ...] = ()
     all_items: tuple[ControleAssinaturasItem, ...] = ()
+    pending_track_items: tuple[ControleAssinaturasItem, ...] = ()
+
+    def _items_for_title_match(self) -> tuple[ControleAssinaturasItem, ...]:
+        if self.pending_track_items:
+            return self.pending_track_items
+        return self.all_items
 
     def get_item(self, document_id: str) -> ControleAssinaturasItem | None:
         target = document_id.casefold().strip()
@@ -291,14 +299,18 @@ class ControleAssinaturasIndex:
         if not document_name:
             return False
         normalized_name = document_name.casefold().strip()
-        if normalized_name in self.exact_names:
+        name_pool = self._items_for_title_match()
+        name_exact_names = frozenset(
+            item.name.casefold().strip() for item in name_pool if item.name
+        )
+        if normalized_name in name_exact_names:
             return True
         from classificacao_procons.contratos.controle_dedup import normalized_controle_titles_equal
 
-        for item in self.all_items:
+        for item in name_pool:
             if normalized_controle_titles_equal(document_name, item.name):
                 return True
-        return bool(find_likely_name_matches(document_name=document_name, items=self.all_items))
+        return False
 
     def with_item(
         self,
@@ -330,6 +342,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
     exact_names: set[str] = set()
     items_by_document_id: dict[str, ControleAssinaturasItem] = {}
     all_items_by_id: dict[str, ControleAssinaturasItem] = {}
+    pending_track_by_id: dict[str, ControleAssinaturasItem] = {}
     cursor: str | None = None
 
     for _ in range(50):
@@ -343,7 +356,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
                   items {
                     id
                     name
-                    group { id }
+                    group { id title }
                     column_values(ids: ["status", "status_1__1", "long_text_mkvnwp6d"]) {
                       id
                       text
@@ -371,6 +384,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
             values = {column_id: column.get("text") for column_id, column in columns_by_id.items()}
             signature_link = values.get(CONTROLE_COL_LINK_ASSINATURA) or ""
             group = item.get("group") or {}
+            group_title = str(group.get("title") or "")
             controle_item = ControleAssinaturasItem(
                 item_id=str(item["id"]),
                 name=str(item.get("name", "")),
@@ -391,6 +405,8 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
                 if existing is None or _prefer_controle_index_item(controle_item, existing):
                     items_by_document_id[token] = controle_item
             all_items_by_id[controle_item.item_id] = controle_item
+            if is_controle_pending_track_group_title(group_title):
+                pending_track_by_id[controle_item.item_id] = controle_item
 
         cursor = page.get("cursor")
         if not cursor:
@@ -401,6 +417,7 @@ def build_controle_assinaturas_index(*, api_token: str) -> ControleAssinaturasIn
         exact_names=frozenset(exact_names),
         items_by_document_id=tuple(items_by_document_id.items()),
         all_items=tuple(all_items_by_id.values()),
+        pending_track_items=tuple(pending_track_by_id.values()),
     )
 
 
