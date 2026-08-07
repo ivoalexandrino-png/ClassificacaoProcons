@@ -231,6 +231,7 @@ def _title_kind_conflict(left_norm: str, right_norm: str) -> bool:
         ("distrato", "rescis"),
         ("distrato", "admiss"),
         ("rescis", "admiss"),
+        ("rescis", "prestac"),  # rescisão CLT vs contrato de prestação de serviços
     )
     for a, b in conflict_pairs:
         if a in left_norm and b in right_norm:
@@ -238,6 +239,11 @@ def _title_kind_conflict(left_norm: str, right_norm: str) -> bool:
         if b in left_norm and a in right_norm:
             return True
     return False
+
+
+def controle_title_kind_conflict(left: str, right: str) -> bool:
+    """True quando títulos são tipos de documento incompatíveis (ex. rescisão vs prestação)."""
+    return _title_kind_conflict(_normalize_controle_name(left), _normalize_controle_name(right))
 
 
 def controle_names_likely_same_contract(

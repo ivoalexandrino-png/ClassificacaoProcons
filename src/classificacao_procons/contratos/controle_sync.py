@@ -32,6 +32,7 @@ from classificacao_procons.contratos.controle_create_policy import (
     controle_create_paused_message,
 )
 from classificacao_procons.contratos.controle_dedup import (
+    controle_title_kind_conflict,
     find_exact_title_matches,
     find_likely_name_matches,
 )
@@ -418,6 +419,16 @@ def reconcile_controle_item_from_document(
     dry_run: bool = False,
 ) -> ControleReconcileResult:
     """Alinha status e grupo do item Monday com o estado atual no Autentique."""
+    if controle_title_kind_conflict(document.name, controle_item.name):
+        return ControleReconcileResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=controle_item.item_id,
+            updated=False,
+            skipped=True,
+            skip_reason="title_kind_mismatch",
+        )
+
     if _status_matches(controle_item.status, CONTROLE_STATUS_ASSINADO):
         if not document_is_refused_or_blocked(document):
             return ControleReconcileResult(

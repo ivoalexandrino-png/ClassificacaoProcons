@@ -190,6 +190,31 @@ class TestControleReconcile:
         assert result.skip_reason == "already_assinado"
         update_mock.assert_not_called()
 
+    def test_should_skip_reconcile_when_rescisao_item_linked_to_prestacao_doc(self) -> None:
+        document = AutentiqueDocumentSummary(
+            document_id="doc-prest",
+            name="Contrato de Prestação de Serviços - Matheus de Lima Ramos",
+            created_at=None,
+            signed_pdf_url="https://signed.pdf",
+            signatures=(),
+        )
+        result = reconcile_controle_item_from_document(
+            document=document,
+            controle_item=ControleAssinaturasItem(
+                item_id="999",
+                name="Termo de Rescisão CLT - Matheus de Lima Ramos 05 2026",
+                status="Bloqueado - aguardando providencia",
+                tipo=None,
+                signature_link="Autentique ID: doc-prest",
+                group_id="g-luciano",
+            ),
+            api_token="monday-token",
+            groups=_jan_luciano_groups(),
+        )
+
+        assert result.skipped is True
+        assert result.skip_reason == "title_kind_mismatch"
+
     @patch("classificacao_procons.contratos.controle_sync.update_controle_item_progress")
     def test_should_mark_assinado_when_document_fully_signed(self, update_mock) -> None:
         document = AutentiqueDocumentSummary(
