@@ -15,16 +15,53 @@ from classificacao_procons.contratos.controle_create_allowlist import (
     BRUNO_DISTRATO_V2_NORMALIZED,
 )
 from classificacao_procons.contratos.controle_dedup import normalize_controle_title
+from classificacao_procons.contratos.controle_status import (
+    resolve_controle_status_document,
+    resolve_signed_at_document,
+)
 from classificacao_procons.contratos.controle_sync import (
     ControleSyncError,
+    _build_track_signature_link,
+    _resolve_signer_group_ids,
     reconcile_controle_from_document,
     register_document_in_controle,
+)
+from classificacao_procons.contratos.controle_tipo import resolve_controle_tipo_label
+from classificacao_procons.contratos.controle_track_repair import (
+    ensure_controle_dual_tracks_for_document,
 )
 from classificacao_procons.contratos.monday_contracts import (
     find_controle_items_by_autentique_id,
     load_controle_board_groups,
 )
 from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
+
+
+def _repair_document_tracks(
+    *,
+    api_token: str,
+    document: AutentiqueDocumentSummary,
+    build_track_link,
+    jan_group_id: str,
+    luciano_group_id: str,
+    dry_run: bool,
+) -> None:
+    tipo_label = resolve_controle_tipo_label(
+        document_name=document.name,
+        min_confidence="low",
+    )
+    ensure_controle_dual_tracks_for_document(
+        api_token=api_token,
+        document=document,
+        jan_group_id=jan_group_id,
+        luciano_group_id=luciano_group_id,
+        tipo_label=tipo_label,
+        status_label=resolve_controle_status_document(document),
+        signed_at=resolve_signed_at_document(document),
+        build_track_link=build_track_link,
+        dry_run=dry_run,
+        allow_create=True,
+    )
 
 
 @dataclass(frozen=True)
@@ -94,6 +131,11 @@ def run_bruno_distrato_controle_pilot(
 
     v2_action = "skipped_no_v2_in_autentique"
     v2_item_id: str | None = None
+    groups = load_controle_board_groups(api_token=monday_token)
+    jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
+    if not jan_group_id or not luciano_group_id:
+        raise ControleSyncError("Grupos Jan/Luciano não encontrados no Controle.")
+
     if v2_doc is not None:
         if dry_run:
             linked = find_controle_items_by_autentique_id(
@@ -102,6 +144,14 @@ def run_bruno_distrato_controle_pilot(
             )
             v2_action = "would_register_v2" if not linked else "would_reconcile_v2"
             v2_item_id = linked[0].item_id if linked else None
+            _repair_document_tracks(
+                api_token=monday_token,
+                document=v2_doc,
+                build_track_link=_build_track_signature_link,
+                jan_group_id=jan_group_id,
+                luciano_group_id=luciano_group_id,
+                dry_run=True,
+            )
         else:
             reg = register_document_in_controle(
                 document_id=v2_doc.document_id,
@@ -136,6 +186,14 @@ def run_bruno_distrato_controle_pilot(
                 v2_item_id = reg.monday_item_id
             else:
                 v2_action = "register_finished"
+        _repair_document_tracks(
+            api_token=monday_token,
+            document=v2_doc,
+            build_track_link=_build_track_signature_link,
+            jan_group_id=jan_group_id,
+            luciano_group_id=luciano_group_id,
+            dry_run=dry_run,
+        )
 
     v1_ids: list[str] = []
     updated = 0
@@ -162,6 +220,14 @@ def run_bruno_distrato_controle_pilot(
                     updated += 1
             except MondayClientError as exc:
                 raise ControleSyncError(str(exc)) from exc
+            _repair_document_tracks(
+                api_token=monday_token,
+                document=v1_autentique,
+                build_track_link=_build_track_signature_link,
+                jan_group_id=jan_group_id,
+                luciano_group_id=luciano_group_id,
+                dry_run=dry_run,
+            )
         elif monday_items and dry_run:
             updated = len(monday_items)
 

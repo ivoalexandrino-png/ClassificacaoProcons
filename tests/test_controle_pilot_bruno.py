@@ -31,6 +31,12 @@ class TestControleCreateAllowlist:
 
 
 class TestBrunoPilotCommand:
+    @patch("classificacao_procons.contratos.controle_pilot_bruno._repair_document_tracks")
+    @patch(
+        "classificacao_procons.contratos.controle_pilot_bruno._resolve_signer_group_ids",
+        return_value=("g-jan", "g-luciano"),
+    )
+    @patch("classificacao_procons.contratos.controle_pilot_bruno.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_pilot_bruno.register_document_in_controle")
     @patch("classificacao_procons.contratos.controle_pilot_bruno.list_documents")
     @patch("classificacao_procons.contratos.controle_pilot_bruno.get_api_token_from_env")
@@ -39,6 +45,9 @@ class TestBrunoPilotCommand:
         token_mock,
         list_mock,
         register_mock,
+        load_groups_mock,
+        _resolve_groups_mock,
+        repair_mock,
     ) -> None:
         from classificacao_procons.contratos.autentique.client import (
             AutentiqueDocumentSummary,
@@ -46,6 +55,11 @@ class TestBrunoPilotCommand:
         )
 
         token_mock.return_value = "monday"
+        load_groups_mock.return_value = {
+            "assinados": "g-assinados",
+            "contratos pendentes de assinatura jan": "g-jan",
+            "contratos pendentes de assinatura luciano": "g-luciano",
+        }
         list_mock.return_value = [
             AutentiqueDocumentSummary(
                 document_id="v2-id",
@@ -87,3 +101,4 @@ class TestBrunoPilotCommand:
         assert result.v2_document_id == "v2-id"
         assert result.v2_action == "created_v2"
         register_mock.assert_called_once()
+        assert repair_mock.call_count >= 1
