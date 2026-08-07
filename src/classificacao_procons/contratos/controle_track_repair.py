@@ -16,6 +16,9 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_QUEM_ASSINA_JAN,
     CONTROLE_QUEM_ASSINA_LUCIANO,
 )
+from classificacao_procons.contratos.controle_required_tracks import (
+    document_required_controle_tracks,
+)
 from classificacao_procons.contratos.controle_status import (
     resolve_controle_status_for_track,
     resolve_signed_at_for_track,
@@ -122,10 +125,24 @@ def ensure_controle_dual_tracks_for_document(
         luciano_group_id=luciano_group_id,
     )
 
+    required_tracks = document_required_controle_tracks(document)
+
     created_jan = False
     created_luciano = False
+    archived = 0
 
-    if not by_track["jan"]:
+    for track in ("jan", "luciano"):
+        if track in required_tracks:
+            continue
+        for stray in by_track[track]:
+            if dry_run:
+                archived += 1
+            else:
+                archive_controle_item(api_token=api_token, item_id=stray.item_id)
+                archived += 1
+        by_track[track] = []
+
+    if "jan" in required_tracks and not by_track["jan"]:
         if not allow_create:
             pass
         elif dry_run:
@@ -149,7 +166,7 @@ def ensure_controle_dual_tracks_for_document(
             )
             created_jan = True
 
-    if not by_track["luciano"]:
+    if "luciano" in required_tracks and not by_track["luciano"]:
         if not allow_create:
             pass
         elif dry_run:
@@ -185,9 +202,10 @@ def ensure_controle_dual_tracks_for_document(
         )
 
     updated = 0
-    archived = 0
     duplicates = 0
     for track, track_items in by_track.items():
+        if track not in required_tracks:
+            continue
         if len(track_items) > 1:
             duplicates += len(track_items) - 1
             canonical_pick = pick_canonical_controle_item(tuple(track_items)) or track_items[0]

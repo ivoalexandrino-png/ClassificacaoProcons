@@ -9,6 +9,7 @@ from classificacao_procons.contratos.autentique.client import (
     AutentiqueDocumentSummary,
     AutentiqueSigner,
 )
+from classificacao_procons.contratos.constants import SIGNER_EMAIL_JAN, SIGNER_EMAIL_LUCIANO
 from classificacao_procons.contratos.controle_link_suggestions import LegacyAutoLinkResult
 from classificacao_procons.contratos.controle_sync import sync_controle_from_autentique
 from classificacao_procons.contratos.models import ControleAssinaturasItem
@@ -53,9 +54,16 @@ class TestControleSync:
                 AutentiqueSigner(
                     public_id="sig-1",
                     name="Jan",
-                    email="jan@example.com",
+                    email=SIGNER_EMAIL_JAN,
                     short_link="https://assina.ae/abc",
                     signed_at="2026-01-02T10:00:00Z",
+                ),
+                AutentiqueSigner(
+                    public_id="sig-2",
+                    name="Luciano",
+                    email=SIGNER_EMAIL_LUCIANO,
+                    short_link="https://assina.ae/luc",
+                    signed_at=None,
                 ),
             ),
         )
@@ -86,7 +94,7 @@ class TestControleSync:
         assert create_item_mock.call_count == 2
         call_kwargs = create_item_mock.call_args_list[0].kwargs
         assert call_kwargs["item_name"] == "Contrato B2B - Empresa X"
-        assert call_kwargs["status_label"] == "Assinado"
+        assert call_kwargs["status_label"] == "Aguardando outros"
         assert call_kwargs["signed_at"] == date(2026, 1, 2)
 
     @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
