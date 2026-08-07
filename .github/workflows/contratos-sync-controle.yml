@@ -46,6 +46,11 @@ on:
         required: false
         type: boolean
         default: false
+      pilot_bruno_dry_run:
+        description: "Simular piloto Bruno (sem writes no Monday)"
+        required: false
+        type: boolean
+        default: false
       validate_status_labels:
         description: "Validar labels da coluna Status no Monday"
         required: false
