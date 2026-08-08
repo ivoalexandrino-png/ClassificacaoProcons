@@ -8,6 +8,7 @@ from classificacao_procons.drive.client import DRIVE_FOLDER_MIME, _build_drive_s
 from classificacao_procons.drive.reader import DriveFileInfo, _parse_drive_timestamp
 from classificacao_procons.juridico.depositos.path_rules import path_suggests_deposit_workflow
 
+_NON_DOWNLOADABLE_PREFIX = "application/vnd.google-apps."
 
 @dataclass(frozen=True)
 class DrivePdfItem:
@@ -91,6 +92,8 @@ def walk_pdfs_under_folder(
                     _depth=_depth + 1,
                 ),
             )
+            continue
+        if item.mime_type.startswith(_NON_DOWNLOADABLE_PREFIX):
             continue
         is_pdf = item.mime_type == "application/pdf" or item.name.casefold().endswith(".pdf")
         if is_pdf or path_suggests_deposit_workflow(child_path):

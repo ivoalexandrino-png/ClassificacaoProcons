@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from classificacao_procons.drive.client import DriveClientError
 from classificacao_procons.drive.reader import download_drive_file
 from classificacao_procons.gemini.client import get_api_key_from_env
 from classificacao_procons.juridico.depositos.classify import (
@@ -75,7 +76,7 @@ def _needs_gemini(
     *,
     kind: DocumentKind,
     drive_path: str,
-    text_chars: int,
+    text: str,
     amount,
     process_number: str | None,
 ) -> bool:
@@ -83,13 +84,25 @@ def _needs_gemini(
         return False
     if kind == DocumentKind.JUDICIAL_DEPOSIT and amount is not None:
         return False
-    if path_suggests_court_fees(drive_path) and kind != DocumentKind.JUDICIAL_DEPOSIT:
+    if path_suggests_court_fees(drive_path):
         return False
-    if path_suggests_deposit_workflow(drive_path):
-        return True
     if kind == DocumentKind.JUDICIAL_DEPOSIT:
         return amount is None or process_number is None
-    return text_chars > 0 and kind == DocumentKind.UNKNOWN
+    if not path_suggests_deposit_workflow(drive_path):
+        return False
+    normalized = text.casefold()
+    if kind == DocumentKind.UNKNOWN and not normalized.strip():
+        return True
+    deposit_hints = (
+        "deposito",
+        "depósito",
+        "judicial",
+        "conta judicial",
+        "codigo de barras",
+        "condenacao",
+        "condenação",
+    )
+    return any(hint in normalized for hint in deposit_hints)
 
 
 def _analyze_pdf_item(
@@ -101,16 +114,23 @@ def _analyze_pdf_item(
     gemini_calls: list[int],
 ) -> JudicialDepositRecord | None:
     local_path = options.work_dir / consumer_folder / _safe_local_name(item.name)
-    download_drive_file(
-        file_id=item.file_id,
-        destination=local_path,
-        token_path=options.token_path,
-    )
+    try:
+        download_drive_file(
+            file_id=item.file_id,
+            destination=local_path,
+            token_path=options.token_path,
+        )
+    except DriveClientError:
+        return None
 
     extracted = extract_pdf_text(
         local_path,
         gemini_api_key=gemini_api_key if options.allow_vision else None,
-        allow_vision=options.allow_vision,
+        allow_vision=options.allow_vision
+        and (
+            path_suggests_deposit_workflow(item.drive_path)
+            or path_suggests_court_fees(item.drive_path)
+        ),
     )
     text = extracted.text
     kind = classify_document_text(text)
@@ -132,7 +152,7 @@ def _analyze_pdf_item(
         and _needs_gemini(
             kind=kind,
             drive_path=item.drive_path,
-            text_chars=len(text.strip()),
+            text=text,
             amount=amount,
             process_number=process_number,
         )
