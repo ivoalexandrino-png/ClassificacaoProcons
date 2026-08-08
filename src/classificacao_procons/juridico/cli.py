@@ -10,10 +10,19 @@ from dataclasses import asdict
 from pathlib import Path
 
 from classificacao_procons.email.gmail import GmailClientError
-from classificacao_procons.google_auth import has_valid_token
+from classificacao_procons.google_auth import has_drive_access, has_valid_token
 from classificacao_procons.juridico.cnj import extract_process_number
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
+from classificacao_procons.juridico.constants import DEFAULT_CONSUMER_PROCESSES_DRIVE_FOLDER_ID
 from classificacao_procons.juridico.datajud import DataJudError, fetch_case_movements
+from classificacao_procons.juridico.depositos.pipeline import (
+    DepositScanOptions,
+    scan_consumer_deposits,
+)
+from classificacao_procons.juridico.depositos.report import (
+    write_deposits_csv,
+    write_scan_summary_json,
+)
 from classificacao_procons.juridico.events import AgentEventError, list_events
 from classificacao_procons.juridico.gmail import GmailJuridicoFetcher
 from classificacao_procons.juridico.monday import MondayClientError, describe_boards
@@ -24,6 +33,7 @@ from classificacao_procons.juridico.pipeline import (
 )
 
 AUTH_HINT = "Google não conectado. Rode: procon-email auth"
+DRIVE_AUTH_HINT = "Drive ainda não autorizado. Rode: procon-email auth"
 
 
 def _default_credentials_path() -> str:
@@ -42,6 +52,38 @@ def _serialize(value: object) -> object:
 
 def _serialize_dataclass(item: object) -> dict[str, object]:
     return {key: _serialize(value) for key, value in asdict(item).items()}
+
+
+def _run_depositos_scan(args: argparse.Namespace) -> int:
+    if not has_drive_access(args.token):
+        print(DRIVE_AUTH_HINT, file=sys.stderr)
+        return 1
+
+    options = DepositScanOptions(
+        root_folder_id=args.root_folder_id,
+        work_dir=Path(args.work_dir),
+        token_path=args.token,
+        max_consumers=args.max_consumers,
+        use_gemini=not args.no_gemini,
+        max_gemini_calls=args.max_gemini_calls,
+        allow_vision=not args.no_vision,
+    )
+    result = scan_consumer_deposits(options)
+    csv_path = Path(args.output_csv)
+    write_deposits_csv(result=result, destination=csv_path)
+    if args.output_json:
+        write_scan_summary_json(result=result, destination=Path(args.output_json))
+
+    summary = {
+        "consumers_scanned": result.consumers_scanned,
+        "pdfs_seen": result.pdfs_seen,
+        "pdfs_analyzed": result.pdfs_analyzed,
+        "pdfs_skipped_path": result.pdfs_skipped_path,
+        "deposit_records": len(result.records),
+        "output_csv": str(csv_path),
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
 
 
 def _run_list(args: argparse.Namespace) -> int:
@@ -403,6 +445,52 @@ def main(argv: list[str] | None = None) -> int:
         help=argparse.SUPPRESS,
     )
 
+    depositos_parser = subparsers.add_parser(
+        "depositos-scan",
+        help="Varre pastas de consumidores no Drive e extrai depósitos judiciais",
+    )
+    depositos_parser.add_argument(
+        "--root-folder-id",
+        default=DEFAULT_CONSUMER_PROCESSES_DRIVE_FOLDER_ID,
+        help="ID da pasta raiz dos processos de consumidores no Drive.",
+    )
+    depositos_parser.add_argument(
+        "--max-consumers",
+        type=int,
+        default=30,
+        help="Limite de pastas de consumidor (padrão: 30; use 0 para todas).",
+    )
+    depositos_parser.add_argument(
+        "--work-dir",
+        default="data/depositos-scan-cache",
+        help="Diretório local para cache de downloads.",
+    )
+    depositos_parser.add_argument(
+        "--output-csv",
+        default="data/depositos-judiciais.csv",
+        help="CSV de saída com depósitos identificados.",
+    )
+    depositos_parser.add_argument(
+        "--output-json",
+        help="JSON opcional com resumo completo da varredura.",
+    )
+    depositos_parser.add_argument(
+        "--no-gemini",
+        action="store_true",
+        help="Não usar Gemini para classificar PDFs ambíguos.",
+    )
+    depositos_parser.add_argument(
+        "--no-vision",
+        action="store_true",
+        help="Não usar Gemini para OCR em PDFs sem texto.",
+    )
+    depositos_parser.add_argument(
+        "--max-gemini-calls",
+        type=int,
+        default=80,
+        help="Limite de chamadas Gemini por execução (classificação estruturada).",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "list":
@@ -419,6 +507,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_boards(args)
     if args.command == "events":
         return _run_events(args)
+    if args.command == "depositos-scan":
+        if args.max_consumers == 0:
+            args.max_consumers = None
+        return _run_depositos_scan(args)
 
     parser.print_help()
     return 0
