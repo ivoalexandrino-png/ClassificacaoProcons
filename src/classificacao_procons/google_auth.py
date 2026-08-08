@@ -12,12 +12,14 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 
 GOOGLE_SCOPES = [
     GMAIL_READONLY_SCOPE,
     GMAIL_MODIFY_SCOPE,
+    GMAIL_SEND_SCOPE,
     DRIVE_FILE_SCOPE,
     DRIVE_READONLY_SCOPE,
 ]
@@ -222,3 +224,19 @@ def has_gmail_modify_access(token_path: str = DEFAULT_TOKEN_PATH) -> bool:
         return False
     data = json.loads(Path(token_path).read_text(encoding="utf-8"))
     return GMAIL_MODIFY_SCOPE in set(data.get("scopes", []))
+
+
+def has_gmail_send_access(token_path: str = DEFAULT_TOKEN_PATH) -> bool:
+    """Verifica se o token pode enviar e-mails.
+
+    O escopo ``gmail.modify`` também autoriza envio, então qualquer um dos dois
+    habilita o notifier.
+    """
+    if not os.path.exists(token_path):
+        return False
+    try:
+        data = json.loads(Path(token_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    scopes = set(data.get("scopes", []))
+    return GMAIL_SEND_SCOPE in scopes or GMAIL_MODIFY_SCOPE in scopes
