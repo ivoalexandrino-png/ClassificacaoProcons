@@ -291,6 +291,18 @@ class ControleAssinaturasIndex:
                 return item
         return None
 
+    def items_for_document_id(self, document_id: str) -> tuple[ControleAssinaturasItem, ...]:
+        """Todos os itens Monday (Jan/Luciano) vinculados ao mesmo Autentique ID."""
+        target = document_id.casefold().strip()
+        if not target:
+            return ()
+        by_item_id: dict[str, ControleAssinaturasItem] = {}
+        for indexed_id, item in self.items_by_document_id:
+            if indexed_id != target:
+                continue
+            by_item_id[item.item_id] = item
+        return tuple(by_item_id.values())
+
     def matches_document(self, document: object) -> bool:
         """Verifica se o documento já está representado no Controle (ID ou nome)."""
         document_id = str(getattr(document, "document_id", "")).casefold().strip()
