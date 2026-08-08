@@ -65,10 +65,22 @@ Workflow GitHub: **Sync Controle Assinaturas (Autentique)** — modos `compare`,
 2. **validate_status_labels** — `validate_status_labels=true` no dispatch.
 3. **sync** `dry_run=true`, `allow_create=true`, `create_only=false`, `skip_signed_documents=true`.
 4. **sync** `dry_run=false`, mesmos parâmetros — cria pendentes + auto-link + atualiza existentes.
-5. (Opcional) **sync** com `skip_signed_documents=false` — assinados faltando no Controle.
+5. **Não** usar `skip_signed_documents=false` + `allow_create=true` em massa — isso recria filas para documentos **já assinados** quando existe legado **Assinado** sem Autentique ID (duplicatas na fila Luciano). Preferir `link-controle` ou `remediate-sync-duplicates`.
 6. **reconcile-mismatches** — `light_autentique_feed=true` quando só há poucas divergências.
 7. **pilot_bruno_distrato** — `pilot_bruno_dry_run=true`, depois `false`.
 8. **compare** final.
+
+### Remediação (duplicatas do sync)
+
+```bash
+# Listar candidatos (filas pendentes + doc assinado + legado Assinado com mesmo título)
+contratos-webhook remediate-sync-duplicates --max-pages 100
+
+# Arquivar no Monday (reversível)
+contratos-webhook remediate-sync-duplicates --max-pages 100 --apply
+```
+
+Workflow: **Remediar duplicatas sync Controle** (`apply=false` primeiro).
 
 **Itens inativos no Monday:** sync/reconcile ignoram com `skipped_inactive` (não atualizam colunas).
 

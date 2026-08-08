@@ -41,6 +41,10 @@ from classificacao_procons.contratos.controle_dedup import (
     find_exact_title_matches,
     find_likely_name_matches,
 )
+from classificacao_procons.contratos.controle_legacy_guard import (
+    find_legacy_signed_name_matches,
+    should_block_create_for_signed_autentique,
+)
 from classificacao_procons.contratos.controle_link_suggestions import (
     ControleLinkSuggestion,
     auto_link_unambiguous_legacy_controle,
@@ -995,6 +999,7 @@ def sync_controle_from_autentique(
     skip_signed_documents: bool = False,
     auto_link_legacy: bool = True,
     allow_create: bool | None = None,
+    import_signed_as_new: bool = False,
 ) -> ControleSyncResult:
     """Cria ou atualiza itens no Controle Assinaturas a partir do Autentique."""
     monday_token = monday_api_token or get_api_token_from_env()
@@ -1050,6 +1055,12 @@ def sync_controle_from_autentique(
             document_name=document.name,
             allow_create=allow_create,
         )
+        track_may_create = doc_may_create and not should_block_create_for_signed_autentique(
+            document_name=document.name,
+            is_fully_signed=document.is_fully_signed,
+            items=index.all_items,
+            import_signed_as_new=import_signed_as_new,
+        )
         if not dry_run:
             linked_items = index.items_for_document_id(document.document_id)
             if linked_items and not controle_dual_tracks_satisfied_for_items(
@@ -1068,7 +1079,7 @@ def sync_controle_from_autentique(
                             status_label=_resolve_controle_status(document=document),
                             signed_at=_resolve_signed_at(document=document),
                             build_track_link=_build_track_signature_link,
-                            allow_create=doc_may_create,
+                            allow_create=track_may_create,
                         )
                     except MondayClientError as exc:
                         failed += 1
@@ -1248,6 +1259,47 @@ def sync_controle_from_autentique(
             )
             continue
 
+        legacy_signed = find_legacy_signed_name_matches(
+            document_name=document.name,
+            items=index.all_items,
+        )
+        if should_block_create_for_signed_autentique(
+            document_name=document.name,
+            is_fully_signed=document.is_fully_signed,
+            items=index.all_items,
+            import_signed_as_new=import_signed_as_new,
+        ):
+            if legacy_signed:
+                if not dry_run:
+                    ensure_autentique_id_on_controle_items(
+                        api_token=monday_token,
+                        document_id=document.document_id,
+                        items=legacy_signed,
+                    )
+                already += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="linked_legacy_assinado_skip_create"
+                        if not dry_run
+                        else "would_link_legacy_assinado_skip_create",
+                        monday_item_id=legacy_signed[0].item_id,
+                        detail=legacy_signed[0].name,
+                    ),
+                )
+                continue
+            deferred_signed += 1
+            results.append(
+                ControleSyncItemResult(
+                    document_id=document.document_id,
+                    document_name=document.name,
+                    action="deferred_signed_no_legacy_match",
+                    detail="fully_signed; use link-controle or --import-signed-as-new",
+                ),
+            )
+            continue
+
         if dry_run:
             if not doc_may_create:
                 create_paused += 1
@@ -1293,7 +1345,7 @@ def sync_controle_from_autentique(
                         status_label=_resolve_controle_status(document=document),
                         signed_at=_resolve_signed_at(document=document),
                         build_track_link=_build_track_signature_link,
-                        allow_create=doc_may_create,
+                        allow_create=track_may_create,
                     )
                 except MondayClientError as exc:
                     failed += 1
