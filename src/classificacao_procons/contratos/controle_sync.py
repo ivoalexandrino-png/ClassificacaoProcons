@@ -72,6 +72,7 @@ from classificacao_procons.contratos.controle_track_repair import (
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
+    ControleAssinaturasIndex,
     build_controle_assinaturas_index,
     create_controle_assinatura_item,
     ensure_autentique_id_on_controle_items,
@@ -812,10 +813,7 @@ def sync_controle_from_autentique(
             allow_create=allow_create,
         )
         if not dry_run:
-            linked_items = find_controle_items_by_autentique_id(
-                api_token=monday_token,
-                document_id=document.document_id,
-            )
+            linked_items = index.items_for_document_id(document.document_id)
             if linked_items:
                 jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
                 if jan_group_id and luciano_group_id:
@@ -874,6 +872,7 @@ def sync_controle_from_autentique(
                         api_token=monday_token,
                         document_id=document.document_id,
                         fallback_item=existing_item,
+                        index=index,
                     ),
                     api_token=monday_token,
                     groups=groups,
@@ -909,6 +908,7 @@ def sync_controle_from_autentique(
                         api_token=monday_token,
                         document_id=document.document_id,
                         fallback_item=existing_item,
+                        index=index,
                     ),
                     api_token=monday_token,
                     groups=groups,
@@ -1145,7 +1145,12 @@ def _load_controle_items_for_document(
     api_token: str,
     document_id: str,
     fallback_item: ControleAssinaturasItem,
+    index: ControleAssinaturasIndex | None = None,
 ) -> tuple[ControleAssinaturasItem, ...]:
+    if index is not None:
+        indexed = index.items_for_document_id(document_id)
+        if indexed:
+            return indexed
     items = find_controle_items_by_autentique_id(api_token=api_token, document_id=document_id)
     if items:
         return items

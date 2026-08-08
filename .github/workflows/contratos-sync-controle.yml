@@ -65,7 +65,7 @@ concurrency:
 jobs:
   sync-controle:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Set workflow parameters

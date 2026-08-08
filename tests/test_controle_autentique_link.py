@@ -144,3 +144,31 @@ class TestControleAutentiqueLink:
         rows = find_monday_items_with_multiple_autentique_ids(index)
 
         assert rows == (("1", "X", (id_a, id_b)),)
+
+    def test_should_return_both_tracks_for_same_autentique_id(self) -> None:
+        doc_id = "a" * 48
+        jan = ControleAssinaturasItem(
+            item_id="jan-1",
+            name="Contrato",
+            status=None,
+            tipo="Contratos B2B",
+            signature_link=f"Autentique ID: {doc_id}\ncontrole_track: jan",
+        )
+        luciano = ControleAssinaturasItem(
+            item_id="luc-1",
+            name="Contrato",
+            status=None,
+            tipo=None,
+            signature_link=f"Autentique ID: {doc_id}\ncontrole_track: luciano",
+        )
+        index = ControleAssinaturasIndex(
+            document_ids=frozenset({doc_id}),
+            exact_names=frozenset(),
+            items_by_document_id=((doc_id, jan), (doc_id, luciano)),
+            all_items=(jan, luciano),
+        )
+
+        items = index.items_for_document_id(doc_id)
+
+        assert len(items) == 2
+        assert {item.item_id for item in items} == {"jan-1", "luc-1"}
