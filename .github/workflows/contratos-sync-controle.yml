@@ -14,15 +14,16 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "compare = só relatório; sync = criar faltantes + auto-link legado"
+        description: "compare = relatório; repair = 1 Autentique ID por item; sync = auto-link + sync"
         required: true
         type: choice
         options:
           - compare
+          - repair
           - sync
         default: compare
       dry_run:
-        description: "Somente simular (não cria itens no Monday)"
+        description: "Simular sync ou repair (não grava no Monday)"
         required: false
         type: boolean
         default: true
@@ -114,6 +115,18 @@ jobs:
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
         run: |
           contratos-webhook compare-controle --max-pages "${{ steps.params.outputs.max_pages }}"
+
+      - name: Repair canonical Autentique links (Controle)
+        if: ${{ steps.params.outputs.mode == 'repair' }}
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
+          if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          contratos-webhook repair-controle-autentique-links $ARGS
 
       - name: Sync Controle Assinaturas
         if: ${{ steps.params.outputs.mode == 'sync' }}
