@@ -18,8 +18,10 @@ pytest
 
 - `src/classificacao_procons/email/` — parser e cliente Gmail
 - `src/classificacao_procons/juridico/` — agente jurídico (intimações, DataJud, providências)
+- `src/classificacao_procons/questor/` — agente Questor (certidões negativas + caixa postal fiscal → alerta por e-mail)
 - `src/classificacao_procons/cli.py` — CLI `procon-email`
 - `src/classificacao_procons/juridico/cli.py` — CLI `juridico`
+- `src/classificacao_procons/questor/cli.py` — CLI `questor`
 - `tests/` — testes unitários
 
 ## Segredos
@@ -74,6 +76,33 @@ gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" -f dry_run=fa
 **Automação sem intervenção:** merge em `main` que altere `src/classificacao_procons/contratos/**` dispara o workflow **Sync Controle Assinaturas** (reparo Jan/Luciano + reconcile, sem import em massa de já assinados). O cron horário (`:15`) usa os mesmos parâmetros.
 
 **Pausa de criação no Controle:** por padrão **não** criamos novos itens no quadro (`CONTROLE_PAUSE_CREATE=true` ou variável ausente). Sync, webhooks `document.created` e `register-controle` continuam com vínculo legado, reparo de filas Jan/Luciano e atualização de status. Para criar faltantes de propósito: `CONTROLE_PAUSE_CREATE=false` ou `contratos-webhook sync-controle --allow-create`.
+
+### Questor (certidões negativas + caixa postal fiscal)
+
+Agente que lê o retrato do Questor (situação das certidões — Federal/PGFN, Estadual, Municipal, FGTS, Trabalhista — e mensagens da caixa postal eletrônica), detecta pendências (certidão positiva/vencida/a vencer/indisponível, mensagem não lida, prazo de ciência vencido/próximo) e, havendo problema **novo**, envia e-mail ao time fiscal e de contabilidade.
+
+- Núcleo offline testável: `questor/analise.py` (regras), `questor/parser.py` (normalização de situação/datas/CNPJ), `questor/serialization.py` (JSON ↔ modelos). `ruff`/`pytest` rodam 100% offline.
+- Envio de e-mail: `questor/notifier.py` via Gmail API (escopo `gmail.send`; `gmail.modify` também serve). Reautorizar com `procon-email auth` para o token ganhar o escopo de envio.
+- Coleta no portal: `questor/portal.py` (Playwright, heurístico — os seletores/rotas precisam ser calibrados na primeira execução assistida contra o ambiente real do cliente).
+- Dedup por `dedup_key` em `data/questor-alerted.json`: o mesmo problema não é reenviado a cada execução (use `--resend` para forçar).
+
+Uso offline (sem portal), a partir de um snapshot JSON:
+
+```bash
+source .venv/bin/activate
+questor analyze --snapshot snapshot.json                     # lista pendências (exit 1 se houver crítica)
+questor check --snapshot snapshot.json --to fiscal@b4a.com,contabil@b4a.com --dry-run
+```
+
+Coleta + análise + alerta (produção; exige credenciais do Questor e token Gmail com envio):
+
+```bash
+questor check --portal-url "$QUESTOR_PORTAL_URL" --portal-login "$QUESTOR_LOGIN" \
+  --portal-password "$QUESTOR_PASSWORD" --empresa "Empresa X" --cnpj 12345678000199 \
+  --to fiscal@b4a.com,contabilidade@b4a.com
+```
+
+Segredos esperados (ausentes neste ambiente): `QUESTOR_PORTAL_URL`, `QUESTOR_LOGIN`, `QUESTOR_PASSWORD` e o token Gmail com escopo de envio.
 
 ### Procon (backup SLA 30 min no GCP)
 
