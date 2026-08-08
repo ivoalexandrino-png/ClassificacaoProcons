@@ -24,6 +24,10 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_LINK_TRACK_LUCIANO,
     CONTROLE_STATUS_ASSINADO,
 )
+from classificacao_procons.contratos.controle_autentique_link import (
+    pick_primary_autentique_document_id_for_item,
+    rebuild_controle_signature_link_text,
+)
 from classificacao_procons.contratos.controle_autentique_terminal import (
     document_is_refused_or_blocked,
 )
@@ -44,6 +48,7 @@ from classificacao_procons.contratos.controle_link_suggestions import (
 from classificacao_procons.contratos.controle_reconcile import (
     find_duplicate_autentique_ids,
     find_duplicate_normalized_names,
+    find_monday_items_with_multiple_autentique_ids,
     find_monday_status_behind_autentique,
     find_monday_track_status_mismatch,
 )
@@ -75,6 +80,7 @@ from classificacao_procons.contratos.monday_contracts import (
     is_controle_contratos_trigger_item,
     load_controle_board_groups,
     update_controle_item_progress,
+    update_controle_item_signature_link,
 )
 from classificacao_procons.contratos.signer_identity import find_jan_signer, find_luciano_signer
 from classificacao_procons.monday.client import MondayClientError, get_api_token_from_env
@@ -130,6 +136,24 @@ class ControleAutentiqueCompareResult:
         ...,
     ] = ()
     legacy_link_suggestions: tuple[ControleLinkSuggestion, ...] = ()
+    monday_multiple_autentique_ids: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
+
+
+@dataclass(frozen=True)
+class ControleCanonicalLinkRepairItem:
+    item_id: str
+    item_name: str
+    previous_ids: tuple[str, ...]
+    canonical_id: str
+    updated: bool
+    skipped: bool
+    skip_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ControleCanonicalLinkRepairResult:
+    dry_run: bool
+    items: tuple[ControleCanonicalLinkRepairItem, ...]
 
 
 @dataclass(frozen=True)
@@ -612,7 +636,114 @@ def compare_autentique_with_controle(
             documents_by_id=documents_by_id,
         ),
         legacy_link_suggestions=link_suggestions,
+        monday_multiple_autentique_ids=find_monday_items_with_multiple_autentique_ids(index),
     )
+
+
+def repair_controle_canonical_autentique_links(
+    *,
+    monday_api_token: str | None = None,
+    autentique_api_token: str | None = None,
+    max_pages: int = 50,
+    dry_run: bool = False,
+) -> ControleCanonicalLinkRepairResult:
+    """Reduz o link do Controle a um único Autentique ID canônico por item Monday."""
+    monday_token = monday_api_token or get_api_token_from_env()
+    if not monday_token:
+        raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+
+    try:
+        documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
+    except AutentiqueClientError as exc:
+        raise ControleSyncError(str(exc)) from exc
+
+    documents_by_id = {
+        document.document_id.casefold().strip(): document for document in documents
+    }
+    index = build_controle_assinaturas_index(api_token=monday_token)
+    multi = find_monday_items_with_multiple_autentique_ids(index)
+    items_out: list[ControleCanonicalLinkRepairItem] = []
+
+    item_by_id = {item.item_id: item for item in index.all_items}
+    for item_id, item_name, previous_ids in multi:
+        item = item_by_id.get(item_id)
+        if item is None:
+            items_out.append(
+                ControleCanonicalLinkRepairItem(
+                    item_id=item_id,
+                    item_name=item_name,
+                    previous_ids=previous_ids,
+                    canonical_id="",
+                    updated=False,
+                    skipped=True,
+                    skip_reason="item_not_in_index",
+                ),
+            )
+            continue
+        canonical_id = pick_primary_autentique_document_id_for_item(
+            item,
+            documents_by_id=documents_by_id,
+        )
+        if canonical_id is None:
+            items_out.append(
+                ControleCanonicalLinkRepairItem(
+                    item_id=item_id,
+                    item_name=item_name,
+                    previous_ids=previous_ids,
+                    canonical_id="",
+                    updated=False,
+                    skipped=True,
+                    skip_reason="no_canonical_id",
+                ),
+            )
+            continue
+        link_text = rebuild_controle_signature_link_text(
+            previous_link=item.signature_link,
+            document_id=canonical_id,
+        )
+        if dry_run:
+            items_out.append(
+                ControleCanonicalLinkRepairItem(
+                    item_id=item_id,
+                    item_name=item_name,
+                    previous_ids=previous_ids,
+                    canonical_id=canonical_id,
+                    updated=True,
+                    skipped=False,
+                ),
+            )
+            continue
+        try:
+            update_controle_item_signature_link(
+                api_token=monday_token,
+                item_id=item_id,
+                signature_link_text=link_text,
+            )
+        except MondayClientError as exc:
+            items_out.append(
+                ControleCanonicalLinkRepairItem(
+                    item_id=item_id,
+                    item_name=item_name,
+                    previous_ids=previous_ids,
+                    canonical_id=canonical_id,
+                    updated=False,
+                    skipped=True,
+                    skip_reason=f"monday_error: {exc}",
+                ),
+            )
+            continue
+        items_out.append(
+            ControleCanonicalLinkRepairItem(
+                item_id=item_id,
+                item_name=item_name,
+                previous_ids=previous_ids,
+                canonical_id=canonical_id,
+                updated=True,
+                skipped=False,
+            ),
+        )
+
+    return ControleCanonicalLinkRepairResult(dry_run=dry_run, items=tuple(items_out))
 
 
 def sync_controle_from_autentique(

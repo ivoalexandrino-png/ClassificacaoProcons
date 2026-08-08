@@ -6,8 +6,13 @@ from collections import defaultdict
 
 from classificacao_procons.contratos.autentique.client import AutentiqueDocumentSummary
 from classificacao_procons.contratos.constants import CONTROLE_STATUS_ASSINADO
+from classificacao_procons.contratos.controle_autentique_link import (
+    autentique_ids_in_controle_link,
+    pick_primary_autentique_document_id_for_item,
+)
 from classificacao_procons.contratos.controle_dedup import normalize_controle_title
 from classificacao_procons.contratos.controle_status import resolve_controle_status_for_track
+from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     ControleAssinaturasIndex,
     infer_controle_signer_track,
@@ -51,6 +56,20 @@ def _status_matches_monday(current: str | None, expected: str) -> bool:
     return current.casefold().strip() == expected.casefold().strip()
 
 
+def _primary_document_for_controle_item(
+    item: ControleAssinaturasItem,
+    *,
+    documents_by_id: dict[str, AutentiqueDocumentSummary],
+) -> tuple[str | None, AutentiqueDocumentSummary | None]:
+    doc_id = pick_primary_autentique_document_id_for_item(
+        item,
+        documents_by_id=documents_by_id,
+    )
+    if doc_id is None:
+        return None, None
+    return doc_id, documents_by_id.get(doc_id)
+
+
 def find_monday_status_behind_autentique(
     *,
     index: ControleAssinaturasIndex,
@@ -58,13 +77,12 @@ def find_monday_status_behind_autentique(
 ) -> tuple[tuple[str, str, str, str | None, str], ...]:
     """Item no Monday ainda pendente enquanto o Autentique já está totalmente assinado."""
     rows: list[tuple[str, str, str, str | None, str]] = []
-    seen_items: set[str] = set()
-    for doc_id, item in index.items_by_document_id:
-        if item.item_id in seen_items:
-            continue
-        seen_items.add(item.item_id)
-        document = documents_by_id.get(doc_id)
-        if document is None or not document.is_fully_signed:
+    for item in index.all_items:
+        doc_id, document = _primary_document_for_controle_item(
+            item,
+            documents_by_id=documents_by_id,
+        )
+        if doc_id is None or document is None or not document.is_fully_signed:
             continue
         expected = CONTROLE_STATUS_ASSINADO
         if _status_matches_monday(item.status, expected):
@@ -80,13 +98,12 @@ def find_monday_track_status_mismatch(
 ) -> tuple[tuple[str, str, str, str, str | None, str], ...]:
     """Status do item Monday não bate com a fila Jan/Luciano no Autentique (pendentes)."""
     rows: list[tuple[str, str, str, str, str | None, str]] = []
-    seen_items: set[str] = set()
-    for doc_id, item in index.items_by_document_id:
-        if item.item_id in seen_items:
-            continue
-        seen_items.add(item.item_id)
-        document = documents_by_id.get(doc_id)
-        if document is None or document.is_fully_signed:
+    for item in index.all_items:
+        doc_id, document = _primary_document_for_controle_item(
+            item,
+            documents_by_id=documents_by_id,
+        )
+        if doc_id is None or document is None or document.is_fully_signed:
             continue
         track = infer_controle_signer_track(item)
         if track not in ("jan", "luciano"):
@@ -95,4 +112,16 @@ def find_monday_track_status_mismatch(
         if _status_matches_monday(item.status, expected):
             continue
         rows.append((item.item_id, item.name, doc_id, track, item.status, expected))
+    return tuple(rows)
+
+
+def find_monday_items_with_multiple_autentique_ids(
+    index: ControleAssinaturasIndex,
+) -> tuple[tuple[str, str, tuple[str, ...]], ...]:
+    """Itens Monday com mais de um Autentique ID no campo de link."""
+    rows: list[tuple[str, str, tuple[str, ...]]] = []
+    for item in index.all_items:
+        linked = autentique_ids_in_controle_link(item.signature_link)
+        if len(linked) > 1:
+            rows.append((item.item_id, item.name, linked))
     return tuple(rows)

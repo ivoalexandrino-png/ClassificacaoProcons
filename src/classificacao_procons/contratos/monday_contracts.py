@@ -26,6 +26,11 @@ from classificacao_procons.contratos.constants import (
     MONDAY_CONTRATOS_BOARD_ID,
     MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
 )
+from classificacao_procons.contratos.controle_autentique_link import (
+    autentique_ids_in_controle_link,
+    extract_autentique_document_ids_from_text,
+    rebuild_controle_signature_link_text,
+)
 from classificacao_procons.contratos.controle_board_scope import (
     is_controle_pending_track_group_title,
 )
@@ -735,16 +740,7 @@ def update_controle_mirror_assinado(
 
 
 def _extract_document_ids_from_text(text: str) -> set[str]:
-    normalized = text.casefold()
-    tokens: set[str] = set()
-    for match in re.findall(r"[a-f0-9]{32,64}", normalized):
-        tokens.add(match)
-    if "autentique id:" in normalized:
-        tail = normalized.split("autentique id:", maxsplit=1)[1].strip()
-        first_line = tail.splitlines()[0].strip()
-        if first_line:
-            tokens.add(first_line)
-    return tokens
+    return extract_autentique_document_ids_from_text(text)
 
 
 def _to_controle_item(
@@ -780,7 +776,7 @@ def ensure_autentique_id_on_controle_items(
     document_id: str,
     items: tuple[ControleAssinaturasItem, ...] | list[ControleAssinaturasItem],
 ) -> None:
-    """Grava o ID do Autentique no link de assinatura de itens legados (sem duplicar)."""
+    """Grava o ID do Autentique no link de assinatura de itens legados (um ID por item)."""
     normalized_id = document_id.casefold().strip()
     if not normalized_id:
         return
@@ -797,12 +793,19 @@ def ensure_autentique_id_on_controle_items(
 
     for item in items:
         current = (item.signature_link or "").strip()
-        if normalized_id in current.casefold():
+        existing_ids = autentique_ids_in_controle_link(current)
+        if normalized_id in {token.casefold() for token in existing_ids}:
             continue
-        if current:
-            updated_text = f"{current}\nAutentique ID: {document_id}"
+        if not existing_ids:
+            if current:
+                updated_text = f"{current}\nAutentique ID: {document_id}"
+            else:
+                updated_text = f"Autentique ID: {document_id}"
         else:
-            updated_text = f"Autentique ID: {document_id}"
+            updated_text = rebuild_controle_signature_link_text(
+                previous_link=current or None,
+                document_id=document_id,
+            )
         column_values = _sanitize_column_values(
             column_details,
             {link_col.id: format_column_value(link_col.column_type, updated_text)},
@@ -815,6 +818,36 @@ def ensure_autentique_id_on_controle_items(
             column_details=column_details,
             column_values=column_values,
         )
+
+
+def update_controle_item_signature_link(
+    *,
+    api_token: str,
+    item_id: str,
+    signature_link_text: str,
+) -> None:
+    """Atualiza somente o campo de link de assinatura no Controle."""
+    column_details = _load_controle_column_details(api_token=api_token)
+    column_by_title = {detail.column.title.casefold(): detail.column for detail in column_details}
+    link_col = columns_by_id_or_title(
+        column_by_title,
+        CONTROLE_COL_LINK_ASSINATURA,
+        ("link autentique", "assinatura", "link"),
+    )
+    if link_col is None:
+        return
+    column_values = _sanitize_column_values(
+        column_details,
+        {link_col.id: format_column_value(link_col.column_type, signature_link_text)},
+    )
+    if not column_values:
+        return
+    _apply_controle_column_values(
+        api_token=api_token,
+        item_id=item_id,
+        column_details=column_details,
+        column_values=column_values,
+    )
 
 
 def archive_controle_item(*, api_token: str, item_id: str) -> None:

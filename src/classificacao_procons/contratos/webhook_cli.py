@@ -36,6 +36,7 @@ from classificacao_procons.contratos.controle_sync import (
     process_signature_accepted_webhook_event,
     process_signature_rejected_webhook_event,
     register_document_in_controle,
+    repair_controle_canonical_autentique_links,
     sync_controle_from_autentique,
 )
 from classificacao_procons.contratos.monday_contracts import build_controle_assinaturas_index
@@ -185,6 +186,7 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
         "monday_status_behind_autentique_count": len(result.monday_status_behind_autentique),
         "monday_track_status_mismatch_count": len(result.monday_track_status_mismatch),
         "legacy_link_suggestions_count": len(result.legacy_link_suggestions),
+        "monday_multiple_autentique_ids_count": len(result.monday_multiple_autentique_ids),
         "pending_missing_in_monday": [
             {"document_id": doc_id, "document_name": name}
             for doc_id, name in result.pending_missing_in_monday[:200]
@@ -250,8 +252,50 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
             }
             for row in result.legacy_link_suggestions[:200]
         ],
+        "monday_multiple_autentique_ids": [
+            {
+                "item_id": item_id,
+                "name": name,
+                "autentique_ids": list(ids),
+            }
+            for item_id, name, ids in result.monday_multiple_autentique_ids[:200]
+        ],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_repair_controle_autentique_links(args: argparse.Namespace) -> int:
+    try:
+        result = repair_controle_canonical_autentique_links(
+            max_pages=args.max_pages,
+            dry_run=args.dry_run,
+        )
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    updated = sum(1 for row in result.items if row.updated and not row.skipped)
+    skipped = sum(1 for row in result.items if row.skipped)
+    payload = {
+        "dry_run": result.dry_run,
+        "items_total": len(result.items),
+        "updated_count": updated,
+        "skipped_count": skipped,
+        "items": [
+            {
+                "item_id": row.item_id,
+                "item_name": row.item_name,
+                "previous_ids": list(row.previous_ids),
+                "canonical_id": row.canonical_id,
+                "updated": row.updated,
+                "skipped": row.skipped,
+                "skip_reason": row.skip_reason,
+            }
+            for row in result.items[:500]
+        ],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -593,6 +637,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     compare_parser.add_argument("--max-pages", type=int, default=50)
     compare_parser.set_defaults(func=_run_compare_controle)
+
+    repair_links_parser = subparsers.add_parser(
+        "repair-controle-autentique-links",
+        help="Deixa um único Autentique ID canônico no link de cada item do Controle",
+    )
+    repair_links_parser.add_argument("--max-pages", type=int, default=50)
+    repair_links_parser.add_argument("--dry-run", action="store_true")
+    repair_links_parser.set_defaults(func=_run_repair_controle_autentique_links)
 
     validate_status_parser = subparsers.add_parser(
         "validate-controle-status-labels",
