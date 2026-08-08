@@ -14,12 +14,13 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "compare = relatório; repair = 1 Autentique ID por item; sync = auto-link + sync"
+        description: "compare | repair | reconcile-mismatches | sync"
         required: true
         type: choice
         options:
           - compare
           - repair
+          - reconcile-mismatches
           - sync
         default: compare
       dry_run:
@@ -127,6 +128,18 @@ jobs:
             ARGS="$ARGS --dry-run"
           fi
           contratos-webhook repair-controle-autentique-links $ARGS
+
+      - name: Reconcile compare mismatches (Controle)
+        if: ${{ steps.params.outputs.mode == 'reconcile-mismatches' }}
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
+          if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          contratos-webhook reconcile-controle-mismatches $ARGS
 
       - name: Sync Controle Assinaturas
         if: ${{ steps.params.outputs.mode == 'sync' }}

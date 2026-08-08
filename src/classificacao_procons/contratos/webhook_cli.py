@@ -35,6 +35,7 @@ from classificacao_procons.contratos.controle_sync import (
     process_document_created_webhook_event,
     process_signature_accepted_webhook_event,
     process_signature_rejected_webhook_event,
+    reconcile_controle_compare_mismatches,
     register_document_in_controle,
     repair_controle_canonical_autentique_links,
     sync_controle_from_autentique,
@@ -297,6 +298,43 @@ def _run_repair_controle_autentique_links(args: argparse.Namespace) -> int:
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0
+
+
+def _run_reconcile_controle_mismatches(args: argparse.Namespace) -> int:
+    try:
+        result = reconcile_controle_compare_mismatches(
+            max_pages=args.max_pages,
+            dry_run=args.dry_run,
+            include_status_behind=not args.track_only,
+        )
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "dry_run": result.dry_run,
+        "track_mismatch_documents": result.track_mismatch_documents,
+        "status_behind_documents": result.status_behind_documents,
+        "updated_count": result.updated,
+        "skipped_count": result.skipped,
+        "failed_count": result.failed,
+        "items": [
+            {
+                "document_id": row.document_id,
+                "document_name": row.document_name,
+                "monday_item_id": row.monday_item_id,
+                "source": row.source,
+                "updated": row.updated,
+                "skipped": row.skipped,
+                "skip_reason": row.skip_reason,
+                "error": row.error,
+                "status_label": row.status_label,
+            }
+            for row in result.items[:500]
+        ],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if result.failed == 0 else 1
 
 
 def _run_link_controle(args: argparse.Namespace) -> int:
@@ -645,6 +683,19 @@ def main(argv: list[str] | None = None) -> int:
     repair_links_parser.add_argument("--max-pages", type=int, default=50)
     repair_links_parser.add_argument("--dry-run", action="store_true")
     repair_links_parser.set_defaults(func=_run_repair_controle_autentique_links)
+
+    reconcile_mismatches_parser = subparsers.add_parser(
+        "reconcile-controle-mismatches",
+        help="Atualiza Monday só onde compare apontou divergência de track/status",
+    )
+    reconcile_mismatches_parser.add_argument("--max-pages", type=int, default=50)
+    reconcile_mismatches_parser.add_argument("--dry-run", action="store_true")
+    reconcile_mismatches_parser.add_argument(
+        "--track-only",
+        action="store_true",
+        help="Ignora monday_status_behind_autentique (só track mismatch)",
+    )
+    reconcile_mismatches_parser.set_defaults(func=_run_reconcile_controle_mismatches)
 
     validate_status_parser = subparsers.add_parser(
         "validate-controle-status-labels",
