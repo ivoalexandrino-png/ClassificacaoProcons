@@ -66,6 +66,7 @@ from classificacao_procons.contratos.controle_track_repair import (
     CONTROLE_PLATFORM_AUTENTIQUE,
     CONTROLE_SIGNER_LABEL_JAN,
     CONTROLE_SIGNER_LABEL_LUCIANO,
+    controle_dual_tracks_satisfied_for_items,
     ensure_controle_dual_tracks_for_document,
     parse_autentique_created_date,
 )
@@ -814,7 +815,10 @@ def sync_controle_from_autentique(
         )
         if not dry_run:
             linked_items = index.items_for_document_id(document.document_id)
-            if linked_items:
+            if linked_items and not controle_dual_tracks_satisfied_for_items(
+                document,
+                linked_items,
+            ):
                 jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
                 if jan_group_id and luciano_group_id:
                     try:

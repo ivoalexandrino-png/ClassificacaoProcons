@@ -11,6 +11,10 @@ from classificacao_procons.contratos.controle_required_tracks import (
     document_required_controle_tracks,
 )
 from classificacao_procons.contratos.controle_sync import _create_controle_track_pair
+from classificacao_procons.contratos.controle_track_repair import (
+    controle_dual_tracks_satisfied_for_items,
+)
+from classificacao_procons.contratos.models import ControleAssinaturasItem
 
 
 class TestDocumentRequiredControleTracks:
@@ -72,6 +76,50 @@ class TestDocumentRequiredControleTracks:
         )
 
         assert document_required_controle_tracks(document) == frozenset({"luciano"})
+
+
+class TestControleDualTracksSatisfied:
+    def test_should_be_satisfied_when_both_tracks_present(self) -> None:
+        document = AutentiqueDocumentSummary(
+            document_id="doc-1",
+            name="Contrato",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(
+                AutentiqueSigner(
+                    public_id="1",
+                    name="Jan",
+                    email=SIGNER_EMAIL_JAN,
+                    short_link=None,
+                    signed_at=None,
+                ),
+                AutentiqueSigner(
+                    public_id="2",
+                    name="Luciano",
+                    email=SIGNER_EMAIL_LUCIANO,
+                    short_link=None,
+                    signed_at=None,
+                ),
+            ),
+        )
+        items = (
+            ControleAssinaturasItem(
+                item_id="j",
+                name="Contrato",
+                status=None,
+                tipo="B2B",
+                signature_link="controle_track: jan",
+            ),
+            ControleAssinaturasItem(
+                item_id="l",
+                name="Contrato",
+                status=None,
+                tipo=None,
+                signature_link="controle_track: luciano",
+            ),
+        )
+
+        assert controle_dual_tracks_satisfied_for_items(document, items) is True
 
 
 class TestCreateControleTrackPairRequiredTracks:
