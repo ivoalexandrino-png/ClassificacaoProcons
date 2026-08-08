@@ -32,6 +32,7 @@ juridico = "classificacao_procons.juridico.cli:main"
 procon-portal = "classificacao_procons.portal_cli:main"
 procon-drive = "classificacao_procons.drive_cli:main"
 contratos-webhook = "classificacao_procons.contratos.webhook_cli:main"
+questor = "classificacao_procons.questor.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
