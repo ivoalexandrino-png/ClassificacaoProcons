@@ -41,6 +41,9 @@ from classificacao_procons.contratos.controle_sync import (
     repair_controle_canonical_autentique_links,
     sync_controle_from_autentique,
 )
+from classificacao_procons.contratos.controle_sync_remediation import (
+    remediate_erroneous_sync_duplicates,
+)
 from classificacao_procons.contratos.monday_contracts import build_controle_assinaturas_index
 from classificacao_procons.contratos.monday_webhook import (
     MondayWebhookError,
@@ -115,6 +118,7 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
             skip_signed_documents=args.skip_signed_documents,
             auto_link_legacy=not args.no_auto_link_legacy,
             allow_create=True if args.allow_create else None,
+            import_signed_as_new=args.import_signed_as_new,
         )
     except ControleSyncError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
@@ -142,6 +146,43 @@ def _run_sync_controle(args: argparse.Namespace) -> int:
         ],
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if result.failed == 0 else 1
+
+
+def _run_remediate_sync_duplicates(args: argparse.Namespace) -> int:
+    monday_token = get_api_token_from_env()
+    if not monday_token:
+        print("Erro: MONDAY_API_TOKEN não configurada.", file=sys.stderr)
+        return 1
+    try:
+        result = remediate_erroneous_sync_duplicates(
+            monday_api_token=monday_token,
+            max_pages=args.max_pages,
+            dry_run=not args.apply,
+        )
+    except ValueError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    payload = {
+        "dry_run": result.dry_run,
+        "candidates_count": len(result.candidates),
+        "archived_count": result.archived,
+        "failed_count": result.failed,
+        "candidates": [
+            {
+                "item_id": row.item_id,
+                "item_name": row.item_name,
+                "item_status": row.item_status,
+                "autentique_document_id": row.autentique_document_id,
+                "legacy_assinado_item_id": row.legacy_assinado_item_id,
+                "legacy_assinado_item_name": row.legacy_assinado_item_name,
+                "reason": row.reason,
+            }
+            for row in result.candidates[:500]
+        ],
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if result.failed == 0 else 1
 
 
@@ -683,6 +724,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Permite criar novos itens no Controle (padrão: criação pausada)",
     )
+    sync_parser.add_argument(
+        "--import-signed-as-new",
+        action="store_true",
+        help="Importa assinados como itens novos (perigoso; prefira link legado)",
+    )
     sync_parser.set_defaults(func=_run_sync_controle)
 
     compare_parser = subparsers.add_parser(
@@ -722,6 +768,18 @@ def main(argv: list[str] | None = None) -> int:
         help="Busca no Autentique só IDs já presentes no link do Monday (mais rápido)",
     )
     reconcile_mismatches_parser.set_defaults(func=_run_reconcile_controle_mismatches)
+
+    remediate_parser = subparsers.add_parser(
+        "remediate-sync-duplicates",
+        help="Arquiva itens criados pelo sync em duplicata de legado já Assinado",
+    )
+    remediate_parser.add_argument("--max-pages", type=int, default=50)
+    remediate_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Executa arquivamento no Monday (padrão: só lista candidatos)",
+    )
+    remediate_parser.set_defaults(func=_run_remediate_sync_duplicates)
 
     validate_status_parser = subparsers.add_parser(
         "validate-controle-status-labels",

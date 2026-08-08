@@ -1,0 +1,36 @@
+name: Remediar duplicatas sync Controle
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Arquivar candidatos no Monday (reversível). Padrão: só listar."
+        required: false
+        type: boolean
+        default: false
+      max_pages:
+        description: "Páginas Autentique"
+        required: false
+        type: string
+        default: "100"
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install .
+      - name: Remediate erroneous sync duplicates
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+        run: |
+          ARGS="--max-pages ${{ inputs.max_pages }}"
+          if [ "${{ inputs.apply }}" = "true" ]; then
+            ARGS="$ARGS --apply"
+          fi
+          contratos-webhook remediate-sync-duplicates $ARGS
