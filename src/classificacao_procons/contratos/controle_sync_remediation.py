@@ -19,7 +19,9 @@ from classificacao_procons.contratos.controle_autentique_link import (
 )
 from classificacao_procons.contratos.controle_legacy_guard import (
     find_legacy_signed_name_matches,
+    status_is_assinado,
 )
+from classificacao_procons.contratos.controle_reconcile import find_duplicate_normalized_names
 from classificacao_procons.contratos.monday_contracts import (
     ControleAssinaturasIndex,
     archive_controle_item,
@@ -73,6 +75,55 @@ def _document_fully_signed(
     return fetched.is_fully_signed
 
 
+def _append_duplicate_normalized_name_candidates(
+    *,
+    index: ControleAssinaturasIndex,
+    documents_by_id: dict[str, AutentiqueDocumentSummary],
+    autentique_api_token: str | None,
+    pending_ids: set[str],
+    seen_item_ids: set[str],
+    rows: list[ErroneousSyncItemRow],
+) -> None:
+    items_by_id = {item.item_id: item for item in index.all_items}
+    for _normalized, entries in find_duplicate_normalized_names(index):
+        if len(entries) < 2:
+            continue
+        cluster = [items_by_id[item_id] for item_id, _name in entries if item_id in items_by_id]
+        assinados = [item for item in cluster if status_is_assinado(item.status)]
+        if not assinados:
+            continue
+        legacy = assinados[0]
+        for item in cluster:
+            if item.item_id in seen_item_ids:
+                continue
+            if item.item_id not in pending_ids:
+                continue
+            if not _status_is_pending_sync_noise(item.status):
+                continue
+            linked_ids = autentique_ids_in_controle_link(item.signature_link)
+            if not linked_ids:
+                continue
+            primary_doc_id = linked_ids[-1]
+            if not _document_fully_signed(
+                primary_doc_id,
+                documents_by_id=documents_by_id,
+                autentique_api_token=autentique_api_token,
+            ):
+                continue
+            seen_item_ids.add(item.item_id)
+            rows.append(
+                ErroneousSyncItemRow(
+                    item_id=item.item_id,
+                    item_name=item.name,
+                    item_status=item.status,
+                    autentique_document_id=primary_doc_id,
+                    legacy_assinado_item_id=legacy.item_id,
+                    legacy_assinado_item_name=legacy.name,
+                    reason="duplicate_normalized_title_pending_vs_assinado",
+                ),
+            )
+
+
 def find_erroneous_sync_duplicate_items(
     *,
     index: ControleAssinaturasIndex,
@@ -81,6 +132,7 @@ def find_erroneous_sync_duplicate_items(
 ) -> tuple[ErroneousSyncItemRow, ...]:
     """Itens em fila pendente, ainda Aguardando, com doc assinado e par Assinado legado."""
     rows: list[ErroneousSyncItemRow] = []
+    seen_item_ids: set[str] = set()
     pending_ids = {p.item_id for p in index.pending_track_items}
     for item in index.all_items:
         if item.item_id not in pending_ids:
@@ -103,6 +155,7 @@ def find_erroneous_sync_duplicate_items(
         if not legacy_hits:
             continue
         legacy = legacy_hits[0]
+        seen_item_ids.add(item.item_id)
         rows.append(
             ErroneousSyncItemRow(
                 item_id=item.item_id,
@@ -114,6 +167,14 @@ def find_erroneous_sync_duplicate_items(
                 reason="fully_signed_doc_pending_duplicate_of_legacy_assinado",
             ),
         )
+    _append_duplicate_normalized_name_candidates(
+        index=index,
+        documents_by_id=documents_by_id,
+        autentique_api_token=autentique_api_token,
+        pending_ids=pending_ids,
+        seen_item_ids=seen_item_ids,
+        rows=rows,
+    )
     return tuple(rows)
 
 
