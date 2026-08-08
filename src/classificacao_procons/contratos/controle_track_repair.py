@@ -67,6 +67,18 @@ def classify_controle_item_track(
     return "luciano"
 
 
+def controle_dual_tracks_satisfied_for_items(
+    document: AutentiqueDocumentSummary,
+    items: tuple[ControleAssinaturasItem, ...] | list[ControleAssinaturasItem],
+) -> bool:
+    """True quando cada fila exigida pelo Autentique já tem item no Monday."""
+    required = document_required_controle_tracks(document)
+    if not required:
+        return True
+    present = {infer_controle_signer_track(item) for item in items}
+    return all(track in present for track in required)
+
+
 def parse_autentique_created_date(document: AutentiqueDocumentSummary) -> date | None:
     raw = document.created_at
     if not raw:
