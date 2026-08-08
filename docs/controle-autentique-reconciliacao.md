@@ -39,7 +39,8 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 - Item no Controle com link para documento **já totalmente assinado** no Autentique mas status ainda “Aguardando…” → **desatualizado**.
 - **Como medir:** `compare-controle` → `monday_track_status_mismatch`, `monday_status_behind_autentique`, `monday_multiple_autentique_ids`.
 - **Reparo (um ID por item):** GitHub Actions → **Sync Controle Assinaturas** → `mode: repair`, `dry_run: true` (depois `false` para aplicar). Ou CLI: `repair-controle-autentique-links --dry-run --max-pages 50`.
-- **Como corrigir:** `sync-controle` (campo `legacy_linked` no JSON); workflow **Sync Controle Assinaturas** roda em cron (sync real).
+- **Corrigir só divergências do compare (rápido):** `mode: reconcile-mismatches` ou CLI `reconcile-controle-mismatches` (atualiza track/status onde `monday_track_status_mismatch` / `monday_status_behind_autentique`; itens **inativos** no Monday são ignorados, não falham o job).
+- **Como corrigir (varredura completa):** `sync-controle` (campo `legacy_linked` no JSON); workflow **Sync Controle Assinaturas** roda em cron (compare only no push/schedule).
 
 ## Comandos
 
