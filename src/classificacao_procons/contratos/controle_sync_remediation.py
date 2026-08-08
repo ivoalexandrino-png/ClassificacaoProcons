@@ -22,6 +22,7 @@ from classificacao_procons.contratos.controle_legacy_guard import (
     status_is_assinado,
 )
 from classificacao_procons.contratos.controle_reconcile import find_duplicate_normalized_names
+from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     ControleAssinaturasIndex,
     archive_controle_item,
@@ -124,6 +125,61 @@ def _append_duplicate_normalized_name_candidates(
             )
 
 
+def _append_pending_only_duplicate_candidates(
+    *,
+    index: ControleAssinaturasIndex,
+    documents_by_id: dict[str, AutentiqueDocumentSummary],
+    autentique_api_token: str | None,
+    pending_ids: set[str],
+    seen_item_ids: set[str],
+    rows: list[ErroneousSyncItemRow],
+) -> None:
+    """Vários itens na fila pendente com o mesmo título e doc já assinado (ex.: sync duplo)."""
+    items_by_id = {item.item_id: item for item in index.all_items}
+    for _normalized, entries in find_duplicate_normalized_names(index):
+        if len(entries) < 2:
+            continue
+        cluster = [items_by_id[item_id] for item_id, _name in entries if item_id in items_by_id]
+        pending = [
+            item
+            for item in cluster
+            if item.item_id in pending_ids and _status_is_pending_sync_noise(item.status)
+        ]
+        if len(pending) < 2:
+            continue
+        signed_pending: list[ControleAssinaturasItem] = []
+        for item in pending:
+            linked_ids = autentique_ids_in_controle_link(item.signature_link)
+            if not linked_ids:
+                continue
+            if _document_fully_signed(
+                linked_ids[-1],
+                documents_by_id=documents_by_id,
+                autentique_api_token=autentique_api_token,
+            ):
+                signed_pending.append(item)
+        if len(signed_pending) < 2:
+            continue
+        signed_pending.sort(key=lambda row: int(row.item_id))
+        keeper = signed_pending[0]
+        for extra in signed_pending[1:]:
+            if extra.item_id in seen_item_ids:
+                continue
+            seen_item_ids.add(extra.item_id)
+            doc_id = autentique_ids_in_controle_link(extra.signature_link)[-1]
+            rows.append(
+                ErroneousSyncItemRow(
+                    item_id=extra.item_id,
+                    item_name=extra.name,
+                    item_status=extra.status,
+                    autentique_document_id=doc_id,
+                    legacy_assinado_item_id=keeper.item_id,
+                    legacy_assinado_item_name=keeper.name,
+                    reason="duplicate_pending_same_title_signed_doc",
+                ),
+            )
+
+
 def find_erroneous_sync_duplicate_items(
     *,
     index: ControleAssinaturasIndex,
@@ -168,6 +224,14 @@ def find_erroneous_sync_duplicate_items(
             ),
         )
     _append_duplicate_normalized_name_candidates(
+        index=index,
+        documents_by_id=documents_by_id,
+        autentique_api_token=autentique_api_token,
+        pending_ids=pending_ids,
+        seen_item_ids=seen_item_ids,
+        rows=rows,
+    )
+    _append_pending_only_duplicate_candidates(
         index=index,
         documents_by_id=documents_by_id,
         autentique_api_token=autentique_api_token,
