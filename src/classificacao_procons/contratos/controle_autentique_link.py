@@ -30,10 +30,33 @@ def extract_autentique_document_ids_from_text(text: str) -> set[str]:
 
 
 def autentique_ids_in_controle_link(text: str | None) -> tuple[str, ...]:
-    """IDs hex do Autentique presentes no campo de link (ordem estável)."""
+    """IDs do Autentique no campo de link (ordem estável).
+
+    Prioriza linhas ``Autentique ID:`` para não contar hashes em URLs assina.ae
+    como segundo documento após o repair canônico.
+    """
     if not text:
         return ()
-    return tuple(sorted(extract_autentique_document_ids_from_text(text)))
+    explicit: list[str] = []
+    legacy_lines: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.casefold().startswith("autentique id:"):
+            token = line.split(":", 1)[1].strip()
+            if token:
+                explicit.append(token)
+            continue
+        if _ASSINA_LINK.search(line):
+            continue
+        legacy_lines.append(line)
+    if explicit:
+        by_key = {token.casefold(): token for token in explicit}
+        return tuple(sorted(by_key.values(), key=str.casefold))
+    if not legacy_lines:
+        return ()
+    return tuple(sorted(extract_autentique_document_ids_from_text("\n".join(legacy_lines))))
 
 
 def pick_primary_autentique_document_id(

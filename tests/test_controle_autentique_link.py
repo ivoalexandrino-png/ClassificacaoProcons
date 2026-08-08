@@ -125,6 +125,17 @@ class TestControleAutentiqueLink:
         assert len(rows) == 1
         assert rows[0][2] == rescisao_id
 
+    def test_should_not_count_hex_in_assina_url_as_second_autentique_id(self) -> None:
+        canonical = "8d099b60e03d16866c391507092d6cb80bc4ae22dca1d515ff45168f579601df"
+        other = "cd38eceb9857fd60dc6371410c98d169e190561b511690d935e327e05dd99a86"
+        link = (
+            f"https://assina.ae/{other}\n"
+            f"Autentique ID: {canonical}\n"
+            "controle_track: jan"
+        )
+
+        assert autentique_ids_in_controle_link(link) == (canonical,)
+
     def test_should_list_items_with_multiple_autentique_ids(self) -> None:
         id_a = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         id_b = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
