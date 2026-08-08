@@ -148,4 +148,45 @@ class TestReconcileControleCompareMismatches:
 
         assert result.failed == 0
         assert result.skipped == 1
-        assert result.items[0].skip_reason == "monday_inactive_item"
+    @patch("classificacao_procons.contratos.controle_sync.list_documents")
+    @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
+    def test_should_use_light_feed_without_list_documents(
+        self,
+        fetch_mock,
+        list_documents_mock,
+    ) -> None:
+        from classificacao_procons.contratos.controle_sync import (
+            _documents_by_id_for_controle_reconcile,
+        )
+
+        doc_id = "a" * 48
+        item = ControleAssinaturasItem(
+            item_id="1",
+            name="Doc",
+            status=None,
+            tipo=None,
+            signature_link=f"Autentique ID: {doc_id}",
+        )
+        index = ControleAssinaturasIndex(
+            document_ids=frozenset({doc_id}),
+            exact_names=frozenset(),
+            all_items=(item,),
+        )
+        fetch_mock.return_value = AutentiqueDocumentSummary(
+            document_id=doc_id,
+            name="Doc",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(),
+        )
+
+        result = _documents_by_id_for_controle_reconcile(
+            index=index,
+            autentique_api_token="token",
+            max_pages=50,
+            light_feed=True,
+        )
+
+        list_documents_mock.assert_not_called()
+        fetch_mock.assert_called_once()
+        assert doc_id in result

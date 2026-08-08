@@ -25,6 +25,7 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_STATUS_ASSINADO,
 )
 from classificacao_procons.contratos.controle_autentique_link import (
+    autentique_ids_in_controle_link,
     pick_primary_autentique_document_id_for_item,
     rebuild_controle_signature_link_text,
 )
@@ -776,6 +777,40 @@ def _monday_inactive_item_error(exc: BaseException) -> bool:
     return "inactive items" in str(exc).casefold()
 
 
+def _documents_by_id_for_controle_reconcile(
+    *,
+    index: ControleAssinaturasIndex,
+    autentique_api_token: str | None,
+    max_pages: int,
+    light_feed: bool,
+) -> dict[str, AutentiqueDocumentSummary]:
+    """Carrega metadados Autentique para reconciliação (feed completo ou só IDs do Monday)."""
+    if not light_feed:
+        try:
+            documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
+        except AutentiqueClientError as exc:
+            raise ControleSyncError(str(exc)) from exc
+        return {
+            document.document_id.casefold().strip(): document for document in documents
+        }
+
+    wanted: set[str] = set()
+    for item in index.all_items:
+        for token in autentique_ids_in_controle_link(item.signature_link):
+            wanted.add(token.casefold().strip())
+    documents_by_id: dict[str, AutentiqueDocumentSummary] = {}
+    for doc_id in sorted(wanted):
+        try:
+            document = fetch_document_summary(
+                document_id=doc_id,
+                api_token=autentique_api_token,
+            )
+        except AutentiqueClientError:
+            continue
+        documents_by_id[document.document_id.casefold().strip()] = document
+    return documents_by_id
+
+
 def reconcile_controle_compare_mismatches(
     *,
     monday_api_token: str | None = None,
@@ -783,21 +818,20 @@ def reconcile_controle_compare_mismatches(
     max_pages: int = 50,
     dry_run: bool = False,
     include_status_behind: bool = True,
+    light_feed: bool = False,
 ) -> ControleMismatchReconcileResult:
     """Atualiza no Monday só itens com divergência do compare (track/status)."""
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
 
-    try:
-        documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
-    except AutentiqueClientError as exc:
-        raise ControleSyncError(str(exc)) from exc
-
-    documents_by_id = {
-        document.document_id.casefold().strip(): document for document in documents
-    }
     index = build_controle_assinaturas_index(api_token=monday_token)
+    documents_by_id = _documents_by_id_for_controle_reconcile(
+        index=index,
+        autentique_api_token=autentique_api_token,
+        max_pages=max_pages,
+        light_feed=light_feed,
+    )
     groups = load_controle_board_groups(api_token=monday_token)
 
     track_rows = find_monday_track_status_mismatch(

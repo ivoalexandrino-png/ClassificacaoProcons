@@ -58,6 +58,16 @@ on:
         required: false
         type: boolean
         default: false
+      allow_create:
+        description: "Sync: permite criar itens faltantes no Controle (--allow-create)"
+        required: false
+        type: boolean
+        default: false
+      light_autentique_feed:
+        description: "reconcile-mismatches: buscar só IDs já no link do Monday"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: contratos-sync-controle
@@ -78,12 +88,16 @@ jobs:
             echo "max_pages=50" >> "$GITHUB_OUTPUT"
             echo "create_only=true" >> "$GITHUB_OUTPUT"
             echo "skip_signed_documents=true" >> "$GITHUB_OUTPUT"
+            echo "allow_create=false" >> "$GITHUB_OUTPUT"
+            echo "light_autentique_feed=false" >> "$GITHUB_OUTPUT"
           else
             echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
             echo "dry_run=${{ inputs.dry_run }}" >> "$GITHUB_OUTPUT"
             echo "max_pages=${{ inputs.max_pages }}" >> "$GITHUB_OUTPUT"
             echo "create_only=${{ inputs.create_only }}" >> "$GITHUB_OUTPUT"
             echo "skip_signed_documents=${{ inputs.skip_signed_documents }}" >> "$GITHUB_OUTPUT"
+            echo "allow_create=${{ inputs.allow_create }}" >> "$GITHUB_OUTPUT"
+            echo "light_autentique_feed=${{ inputs.light_autentique_feed }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout
@@ -115,7 +129,17 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
         run: |
-          contratos-webhook compare-controle --max-pages "${{ steps.params.outputs.max_pages }}"
+          contratos-webhook compare-controle \
+            --max-pages "${{ steps.params.outputs.max_pages }}" \
+            --export-pending-json pending-export.json
+
+      - name: Upload pending export
+        if: ${{ steps.params.outputs.mode == 'compare' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: controle-pending-export
+          path: pending-export.json
+          if-no-files-found: ignore
 
       - name: Repair canonical Autentique links (Controle)
         if: ${{ steps.params.outputs.mode == 'repair' }}
@@ -139,6 +163,9 @@ jobs:
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"
           fi
+          if [ "${{ steps.params.outputs.light_autentique_feed }}" = "true" ]; then
+            ARGS="$ARGS --light-feed"
+          fi
           contratos-webhook reconcile-controle-mismatches $ARGS
 
       - name: Sync Controle Assinaturas
@@ -146,7 +173,7 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
-          CONTROLE_PAUSE_CREATE: "true"
+          CONTROLE_PAUSE_CREATE: ${{ steps.params.outputs.allow_create == 'true' && 'false' || 'true' }}
         run: |
           ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
@@ -157,6 +184,9 @@ jobs:
           fi
           if [ "${{ steps.params.outputs.skip_signed_documents }}" = "true" ]; then
             ARGS="$ARGS --skip-signed-documents"
+          fi
+          if [ "${{ steps.params.outputs.allow_create }}" = "true" ]; then
+            ARGS="$ARGS --allow-create"
           fi
           contratos-webhook sync-controle $ARGS
 
