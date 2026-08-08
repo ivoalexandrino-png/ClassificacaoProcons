@@ -8,6 +8,7 @@ import os
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 from classificacao_procons.contratos.autentique.client import AutentiqueClientError
 from classificacao_procons.contratos.autentique.webhook import (
@@ -262,6 +263,20 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
             for item_id, name, ids in result.monday_multiple_autentique_ids[:200]
         ],
     }
+    if getattr(args, "export_pending_json", None):
+        export_path = Path(args.export_pending_json)
+        export_path.write_text(
+            json.dumps(
+                {
+                    "pending_missing_in_monday": summary["pending_missing_in_monday"],
+                    "signed_missing_in_monday": summary["signed_missing_in_monday"],
+                    "legacy_link_suggestions": summary["legacy_link_suggestions"],
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 
@@ -306,6 +321,7 @@ def _run_reconcile_controle_mismatches(args: argparse.Namespace) -> int:
             max_pages=args.max_pages,
             dry_run=args.dry_run,
             include_status_behind=not args.track_only,
+            light_feed=args.light_feed,
         )
     except ControleSyncError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
@@ -674,6 +690,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Compara Autentique e Controle Assinaturas sem alterar Monday",
     )
     compare_parser.add_argument("--max-pages", type=int, default=50)
+    compare_parser.add_argument(
+        "--export-pending-json",
+        metavar="PATH",
+        help="Grava pending/signed missing e sugestões de link legado em JSON",
+    )
     compare_parser.set_defaults(func=_run_compare_controle)
 
     repair_links_parser = subparsers.add_parser(
@@ -694,6 +715,11 @@ def main(argv: list[str] | None = None) -> int:
         "--track-only",
         action="store_true",
         help="Ignora monday_status_behind_autentique (só track mismatch)",
+    )
+    reconcile_mismatches_parser.add_argument(
+        "--light-feed",
+        action="store_true",
+        help="Busca no Autentique só IDs já presentes no link do Monday (mais rápido)",
     )
     reconcile_mismatches_parser.set_defaults(func=_run_reconcile_controle_mismatches)
 

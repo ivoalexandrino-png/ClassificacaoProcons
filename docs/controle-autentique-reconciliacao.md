@@ -57,7 +57,22 @@ contratos-webhook sync-controle --allow-create --create-only --skip-signed-docum
 contratos-webhook sync-controle --no-auto-link-legacy ...
 ```
 
-Workflow GitHub: **Sync Controle Assinaturas (Autentique)** — modo `compare` ou `sync`.
+Workflow GitHub: **Sync Controle Assinaturas (Autentique)** — modos `compare`, `repair`, `reconcile-mismatches`, `sync`.
+
+### Catch-up recomendado (após compare limpo em track/status/multi-ID)
+
+1. **compare** — artefato `controle-pending-export` (pending, signed missing, sugestões legado).
+2. **validate_status_labels** — `validate_status_labels=true` no dispatch.
+3. **sync** `dry_run=true`, `allow_create=true`, `create_only=false`, `skip_signed_documents=true`.
+4. **sync** `dry_run=false`, mesmos parâmetros — cria pendentes + auto-link + atualiza existentes.
+5. (Opcional) **sync** com `skip_signed_documents=false` — assinados faltando no Controle.
+6. **reconcile-mismatches** — `light_autentique_feed=true` quando só há poucas divergências.
+7. **pilot_bruno_distrato** — `pilot_bruno_dry_run=true`, depois `false`.
+8. **compare** final.
+
+**Itens inativos no Monday:** sync/reconcile ignoram com `skipped_inactive` (não atualizam colunas).
+
+**Fase Contratos:** Tipo + Assinado (Jan) → automação Monday / `document.finished`. Ver `docs/cloud-agent-autonomia.md`.
 
 ## Regra de nome (resumo)
 
@@ -65,6 +80,6 @@ Ver `AGENTS.md`. Não fundir vários contratos do mesmo fornecedor (ex. `202505_
 
 ## Roadmap técnico
 
-1. **Hoje:** compare + sync com auto-link legado inequívoco + duas filas Jan/Luciano; cron no workflow **Sync Controle Assinaturas**.
+1. **Hoje:** compare + sync com auto-link legado + duas filas Jan/Luciano; cron no workflow **Sync Controle Assinaturas**.
 2. **Próximo:** assinados → Contratos + colunas Monday.
 3. **Depois:** match legado ambíguo via API/PDF (hash) quando título divergir.
