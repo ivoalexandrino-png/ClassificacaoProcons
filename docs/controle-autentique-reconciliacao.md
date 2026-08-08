@@ -37,7 +37,8 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 
 - Cada fila (**Jan** / **Luciano**) tem status e **data de assinatura** próprios: só contam assinaturas de **Jan/Assinador** ou **Luciano/Beauty For All**, não de terceiros.
 - Item no Controle com link para documento **já totalmente assinado** no Autentique mas status ainda “Aguardando…” → **desatualizado**.
-- **Como medir:** `compare-controle` → `monday_track_status_mismatch`, `monday_status_behind_autentique`.
+- **Como medir:** `compare-controle` → `monday_track_status_mismatch`, `monday_status_behind_autentique`, `monday_multiple_autentique_ids`.
+- **Reparo (um ID por item):** `contratos-webhook repair-controle-autentique-links --dry-run --max-pages 50` e depois sem `--dry-run` (requer `MONDAY_API_TOKEN` + `AUTENTIQUE_API_TOKEN`).
 - **Como corrigir:** `sync-controle` (campo `legacy_linked` no JSON); workflow **Sync Controle Assinaturas** roda em cron (sync real).
 
 ## Comandos
