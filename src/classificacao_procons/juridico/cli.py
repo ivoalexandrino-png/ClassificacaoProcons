@@ -11,6 +11,16 @@ from pathlib import Path
 
 from classificacao_procons.email.gmail import GmailClientError
 from classificacao_procons.google_auth import has_drive_access, has_valid_token
+from classificacao_procons.juridico.casos_consumidor.benchmark import benchmark_similar_cases
+from classificacao_procons.juridico.casos_consumidor.pipeline import (
+    CasosScanOptions,
+    scan_consumer_cases,
+)
+from classificacao_procons.juridico.casos_consumidor.report import (
+    load_cases_from_json,
+    write_casos_csv,
+    write_casos_json,
+)
 from classificacao_procons.juridico.cnj import extract_process_number
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 from classificacao_procons.juridico.constants import DEFAULT_CONSUMER_PROCESSES_DRIVE_FOLDER_ID
@@ -83,6 +93,94 @@ def _run_depositos_scan(args: argparse.Namespace) -> int:
         "output_csv": str(csv_path),
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _theme_deposit_totals(cases: list) -> list[dict[str, object]]:
+    from collections import defaultdict
+    from decimal import Decimal
+
+    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    counts: dict[str, int] = defaultdict(int)
+    for case in cases:
+        totals[case.primary_theme.value] += case.total_judicial_deposits_brl or Decimal("0")
+        if case.total_judicial_deposits_brl:
+            counts[case.primary_theme.value] += 1
+    rows = [
+        {
+            "primary_theme": theme,
+            "consumers_with_deposits": counts[theme],
+            "total_deposits_brl": float(totals[theme]),
+        }
+        for theme in sorted(totals.keys())
+    ]
+    rows.sort(key=lambda row: row["total_deposits_brl"], reverse=True)
+    return rows
+
+
+def _run_casos_scan(args: argparse.Namespace) -> int:
+    if not has_drive_access(args.token):
+        print(DRIVE_AUTH_HINT, file=sys.stderr)
+        return 1
+
+    options = CasosScanOptions(
+        root_folder_id=args.root_folder_id,
+        work_dir=Path(args.work_dir),
+        token_path=args.token,
+        max_consumers=args.max_consumers,
+        deposits_json_path=Path(args.deposits_json),
+        use_gemini=not args.no_gemini,
+        max_gemini_calls=args.max_gemini_calls,
+    )
+    result = scan_consumer_cases(options)
+    csv_path = Path(args.output_csv)
+    write_casos_csv(result=result, destination=csv_path)
+    json_path = Path(args.output_json)
+    write_casos_json(result=result, destination=json_path)
+
+    summary = {
+        "consumers_scanned": result.consumers_scanned,
+        "consumers_with_deposits": result.consumers_with_deposits,
+        "cases": len(result.cases),
+        "output_csv": str(csv_path),
+        "output_json": str(json_path),
+        "deposits_by_theme": _theme_deposit_totals(result.cases),
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_casos_benchmark(args: argparse.Namespace) -> int:
+    cases_path = Path(args.cases_json)
+    if not cases_path.exists():
+        print(json.dumps({"error": f"Arquivo não encontrado: {cases_path}"}), file=sys.stderr)
+        return 1
+
+    if args.text_file:
+        complaint_text = Path(args.text_file).read_text(encoding="utf-8")
+    elif args.text:
+        complaint_text = args.text
+    else:
+        print(json.dumps({"error": "Informe --text ou --text-file."}), file=sys.stderr)
+        return 1
+
+    cases = load_cases_from_json(cases_path)
+    stats = benchmark_similar_cases(complaint_text=complaint_text, cases=cases)
+    output = {
+        "inferred_primary_theme": stats.primary_theme.value,
+        "matched_cases": stats.matched_cases,
+        "with_deposits": stats.with_deposits,
+        "median_deposits_brl": (
+            float(stats.median_deposits_brl) if stats.median_deposits_brl is not None else None
+        ),
+        "p90_deposits_brl": float(stats.p90_deposits_brl) if stats.p90_deposits_brl else None,
+        "max_deposits_brl": float(stats.max_deposits_brl) if stats.max_deposits_brl else None,
+        "median_condemnation_brl": (
+            float(stats.median_condemnation_brl) if stats.median_condemnation_brl else None
+        ),
+        "sample_consumers": list(stats.sample_consumers),
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -487,9 +585,53 @@ def main(argv: list[str] | None = None) -> int:
     depositos_parser.add_argument(
         "--max-gemini-calls",
         type=int,
-        default=80,
+        default=600,
         help="Limite de chamadas Gemini por execução (classificação estruturada).",
     )
+
+    casos_parser = subparsers.add_parser(
+        "casos-scan",
+        help="Classifica temas dos casos e cruza com depósitos judiciais",
+    )
+    casos_parser.add_argument(
+        "--root-folder-id",
+        default=DEFAULT_CONSUMER_PROCESSES_DRIVE_FOLDER_ID,
+    )
+    casos_parser.add_argument(
+        "--max-consumers",
+        type=int,
+        default=0,
+        help="0 = todas as pastas.",
+    )
+    casos_parser.add_argument(
+        "--work-dir",
+        default="data/casos-scan-cache",
+    )
+    casos_parser.add_argument(
+        "--deposits-json",
+        default="data/depositos-judiciais.json",
+    )
+    casos_parser.add_argument(
+        "--output-csv",
+        default="data/casos-consumidor.csv",
+    )
+    casos_parser.add_argument(
+        "--output-json",
+        default="data/casos-consumidor.json",
+    )
+    casos_parser.add_argument("--no-gemini", action="store_true")
+    casos_parser.add_argument("--max-gemini-calls", type=int, default=250)
+
+    benchmark_parser = subparsers.add_parser(
+        "casos-benchmark",
+        help="Estima tendência financeira para reclamação semelhante",
+    )
+    benchmark_parser.add_argument(
+        "--cases-json",
+        default="data/casos-consumidor.json",
+    )
+    benchmark_parser.add_argument("--text", help="Texto da reclamação.")
+    benchmark_parser.add_argument("--text-file", help="Arquivo com texto da reclamação.")
 
     args = parser.parse_args(argv)
 
@@ -511,6 +653,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.max_consumers == 0:
             args.max_consumers = None
         return _run_depositos_scan(args)
+    if args.command == "casos-scan":
+        if args.max_consumers == 0:
+            args.max_consumers = None
+        return _run_casos_scan(args)
+    if args.command == "casos-benchmark":
+        return _run_casos_benchmark(args)
 
     parser.print_help()
     return 0

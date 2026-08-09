@@ -7,19 +7,23 @@ import unicodedata
 
 from classificacao_procons.juridico.depositos.models import DepositPurpose, DocumentKind
 
-_DEPOSIT_TEXT_KEYWORDS: tuple[str, ...] = (
+_STRONG_DEPOSIT_KEYWORDS: tuple[str, ...] = (
     "deposito judicial",
     "depósito judicial",
+    "sistema djo",
     "guia de deposito",
     "guia de depósito",
     "conta judicial",
     "deposito em garantia",
     "depósito em garantia",
     "fundo especial dos tribunais",
+    "dep. jud",
+)
+
+_WEAK_DEPOSIT_KEYWORDS: tuple[str, ...] = (
     "precatorio",
     "precatório",
     "judicial -",
-    "dep. jud",
 )
 
 _CUSTAS_TEXT_KEYWORDS: tuple[str, ...] = (
@@ -31,6 +35,7 @@ _CUSTAS_TEXT_KEYWORDS: tuple[str, ...] = (
     "dare-sp",
     "custas finais",
     "custas iniciais",
+    "custas do recurso",
 )
 
 _NOISE_TEXT_KEYWORDS: tuple[str, ...] = (
@@ -40,6 +45,7 @@ _NOISE_TEXT_KEYWORDS: tuple[str, ...] = (
     "correios",
     "cancelamento da assinatura",
     "historico de pagamento",
+    "comprovante de cancelamento",
 )
 
 _CONDEMNATION_KEYWORDS: tuple[str, ...] = (
@@ -81,6 +87,11 @@ def _normalize(value: str) -> str:
     return re.sub(r"\s+", " ", without_marks).strip()
 
 
+def has_strong_deposit_signal(text: str) -> bool:
+    normalized = _normalize(text)
+    return any(keyword in normalized for keyword in _STRONG_DEPOSIT_KEYWORDS)
+
+
 def classify_document_text(text: str) -> DocumentKind:
     normalized = _normalize(text)
     if not normalized:
@@ -88,11 +99,16 @@ def classify_document_text(text: str) -> DocumentKind:
     if any(keyword in normalized for keyword in _NOISE_TEXT_KEYWORDS):
         return DocumentKind.IRRELEVANT
     if any(keyword in normalized for keyword in _CUSTAS_TEXT_KEYWORDS):
-        if not any(keyword in normalized for keyword in _DEPOSIT_TEXT_KEYWORDS):
+        if not has_strong_deposit_signal(text):
             return DocumentKind.COURT_FEES
-    if any(keyword in normalized for keyword in _DEPOSIT_TEXT_KEYWORDS):
+    if has_strong_deposit_signal(text):
         return DocumentKind.JUDICIAL_DEPOSIT
+    if any(keyword in normalized for keyword in _WEAK_DEPOSIT_KEYWORDS):
+        if "codigo de barras" in normalized or "tribunal de justica" in normalized:
+            return DocumentKind.JUDICIAL_DEPOSIT
     if "codigo de barras" in normalized and "judicial" in normalized:
+        return DocumentKind.JUDICIAL_DEPOSIT
+    if "comprovante de pagamento" in normalized and has_strong_deposit_signal(text):
         return DocumentKind.JUDICIAL_DEPOSIT
     return DocumentKind.UNKNOWN
 

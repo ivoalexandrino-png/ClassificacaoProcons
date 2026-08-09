@@ -28,6 +28,21 @@ def test_should_analyze_guia_sem_extensao_em_pasta_pagamento() -> None:
     assert should_analyze_pdf(drive_path=path, file_name="2 - guia dep judicial") is True
 
 
+def test_should_not_analyze_processo_pdf_na_raiz() -> None:
+    path = "João/0812079-61.2026.8.20.5004.pdf"
+    assert should_analyze_pdf(drive_path=path, file_name="0812079-61.2026.8.20.5004.pdf") is False
+
+
+def test_extract_amount_from_comprovante_boleto_judicial() -> None:
+    text = (
+        "Comprovante de pagamento de boleto\n"
+        "DEPOSITO JUDICIAL\n"
+        "Valor do pagamento (R$):\n"
+        " 1.893,21\n"
+    )
+    assert extract_amount_brl(text) == Decimal("1893.21")
+
+
 def test_classify_deposito_pelo_texto_da_guia() -> None:
     text = "GUIA DE DEPÓSITO JUDICIAL\nConta judicial\nCódigo de barras"
     assert classify_document_text(text) == DocumentKind.JUDICIAL_DEPOSIT

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,8 +12,10 @@ from classificacao_procons.drive.reader import download_drive_file
 from classificacao_procons.gemini.client import get_api_key_from_env
 from classificacao_procons.juridico.depositos.classify import (
     classify_document_text,
+    has_strong_deposit_signal,
     infer_deposit_purpose,
 )
+from classificacao_procons.juridico.depositos.dedupe import dedupe_deposit_records
 from classificacao_procons.juridico.depositos.drive_crawl import (
     DrivePdfItem,
     list_consumer_folders,
@@ -48,7 +51,7 @@ class DepositScanOptions:
     token_path: str | None = None
     max_consumers: int | None = 30
     use_gemini: bool = True
-    max_gemini_calls: int = 80
+    max_gemini_calls: int = 600
     allow_vision: bool = True
 
 
@@ -183,6 +186,14 @@ def _analyze_pdf_item(
     if kind != DocumentKind.JUDICIAL_DEPOSIT:
         return None
 
+    if (
+        amount is None
+        and process_number is None
+        and not has_strong_deposit_signal(text)
+        and "+gemini" not in method
+    ):
+        return None
+
     return JudicialDepositRecord(
         consumer_folder=consumer_folder,
         drive_file_id=item.file_id,
@@ -212,7 +223,12 @@ def scan_consumer_deposits(options: DepositScanOptions) -> DepositScanResult:
 
     result = DepositScanResult(consumers_scanned=len(consumers))
 
-    for consumer in consumers:
+    for index, consumer in enumerate(consumers, start=1):
+        print(
+            f"[depositos-scan] {index}/{len(consumers)} {consumer.name}",
+            file=sys.stderr,
+            flush=True,
+        )
         pdfs = walk_pdfs_under_folder(
             folder_id=consumer.file_id,
             path_prefix=consumer.name,
@@ -234,4 +250,5 @@ def scan_consumer_deposits(options: DepositScanOptions) -> DepositScanResult:
             if record is not None:
                 result.records.append(record)
 
+    result.records = dedupe_deposit_records(result.records)
     return result
