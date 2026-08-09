@@ -15,6 +15,7 @@ from classificacao_procons.questor.pipeline import (
     QuestorPipelineOptions,
     run_questor_check,
 )
+from classificacao_procons.questor.policy import CAIXA_MODES, DEFAULT_CAIXA_MODE
 from classificacao_procons.questor.serialization import (
     SnapshotParseError,
     analysis_to_dict,
@@ -65,6 +66,7 @@ def _run_check(args: argparse.Namespace) -> int:
         cc=cc,
         sender=args.sender,
         warn_within_days=args.warn_within_days,
+        caixa_mode=args.caixa_mode,
         dry_run=args.dry_run,
         only_new=not args.resend,
         state_path=Path(args.state_path),
@@ -75,6 +77,7 @@ def _run_check(args: argparse.Namespace) -> int:
         empresa=args.empresa,
         cnpj=args.cnpj,
         headless=not args.headed,
+        monday_api_token=os.environ.get("MONDAY_API_TOKEN"),
     )
 
     snapshot = None
@@ -160,11 +163,20 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_WARN_WITHIN_DAYS,
     )
     check_parser.add_argument(
+        "--caixa-mode",
+        choices=CAIXA_MODES,
+        default=DEFAULT_CAIXA_MODE,
+        help="Política de alerta da caixa postal (default: relevante_ou_prazo).",
+    )
+    check_parser.add_argument(
         "--state-path",
         default="data/questor-alerted.json",
         help=argparse.SUPPRESS,
     )
-    check_parser.add_argument("--portal-url", help="URL de login do Questor.")
+    check_parser.add_argument(
+        "--portal-url",
+        help="URL de login do Questor (default: QUESTOR_PORTAL_URL).",
+    )
     check_parser.add_argument("--portal-login", help="Usuário do Questor.")
     check_parser.add_argument("--portal-password", help="Senha do Questor.")
     check_parser.add_argument("--empresa", help="Nome da empresa (rótulo no alerta).")

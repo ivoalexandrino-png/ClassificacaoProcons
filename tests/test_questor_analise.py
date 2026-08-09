@@ -44,6 +44,20 @@ class TestAnalyzeCertidao:
         assert issues[0].kind == "certidao_indisponivel"
         assert issues[0].severity == "warning"
 
+    def test_should_flag_restricao_as_critical(self) -> None:
+        issues = analyze_certidao(_certidao(situacao="restricao"), today=TODAY)
+        assert issues[0].kind == "certidao_restricao"
+        assert issues[0].severity == "critical"
+
+    def test_should_ignore_neutra(self) -> None:
+        assert analyze_certidao(_certidao(situacao="neutra"), today=TODAY) == []
+
+    def test_should_include_empresa_in_title_and_dedup(self) -> None:
+        cert = _certidao(situacao="positiva", empresa="B4A")
+        issue = analyze_certidao(cert, today=TODAY)[0]
+        assert "B4A" in issue.title
+        assert "b4a" in issue.dedup_key
+
     def test_should_warn_when_expiring_within_window(self) -> None:
         certidao = _certidao(data_validade=date(2026, 8, 20))
         issues = analyze_certidao(certidao, today=TODAY, warn_within_days=15)
@@ -102,15 +116,15 @@ class TestAnalyzeMensagem:
         issues = analyze_mensagem(mensagem, today=TODAY, warn_within_days=15)
         assert issues[0].kind == "prazo_ciencia_proximo"
 
-    def test_should_report_both_deadline_and_unread(self) -> None:
+    def test_should_not_duplicate_unread_when_deadline_present(self) -> None:
         mensagem = MensagemCaixaPostal(
             orgao="e-CAC",
             assunto="Intimação",
             lida=False,
             prazo_ciencia=date(2026, 8, 1),
         )
-        kinds = {issue.kind for issue in analyze_mensagem(mensagem, today=TODAY)}
-        assert kinds == {"prazo_ciencia_vencido", "mensagem_nao_lida"}
+        kinds = [issue.kind for issue in analyze_mensagem(mensagem, today=TODAY)]
+        assert kinds == ["prazo_ciencia_vencido"]
 
 
 class TestAnalyzeSnapshot:

@@ -5,9 +5,11 @@ from datetime import date
 import pytest
 
 from classificacao_procons.questor.parser import (
+    leitura_is_lida,
     normalize_cnpj,
     normalize_situacao,
     parse_brazilian_date,
+    situacao_from_questor_code,
 )
 
 
@@ -27,10 +29,36 @@ class TestNormalizeSituacao:
             ("Indisponível", "indisponivel"),
             ("Não emitida", "indisponivel"),
             ("Erro ao emitir", "indisponivel"),
+            ("Irregular", "positiva"),
+            ("Regular", "negativa"),
+            ("Neutro", "neutra"),
+            ("Restrição", "restricao"),
+            ("Falha", "indisponivel"),
         ],
     )
     def test_should_map_known_labels(self, raw: str, expected: str) -> None:
         assert normalize_situacao(raw) == expected
+
+
+class TestQuestorEnums:
+    @pytest.mark.parametrize(
+        ("code", "expected"),
+        [
+            (0, "positiva"),
+            (1, "negativa"),
+            (2, "neutra"),
+            (3, "indisponivel"),
+            (5, "restricao"),
+            (99, "desconhecida"),
+            (None, "desconhecida"),
+        ],
+    )
+    def test_situacao_from_questor_code(self, code: int | None, expected: str) -> None:
+        assert situacao_from_questor_code(code) == expected
+
+    @pytest.mark.parametrize(("code", "lida"), [(0, False), (1, False), (2, True), (None, False)])
+    def test_leitura_is_lida(self, code: int | None, lida: bool) -> None:
+        assert leitura_is_lida(code) is lida
 
     def test_should_prefer_efeitos_negativa_over_positiva(self) -> None:
         assert normalize_situacao("Positiva com efeito de negativa") == (

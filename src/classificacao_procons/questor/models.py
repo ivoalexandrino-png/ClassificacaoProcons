@@ -6,13 +6,17 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Literal
 
-# Situação de uma certidão. ``a_vencer`` é derivada na análise (não vem do portal).
+# Situação canônica de uma certidão. Mapeia o vocabulário do Questor:
+# Regular→negativa, Irregular→positiva, Neutro→neutra, Falha→indisponivel,
+# Restrição→restricao. ``a_vencer`` é derivada na análise (não vem do portal).
 CertidaoStatus = Literal[
     "negativa",
     "positiva",
     "positiva_com_efeitos_negativa",
+    "restricao",
     "vencida",
     "indisponivel",
+    "neutra",
     "desconhecida",
 ]
 
@@ -27,12 +31,14 @@ IssueSeverity = Literal["critical", "warning", "info"]
 # Tipos de problema que o agente reporta.
 IssueKind = Literal[
     "certidao_positiva",
+    "certidao_restricao",
     "certidao_vencida",
     "certidao_a_vencer",
     "certidao_indisponivel",
     "mensagem_nao_lida",
     "prazo_ciencia_vencido",
     "prazo_ciencia_proximo",
+    "caixa_postal_resumo",
 ]
 
 
@@ -44,6 +50,8 @@ class Certidao:
     situacao: CertidaoStatus = "desconhecida"
     tipo: str | None = None
     cnpj: str | None = None
+    empresa: str | None = None
+    uf: str | None = None
     data_emissao: date | None = None
     data_validade: date | None = None
     observacao: str | None = None
@@ -57,10 +65,15 @@ class MensagemCaixaPostal:
     orgao: str
     assunto: str
     categoria: str | None = None
+    empresa: str | None = None
+    cnpj: str | None = None
+    remetente: str | None = None
+    relevante: bool = False
     data_postagem: date | None = None
     prazo_ciencia: date | None = None
     lida: bool = False
     protocolo: str | None = None
+    nsu: str | None = None
     url: str | None = None
 
 

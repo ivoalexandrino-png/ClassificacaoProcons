@@ -79,30 +79,44 @@ gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" -f dry_run=fa
 
 ### Questor (certidões negativas + caixa postal fiscal)
 
-Agente que lê o retrato do Questor (situação das certidões — Federal/PGFN, Estadual, Municipal, FGTS, Trabalhista — e mensagens da caixa postal eletrônica), detecta pendências (certidão positiva/vencida/a vencer/indisponível, mensagem não lida, prazo de ciência vencido/próximo) e, havendo problema **novo**, envia e-mail ao time fiscal e de contabilidade.
+Agente que lê o retrato do Questor Zen (`https://<conta>.zen.questor.com.br`) — situação das certidões (Federal/PGFN, Estadual, Municipal, FGTS, etc.) e mensagens da caixa postal (DTE/e-CAC) — detecta pendências e, havendo problema **novo**, envia e-mail ao time fiscal e de contabilidade.
 
-- Núcleo offline testável: `questor/analise.py` (regras), `questor/parser.py` (normalização de situação/datas/CNPJ), `questor/serialization.py` (JSON ↔ modelos). `ruff`/`pytest` rodam 100% offline.
-- Envio de e-mail: `questor/notifier.py` via Gmail API (escopo `gmail.send`; `gmail.modify` também serve). Reautorizar com `procon-email auth` para o token ganhar o escopo de envio.
-- Coleta no portal: `questor/portal.py` (Playwright, heurístico — os seletores/rotas precisam ser calibrados na primeira execução assistida contra o ambiente real do cliente).
-- Dedup por `dedup_key` em `data/questor-alerted.json`: o mesmo problema não é reenviado a cada execução (use `--resend` para forçar).
+**Integração (calibrada contra o portal real):** o login web (`#Email`/`#SenhaEntrar` + consentimento de cookies) autentica e o agente consome os endpoints JSON internos (DevExtreme) usados pelos grids:
 
-Uso offline (sem portal), a partir de um snapshot JSON:
+- Certidões: `POST /escritorio/cnd/certidaoempresa/listarcertidaoempresa`
+- Caixa postal: `POST /escritorio/dte/capturacaixapostal/listar`
+
+Buscamos o dataset completo (`take` alto) e filtramos em Python — mais robusto que raspar o DOM paginado. Enums do Questor mapeados em `questor/parser.py`:
+
+- `SituacaoCertidao`: `0=Irregular`, `1=Regular`, `2=Neutro`, `3=Falha`, `5=Restrição`.
+- `Leitura`: `0=Não lido`, `1=Leitura pendente`, `2=Lido`. `Relevancia`: `0=Não`, `1=Sim`.
+
+**Regras (`questor/analise.py`, offline e testável):** certidão Irregular/Restrição → crítico; vencida (data/estado) → crítico; a vencer ≤ janela → aviso; Falha → aviso (indisponível); Regular/Neutro → ok. Caixa postal: prazo de ciência (`ExibidaAte`) vencido/próximo → crítico; não lida → aviso.
+
+**Política de caixa postal (`questor/policy.py`):** o backlog de não lidas é grande e o flag "Relevante" é pouco usado; por isso a seleção é configurável (`--caixa-mode`): `relevante_ou_prazo` (default), `relevantes`, `recentes`, `todas`. O total não lido por domicílio vai como nota de contexto no e-mail.
+
+**Credenciais:** lidas do board **Acessos** do Monday (`credentials/monday_board.py`, board `7591024769`) pelo item **"Questor - Certidões - Ivo"** (há dois itens homônimos; o com sufixo "- Ivo" é o ativo). Override: env `QUESTOR_MONDAY_ITEM`. Requer `MONDAY_API_TOKEN`.
+
+**Envio de e-mail:** `questor/notifier.py` via Gmail API. Usa o escopo `gmail.modify` já concedido (que também autoriza envio) — **não** adicionar `gmail.send` a `GOOGLE_SCOPES` (força upgrade de escopo e quebra o refresh dos tokens já emitidos com `invalid_scope`).
+
+**Dedup:** `data/questor-alerted.json` (chave por certidão/empresa e por NSU da mensagem); o mesmo problema não é reenviado (use `--resend` para forçar).
+
+Uso offline (a partir de um snapshot JSON, sem portal/segredos):
 
 ```bash
 source .venv/bin/activate
-questor analyze --snapshot snapshot.json                     # lista pendências (exit 1 se houver crítica)
+questor analyze --snapshot snapshot.json   # lista pendências (exit 1 se houver crítica)
 questor check --snapshot snapshot.json --to fiscal@b4a.com,contabil@b4a.com --dry-run
 ```
 
-Coleta + análise + alerta (produção; exige credenciais do Questor e token Gmail com envio):
+Coleta + análise + alerta (produção; credenciais vêm do Monday):
 
 ```bash
-questor check --portal-url "$QUESTOR_PORTAL_URL" --portal-login "$QUESTOR_LOGIN" \
-  --portal-password "$QUESTOR_PASSWORD" --empresa "Empresa X" --cnpj 12345678000199 \
-  --to fiscal@b4a.com,contabilidade@b4a.com
+questor check --portal-url https://b4a.zen.questor.com.br/ --empresa "B4A / MMKT" \
+  --to fiscal@b4a.com,contabilidade@b4a.com --caixa-mode relevante_ou_prazo
 ```
 
-Segredos esperados (ausentes neste ambiente): `QUESTOR_PORTAL_URL`, `QUESTOR_LOGIN`, `QUESTOR_PASSWORD` e o token Gmail com escopo de envio.
+Playwright: rodar `playwright install chromium` (o update script já faz). O login do Questor é sessão única — evite acessos concorrentes.
 
 ### Procon (backup SLA 30 min no GCP)
 
