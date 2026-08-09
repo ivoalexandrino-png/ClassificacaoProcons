@@ -19,9 +19,11 @@ pytest
 - `src/classificacao_procons/email/` — parser e cliente Gmail
 - `src/classificacao_procons/juridico/` — agente jurídico (intimações, DataJud, providências)
 - `src/classificacao_procons/questor/` — agente Questor (certidões negativas + caixa postal fiscal → alerta por e-mail)
+- `src/classificacao_procons/whatsapp/` — respostas automáticas no WhatsApp (IA + filtro jurídico)
 - `src/classificacao_procons/cli.py` — CLI `procon-email`
 - `src/classificacao_procons/juridico/cli.py` — CLI `juridico`
 - `src/classificacao_procons/questor/cli.py` — CLI `questor`
+- `src/classificacao_procons/whatsapp/cli.py` — CLI `whatsapp`
 - `tests/` — testes unitários
 
 ## Segredos
@@ -103,6 +105,23 @@ questor check --portal-url "$QUESTOR_PORTAL_URL" --portal-login "$QUESTOR_LOGIN"
 ```
 
 Segredos esperados (ausentes neste ambiente): `QUESTOR_PORTAL_URL`, `QUESTOR_LOGIN`, `QUESTOR_PASSWORD` e o token Gmail com escopo de envio.
+
+### WhatsApp (respostas automáticas pessoal + profissional)
+
+Conexão direta à conta via [Neonize](https://github.com/krypton-byte/neonize) (API não oficial — risco de banimento; uso por sua conta e risco).
+
+- Núcleo offline: `whatsapp/risk.py`, `whatsapp/responder.py`, `whatsapp/history.py`. Testes mockam IA.
+- Produção: `pip install -e ".[whatsapp]"`, `GEMINI_API_KEY` e/ou `OPENAI_API_KEY`, sessão em `data/whatsapp-session.sqlite3`.
+- Histórico local: `data/whatsapp-bot-state.json` (dedup + últimas mensagens por chat).
+- Tiers: `routine` (IA responde), `ambiguous` (pede contexto), `legal_high` (resposta segura sem orientação jurídica).
+
+```bash
+source .venv/bin/activate
+whatsapp preview --chat-id 5511999999999@s.whatsapp.net --text "Oi, tudo bem?"
+whatsapp run   # QR no terminal na 1ª execução; use --dry-run para testar sem enviar
+```
+
+Variáveis opcionais: `WHATSAPP_OWNER_NAME`, `WHATSAPP_PERSONA`, `WHATSAPP_SESSION_PATH`, `WHATSAPP_STATE_PATH`.
 
 ### Procon (backup SLA 30 min no GCP)
 
