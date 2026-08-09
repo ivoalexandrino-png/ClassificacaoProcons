@@ -58,6 +58,33 @@ class TestBuildAlertEmail:
         )
         assert email.cc == ("contabil@b4a.com",)
 
+    def test_should_include_details_metadata_and_freshness_note(self) -> None:
+        from datetime import date, datetime
+
+        from classificacao_procons.questor.analise import analyze_snapshot
+        from classificacao_procons.questor.models import Certidao, QuestorSnapshot
+
+        snapshot = QuestorSnapshot(
+            captured_at=datetime(2026, 8, 8, 9, 0),
+            empresa="B4A",
+            certidoes=(
+                Certidao(
+                    orgao="Receita Federal/PGFN",
+                    situacao="positiva",
+                    empresa="B4A SERVICOS",
+                    cnpj="13475001000134",
+                    uf="SP",
+                ),
+            ),
+        )
+        analysis = analyze_snapshot(snapshot, today=date(2026, 8, 8))
+        email = build_alert_email(analysis, to=["fiscal@b4a.com"])
+
+        assert "Empresa/Titular: B4A SERVICOS (CNPJ/CPF 13.475.001/0001-34)" in email.text_body
+        assert "O que fazer:" in email.text_body
+        assert "última captura do Questor" in email.text_body
+        assert "13.475.001/0001-34" in email.html_body
+
 
 class TestGmailSender:
     def test_should_send_multipart_message_with_raw_payload(self) -> None:
