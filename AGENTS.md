@@ -20,10 +20,12 @@ pytest
 - `src/classificacao_procons/juridico/` — agente jurídico (intimações, DataJud, providências)
 - `src/classificacao_procons/questor/` — agente Questor (certidões negativas + caixa postal fiscal → alerta por e-mail)
 - `src/classificacao_procons/whatsapp/` — respostas automáticas no WhatsApp (IA + filtro jurídico)
+- `src/classificacao_procons/radar/` — radar de editais de fomento (nacionais/internacionais → digest por e-mail)
 - `src/classificacao_procons/cli.py` — CLI `procon-email`
 - `src/classificacao_procons/juridico/cli.py` — CLI `juridico`
 - `src/classificacao_procons/questor/cli.py` — CLI `questor`
 - `src/classificacao_procons/whatsapp/cli.py` — CLI `whatsapp`
+- `src/classificacao_procons/radar/cli.py` — CLI `radar`
 - `tests/` — testes unitários
 
 ## Segredos
@@ -122,6 +124,33 @@ whatsapp run   # QR no terminal na 1ª execução; use --dry-run para testar sem
 ```
 
 Variáveis opcionais: `WHATSAPP_OWNER_NAME`, `WHATSAPP_PERSONA`, `WHATSAPP_SESSION_PATH`, `WHATSAPP_STATE_PATH`.
+
+### Radar de editais (fomento e patrocínio → digest por e-mail)
+
+Radar que monitora as principais fontes de fomento **nacionais e internacionais** e avisa os pesquisadores da universidade **assim que um edital/chamada relevante abre**, nas áreas de **Direito, Saúde, Administração e Educação**. Coleta os editais das fontes (RSS/Atom ou HTML), classifica cada um por área/abrangência/situação, seleciona os relevantes (descarta encerrados e fora de escopo) e envia um digest por e-mail com dedup para não reavisar o mesmo edital.
+
+- Núcleo offline testável: `radar/parser.py` (classificação de área PT/EN, escopo, situação, datas), `radar/analise.py` (relevância + dedup), `radar/feeds.py` (parsing RSS/Atom/HTML — o `fetch` de rede fica isolado), `radar/serialization.py` (JSON ↔ modelos). `ruff`/`pytest` rodam 100% offline.
+- Fontes: `radar/sources.py` (CNPq, CAPES, FINEP, FAPESP/FAPERJ/FAPEMIG, CONFAP, Fiocruz, DECIT/MS, IPEA, CNJ; Horizon Europe/ERC, NIH, NSF, Wellcome, Gates, Open Society, Ford, UNESCO, DAAD, Fulbright, British Council, BID). As URLs de listagem de oportunidades precisam ser calibradas na primeira execução assistida (mesma convenção do scraper do Questor); enquanto isso, use `snapshot` JSON.
+- Envio de e-mail: `radar/notifier.py` reutiliza o `GmailSender` do Questor (escopo `gmail.send`/`gmail.modify`; reautorize com `procon-email auth`).
+- Dedup por `dedup_key` em `data/radar-alerted.json`.
+
+Uso offline (sem rede), a partir de um snapshot JSON de editais coletados:
+
+```bash
+source .venv/bin/activate
+radar sources --scope internacional          # lista as fontes monitoradas
+radar scan --snapshot editais.json           # lista os editais relevantes
+radar scan --snapshot editais.json --areas saude,direito
+radar check --snapshot editais.json --to pesquisa@uni.br,prppg@uni.br --dry-run
+```
+
+Coleta + análise + digest (produção; exige token Gmail com envio):
+
+```bash
+radar check --scope nacional --to pesquisa@uni.br,prppg@uni.br
+```
+
+Segredos esperados (ausentes neste ambiente): token Gmail com escopo de envio. As áreas padrão são as quatro pedidas (`direito,saude,administracao,educacao`); use `--areas` para restringir.
 
 ### Procon (backup SLA 30 min no GCP)
 

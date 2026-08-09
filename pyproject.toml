@@ -37,6 +37,7 @@ procon-drive = "classificacao_procons.drive_cli:main"
 contratos-webhook = "classificacao_procons.contratos.webhook_cli:main"
 questor = "classificacao_procons.questor.cli:main"
 whatsapp = "classificacao_procons.whatsapp.cli:main"
+radar = "classificacao_procons.radar.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

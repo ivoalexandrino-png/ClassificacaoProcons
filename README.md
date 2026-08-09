@@ -46,6 +46,17 @@ CLI `juridico`. Os prazos chegam por e-mail — encaminhados do e-mail pessoal p
 
 Detalhes em [`docs/agente-juridico.md`](docs/agente-juridico.md).
 
+### 4. Radar de editais de fomento (fontes → relevância → digest por e-mail)
+
+CLI `radar`. Monitora as principais fontes de fomento e patrocínio **nacionais e internacionais** (CNPq, CAPES, FINEP, FAPs, Fiocruz, Horizon Europe/ERC, NIH, NSF, Wellcome, UNESCO, DAAD, entre outras) e avisa os pesquisadores **assim que um edital/chamada relevante abre**, nas áreas de **Direito, Saúde, Administração e Educação**:
+
+1. **Coleta** os editais das fontes (RSS/Atom ou HTML) — ou usa um `snapshot` JSON (sem rede)
+2. **Classifica** cada edital por área temática (PT/EN), abrangência (nacional/internacional) e situação (aberto/previsto/encerrado)
+3. **Seleciona** os relevantes para as áreas de interesse e descarta os encerrados/fora de escopo
+4. **Envia um digest** por e-mail aos pesquisadores, com dedup por edital (`data/radar-alerted.json`) para não reavisar o mesmo
+
+O núcleo (classificação/relevância/parsing/serialização) é **100% offline e testável**; a coleta em rede e o envio ficam isolados nas bordas.
+
 ## Pré-requisitos
 
 - Python 3.11+
@@ -157,6 +168,9 @@ src/classificacao_procons/
 ├── gemini/      # cliente Gemini
 ├── contratos/   # Autentique, webhooks, sync Controle Assinaturas
 ├── juridico/    # agente jurídico: intimações, DataJud, providências, eventos
+├── questor/     # agente Questor: certidões + caixa postal fiscal → alerta
+├── whatsapp/    # respostas automáticas no WhatsApp (IA + filtro jurídico)
+├── radar/       # radar de editais de fomento → digest por e-mail
 ├── cli.py       # CLI procon-email
 ├── pipeline.py  # pipeline principal (e-mail → portal → Drive → Monday)
 └── response_pipeline.py  # elaboração de respostas
