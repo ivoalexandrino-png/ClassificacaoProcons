@@ -42,6 +42,19 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 - **Corrigir só divergências do compare (rápido):** `mode: reconcile-mismatches` ou CLI `reconcile-controle-mismatches` (atualiza track/status onde `monday_track_status_mismatch` / `monday_status_behind_autentique`; itens **inativos** no Monday são ignorados, não falham o job).
 - **Como corrigir (varredura completa):** `sync-controle` (campo `legacy_linked` no JSON); workflow **Sync Controle Assinaturas** roda em cron (compare only no push/schedule).
 
+## Plano antes de gravar (sync)
+
+O sync classifica cada documento do Autentique **antes** de criar linha no Monday:
+
+| Ação | Quando |
+|------|--------|
+| **CRIAR** | Pendente no Autentique e não há linha legada com título exato sem ID |
+| **VINCULAR** | Existe linha (Jan/Luciano ou Assinado) com título exato **sem** Autentique ID |
+| **ATUALIZAR** | Autentique ID já está no link do item |
+| **IGNORAR** | Assinado sem legado correspondente (ou match ambíguo — revisão manual) |
+
+`compare-controle` expõe `plan_action_counts` (mesma lógica, somente leitura). Com `--skip-signed-documents`, o sync ainda **vincula** e **atualiza** assinados; só adia **CRIAR** de novos assinados.
+
 ## Comandos
 
 ```bash
@@ -59,16 +72,37 @@ contratos-webhook sync-controle --no-auto-link-legacy ...
 
 Workflow GitHub: **Sync Controle Assinaturas (Autentique)** — modos `compare`, `repair`, `reconcile-mismatches`, `sync`.
 
+### Catch-up operacional (Autentique → Monday, agora)
+
+Ordem recomendada no workflow **Sync Controle Assinaturas**:
+
+1. `mode=compare` — revisar `plan_action_counts` (`vincular` / `atualizar` / `criar` / `ignorar`).
+2. `mode=sync`, `dry_run=true`, `create_only=false`, `skip_signed_documents=true`, `allow_create=false` — simula **só vínculo + atualização** (criação pausada).
+3. `mode=sync`, `dry_run=false`, mesmos parâmetros — aplica vínculos legado e status.
+4. Só então `allow_create=true` + `create_only=true` para pendentes **CRIAR** genuínos (nunca `skip_signed_documents=false` em massa).
+
 ### Catch-up recomendado (após compare limpo em track/status/multi-ID)
 
 1. **compare** — artefato `controle-pending-export` (pending, signed missing, sugestões legado).
 2. **validate_status_labels** — `validate_status_labels=true` no dispatch.
 3. **sync** `dry_run=true`, `allow_create=true`, `create_only=false`, `skip_signed_documents=true`.
 4. **sync** `dry_run=false`, mesmos parâmetros — cria pendentes + auto-link + atualiza existentes.
-5. (Opcional) **sync** com `skip_signed_documents=false` — assinados faltando no Controle.
+5. **Não** usar `skip_signed_documents=false` + `allow_create=true` em massa — isso recria filas para documentos **já assinados** quando existe legado **Assinado** sem Autentique ID (duplicatas na fila Luciano). Preferir `link-controle` ou `remediate-sync-duplicates`.
 6. **reconcile-mismatches** — `light_autentique_feed=true` quando só há poucas divergências.
 7. **pilot_bruno_distrato** — `pilot_bruno_dry_run=true`, depois `false`.
 8. **compare** final.
+
+### Remediação (duplicatas do sync)
+
+```bash
+# Listar candidatos (filas pendentes + doc assinado + legado Assinado com mesmo título)
+contratos-webhook remediate-sync-duplicates --max-pages 100
+
+# Arquivar no Monday (reversível)
+contratos-webhook remediate-sync-duplicates --max-pages 100 --apply
+```
+
+Workflow: **Remediar duplicatas sync Controle** (`apply=false` primeiro).
 
 **Itens inativos no Monday:** sync/reconcile ignoram com `skipped_inactive` (não atualizam colunas).
 

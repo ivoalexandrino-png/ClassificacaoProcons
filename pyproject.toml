@@ -25,6 +25,9 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.4",
 ]
+whatsapp = [
+    "neonize>=0.4",
+]
 
 [project.scripts]
 procon-email = "classificacao_procons.cli:main"
@@ -33,6 +36,7 @@ procon-portal = "classificacao_procons.portal_cli:main"
 procon-drive = "classificacao_procons.drive_cli:main"
 contratos-webhook = "classificacao_procons.contratos.webhook_cli:main"
 questor = "classificacao_procons.questor.cli:main"
+whatsapp = "classificacao_procons.whatsapp.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -39,7 +39,7 @@ on:
         type: boolean
         default: true
       skip_signed_documents:
-        description: "Não importa documentos já 100% assinados (evita status Assinado)"
+        description: "Sync: não CRIAR assinados novos (ainda VINCULAR/ATUALIZAR legado)"
         required: false
         type: boolean
         default: true
