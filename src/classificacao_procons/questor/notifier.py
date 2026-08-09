@@ -52,10 +52,50 @@ def build_alert_subject(analysis: QuestorAnalysis) -> str:
     return f"{prefixo} ({total}) — {empresa}"
 
 
-def _issue_line(issue: FiscalIssue) -> str:
+FRESHNESS_NOTE = (
+    "Observação: a situação reflete a última captura do Questor e pode não "
+    "considerar emissões, pagamentos ou baixas recentes. Em caso de dúvida, "
+    "reconfirme diretamente no órgão (e-CAC/Receita, PGFN, SEFAZ, etc.)."
+)
+
+
+def _fmt_date(value) -> str | None:
+    return value.strftime("%d/%m/%Y") if value else None
+
+
+def _issue_meta_lines(issue: FiscalIssue) -> list[str]:
+    """Linhas de metadados/contexto de uma pendência (texto puro)."""
+    lines: list[str] = []
+    if issue.empresa:
+        empresa = issue.empresa + (f" (CNPJ/CPF {issue.cnpj})" if issue.cnpj else "")
+        lines.append(f"Empresa/Titular: {empresa}")
+    orgao = issue.orgao + (f" / {issue.uf}" if issue.uf else "")
+    lines.append(f"Órgão: {orgao}")
+    if issue.remetente:
+        lines.append(f"Remetente: {issue.remetente}")
+    datas = []
+    if issue.data_emissao:
+        datas.append(f"emissão {_fmt_date(issue.data_emissao)}")
+    if issue.data_referencia:
+        datas.append(f"envio {_fmt_date(issue.data_referencia)}")
+    if issue.due_date:
+        rotulo = "prazo" if issue.kind.startswith("prazo") else "vencimento"
+        datas.append(f"{rotulo} {_fmt_date(issue.due_date)}")
+    if datas:
+        lines.append("Datas: " + " · ".join(datas))
+    return lines
+
+
+def _issue_block(issue: FiscalIssue) -> str:
     label = _SEVERITY_LABEL.get(issue.severity, issue.severity)
-    prazo = f" | prazo: {issue.due_date.strftime('%d/%m/%Y')}" if issue.due_date else ""
-    return f"[{label}] {issue.title}{prazo}\n    {issue.detail}"
+    lines = [f"[{label}] {issue.title}", f"    {issue.detail}"]
+    for meta in _issue_meta_lines(issue):
+        lines.append(f"    {meta}")
+    if issue.orientacao:
+        lines.append(f"    O que fazer: {issue.orientacao}")
+    if issue.source_url:
+        lines.append(f"    Link: {issue.source_url}")
+    return "\n".join(lines)
 
 
 def build_alert_bodies(
@@ -67,21 +107,23 @@ def build_alert_bodies(
     empresa = _empresa_label(analysis)
     captured = analysis.snapshot.captured_at.strftime("%d/%m/%Y %H:%M")
 
+    criticos = len(analysis.critical_issues)
     text_lines = [
         f"Análise automática do Questor — {empresa}",
         f"Coletado em: {captured}",
         "",
-        f"Foram encontradas {len(analysis.issues)} pendência(s):",
+        f"Foram encontradas {len(analysis.issues)} pendência(s) "
+        f"({criticos} crítica(s)):",
         "",
     ]
     for issue in analysis.issues:
-        text_lines.append(_issue_line(issue))
-        if issue.source_url:
-            text_lines.append(f"    Link: {issue.source_url}")
+        text_lines.append(_issue_block(issue))
         text_lines.append("")
     if extra_note:
         text_lines.append(extra_note)
         text_lines.append("")
+    text_lines.append(FRESHNESS_NOTE)
+    text_lines.append("")
     text_lines.append(
         "Favor providenciar a regularização junto ao time fiscal e de contabilidade.",
     )
@@ -90,9 +132,13 @@ def build_alert_bodies(
     html_items = []
     for issue in analysis.issues:
         label = escape(_SEVERITY_LABEL.get(issue.severity, issue.severity))
-        prazo = (
-            f" &middot; <strong>prazo:</strong> {issue.due_date.strftime('%d/%m/%Y')}"
-            if issue.due_date
+        meta = "".join(
+            f"<br><span style=\"color:#555\">{escape(line)}</span>"
+            for line in _issue_meta_lines(issue)
+        )
+        orientacao = (
+            f"<br><em>O que fazer:</em> {escape(issue.orientacao)}"
+            if issue.orientacao
             else ""
         )
         link = (
@@ -101,16 +147,18 @@ def build_alert_bodies(
             else ""
         )
         html_items.append(
-            f"<li><strong>[{label}]</strong> {escape(issue.title)}{prazo}"
-            f"<br>{escape(issue.detail)}{link}</li>"
+            f"<li style=\"margin-bottom:10px\"><strong>[{label}]</strong> "
+            f"{escape(issue.title)}<br>{escape(issue.detail)}{meta}{orientacao}{link}</li>"
         )
     note_html = f"<p><em>{escape(extra_note)}</em></p>" if extra_note else ""
     html_body = (
         f"<p>Análise automática do Questor — <strong>{escape(empresa)}</strong><br>"
         f"Coletado em: {escape(captured)}</p>"
-        f"<p>Foram encontradas <strong>{len(analysis.issues)}</strong> pendência(s):</p>"
+        f"<p>Foram encontradas <strong>{len(analysis.issues)}</strong> pendência(s) "
+        f"(<strong>{criticos}</strong> crítica(s)):</p>"
         f"<ul>{''.join(html_items)}</ul>"
         f"{note_html}"
+        f"<p style=\"color:#555;font-size:12px\">{escape(FRESHNESS_NOTE)}</p>"
         "<p>Favor providenciar a regularização junto ao time fiscal e de contabilidade.</p>"
     )
     return text_body, html_body

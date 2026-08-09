@@ -31,9 +31,53 @@ from classificacao_procons.questor.relevancia import classify_caixa_message
 
 DEFAULT_WARN_WITHIN_DAYS = 15
 
+# Orientação ("o que fazer") por tipo de pendência.
+ORIENTACAO_CERTIDAO_IRREGULAR = (
+    "Verificar os débitos/pendências no órgão e regularizar (ou confirmar "
+    "parcelamento ativo). Sem certidão negativa a empresa fica impedida em "
+    "licitações, financiamentos e operações que exijam regularidade fiscal."
+)
+ORIENTACAO_CERTIDAO_RESTRICAO = (
+    "Identificar a origem da restrição no órgão emissor e providenciar a baixa."
+)
+ORIENTACAO_CERTIDAO_VENCIDA = "Reemitir a certidão para restabelecer a regularidade."
+ORIENTACAO_CERTIDAO_A_VENCER = "Reemitir preventivamente antes do vencimento."
+ORIENTACAO_CERTIDAO_INDISPONIVEL = (
+    "A captura automática falhou; consultar/emiitir manualmente no órgão."
+)
+ORIENTACAO_POR_CATEGORIA = {
+    "fiscalizacao": (
+        "Início/andamento de ação fiscal. Acionar o fiscal/jurídico e responder no prazo."
+    ),
+    "lancamento": (
+        "Lançamento/auto de infração. Avaliar pagamento, parcelamento ou impugnação no prazo."
+    ),
+    "pagamento": (
+        "Débito/atraso. Emitir a guia e quitar ou parcelar antes da inscrição em dívida ativa."
+    ),
+    "intimacao": "Intimação/exigência. Cumprir ou responder no prazo indicado pelo órgão.",
+    "certidao": "Aviso de vencimento de certidão. Programar a reemissão.",
+    "processo": "Movimentação em processo administrativo. Verificar necessidade de manifestação.",
+}
+ORIENTACAO_MENSAGEM_GENERICA = (
+    "Abrir a mensagem no órgão e avaliar se exige providência."
+)
+
 
 def _slug(value: str) -> str:
     return "-".join(value.split()).lower()
+
+
+def format_cnpj(cnpj: str | None) -> str | None:
+    """Formata CNPJ (14 díg.) ou CPF (11 díg.); devolve como veio se não casar."""
+    if not cnpj:
+        return None
+    digits = "".join(ch for ch in cnpj if ch.isdigit())
+    if len(digits) == 14:
+        return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+    if len(digits) == 11:
+        return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    return cnpj
 
 
 def analyze_certidao(
@@ -47,6 +91,14 @@ def analyze_certidao(
     empresa = certidao.empresa
     slug = _slug(f"{empresa or ''} {orgao}")
     label = f"{orgao}" + (f" ({empresa})" if empresa else "")
+    common = {
+        "orgao": orgao,
+        "empresa": empresa,
+        "cnpj": format_cnpj(certidao.cnpj),
+        "uf": certidao.uf,
+        "data_emissao": certidao.data_emissao,
+        "source_url": certidao.url,
+    }
 
     if certidao.situacao == "neutra":
         return []
@@ -56,15 +108,15 @@ def analyze_certidao(
             FiscalIssue(
                 kind="certidao_positiva",
                 severity="critical",
-                orgao=orgao,
                 title=f"Certidão IRREGULAR — {label}",
                 detail=(
                     f"A certidão de {label} está irregular/positiva (com débitos ou "
-                    "pendências). Regularizar junto ao órgão."
+                    "pendências), impedindo a emissão da certidão negativa."
                 ),
                 due_date=certidao.data_validade,
-                source_url=certidao.url,
                 dedup_key=f"certidao_positiva:{slug}",
+                orientacao=ORIENTACAO_CERTIDAO_IRREGULAR,
+                **common,
             ),
         ]
 
@@ -73,15 +125,12 @@ def analyze_certidao(
             FiscalIssue(
                 kind="certidao_restricao",
                 severity="critical",
-                orgao=orgao,
                 title=f"Certidão com RESTRIÇÃO — {label}",
-                detail=(
-                    f"A certidão de {label} está com restrição. "
-                    "Verificar e regularizar junto ao órgão."
-                ),
+                detail=f"A certidão de {label} está com restrição registrada no órgão.",
                 due_date=certidao.data_validade,
-                source_url=certidao.url,
                 dedup_key=f"certidao_restricao:{slug}",
+                orientacao=ORIENTACAO_CERTIDAO_RESTRICAO,
+                **common,
             ),
         ]
 
@@ -90,14 +139,14 @@ def analyze_certidao(
             FiscalIssue(
                 kind="certidao_indisponivel",
                 severity="warning",
-                orgao=orgao,
                 title=f"Certidão indisponível — {label}",
                 detail=(
-                    f"Não foi possível emitir/consultar a certidão de {label}. "
-                    "Verificar manualmente no órgão emissor."
+                    f"A captura automática da certidão de {label} falhou "
+                    "(sem retorno do órgão)."
                 ),
-                source_url=certidao.url,
                 dedup_key=f"certidao_indisponivel:{slug}",
+                orientacao=ORIENTACAO_CERTIDAO_INDISPONIVEL,
+                **common,
             ),
         ]
 
@@ -110,16 +159,16 @@ def analyze_certidao(
             FiscalIssue(
                 kind="certidao_vencida",
                 severity="critical",
-                orgao=orgao,
                 title=f"Certidão vencida — {label}",
                 detail=(
                     f"A certidão de {label} está vencida"
                     + (f" (validade {validade.strftime('%d/%m/%Y')})" if validade else "")
-                    + ". Reemitir."
+                    + "."
                 ),
                 due_date=validade,
-                source_url=certidao.url,
                 dedup_key=f"certidao_vencida:{slug}",
+                orientacao=ORIENTACAO_CERTIDAO_VENCIDA,
+                **common,
             ),
         ]
 
@@ -130,15 +179,15 @@ def analyze_certidao(
                 FiscalIssue(
                     kind="certidao_a_vencer",
                     severity="warning",
-                    orgao=orgao,
                     title=f"Certidão a vencer — {label}",
                     detail=(
                         f"A certidão de {label} vence em {days_left} dia(s) "
-                        f"({validade.strftime('%d/%m/%Y')}). Reemitir preventivamente."
+                        f"({validade.strftime('%d/%m/%Y')})."
                     ),
                     due_date=validade,
-                    source_url=certidao.url,
                     dedup_key=f"certidao_a_vencer:{slug}:{validade.isoformat()}",
+                    orientacao=ORIENTACAO_CERTIDAO_A_VENCER,
+                    **common,
                 ),
             ]
 
@@ -159,6 +208,14 @@ def analyze_mensagem(
     key_base = mensagem.nsu or mensagem.protocolo or _slug(
         f"{empresa or ''} {orgao} {mensagem.assunto}",
     )
+    common = {
+        "orgao": orgao,
+        "empresa": empresa,
+        "cnpj": format_cnpj(mensagem.cnpj),
+        "remetente": mensagem.remetente,
+        "data_referencia": mensagem.data_postagem,
+        "source_url": mensagem.url,
+    }
     prazo = mensagem.prazo_ciencia
 
     if prazo is not None:
@@ -168,15 +225,15 @@ def analyze_mensagem(
                 FiscalIssue(
                     kind="prazo_ciencia_vencido",
                     severity="critical",
-                    orgao=orgao,
                     title=f"Prazo de ciência VENCIDO — {label}",
                     detail=(
-                        f"A mensagem \"{mensagem.assunto}\" ({label}) teve o prazo de "
+                        f"A mensagem \"{mensagem.assunto}\" teve o prazo de "
                         f"ciência vencido em {prazo.strftime('%d/%m/%Y')}."
                     ),
                     due_date=prazo,
-                    source_url=mensagem.url,
                     dedup_key=f"prazo_ciencia_vencido:{key_base}",
+                    orientacao=ORIENTACAO_MENSAGEM_GENERICA,
+                    **common,
                 ),
             )
         elif days_left <= warn_within_days:
@@ -184,15 +241,15 @@ def analyze_mensagem(
                 FiscalIssue(
                     kind="prazo_ciencia_proximo",
                     severity="critical",
-                    orgao=orgao,
                     title=f"Prazo de ciência próximo — {label}",
                     detail=(
-                        f"A mensagem \"{mensagem.assunto}\" ({label}) tem prazo de "
+                        f"A mensagem \"{mensagem.assunto}\" tem prazo de "
                         f"ciência em {days_left} dia(s) ({prazo.strftime('%d/%m/%Y')})."
                     ),
                     due_date=prazo,
-                    source_url=mensagem.url,
                     dedup_key=f"prazo_ciencia_proximo:{key_base}",
+                    orientacao=ORIENTACAO_MENSAGEM_GENERICA,
+                    **common,
                 ),
             )
 
@@ -206,29 +263,28 @@ def analyze_mensagem(
     if not mensagem.lida:
         classification = classify_caixa_message(mensagem)
         if classification is not None:
-            _category, cat_label, severity = classification
+            category, cat_label, severity = classification
             title = f"{cat_label} — {label}"
             detail = (
-                f"Mensagem relevante ({cat_label.lower()}) não lida em {label}: "
+                f"Mensagem relevante ({cat_label.lower()}) não lida: "
                 f"\"{mensagem.assunto}\"."
             )
+            orientacao = ORIENTACAO_POR_CATEGORIA.get(category, ORIENTACAO_MENSAGEM_GENERICA)
         else:
             severity = "warning"
             title = f"Mensagem não lida — {label}"
-            detail = (
-                f"Há mensagem não lida na caixa postal de {label}: "
-                f"\"{mensagem.assunto}\"."
-            )
+            detail = f"Mensagem não lida: \"{mensagem.assunto}\"."
+            orientacao = ORIENTACAO_MENSAGEM_GENERICA
         issues.append(
             FiscalIssue(
                 kind="mensagem_nao_lida",
                 severity=severity,
-                orgao=orgao,
                 title=title,
                 detail=detail,
                 due_date=mensagem.prazo_ciencia,
-                source_url=mensagem.url,
                 dedup_key=f"mensagem_nao_lida:{key_base}",
+                orientacao=orientacao,
+                **common,
             ),
         )
 

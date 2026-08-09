@@ -100,6 +100,14 @@ class FiscalIssue:
     due_date: date | None = None
     source_url: str | None = None
     dedup_key: str = ""
+    # Metadados estruturados para um e-mail detalhado.
+    empresa: str | None = None
+    cnpj: str | None = None
+    uf: str | None = None
+    data_emissao: date | None = None
+    data_referencia: date | None = None
+    remetente: str | None = None
+    orientacao: str | None = None
 
 
 @dataclass(frozen=True)
