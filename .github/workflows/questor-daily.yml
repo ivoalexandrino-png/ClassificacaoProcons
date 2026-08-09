@@ -2,9 +2,11 @@ name: Questor diário (certidões + caixa postal)
 
 on:
   schedule:
-    # 11:00 UTC = 08:00 BRT (horário de Brasília). Login do Questor é sessão
-    # única — rode fora do horário de uso manual.
-    - cron: "0 11 * * *"
+    # Fluxo em duas fases (a recaptura no Questor é assíncrona, leva minutos):
+    # 07:30 BRT dispara a recaptura das certidões não regulares; 08:00 BRT lê e
+    # alerta com os dados já atualizados. Horários em UTC (BRT = UTC-3).
+    - cron: "30 10 * * *"  # 07:30 BRT → refresh (gatilho de recaptura)
+    - cron: "0 11 * * *"   # 08:00 BRT → check (leitura + alerta)
   workflow_dispatch:
     inputs:
       dry_run:
@@ -68,7 +70,17 @@ jobs:
           printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
           printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
 
+      # Fase 07:30 BRT: só dispara a recaptura (assíncrona) das certidões não regulares.
+      - name: Trigger certidão recapture
+        if: github.event.schedule == '30 10 * * *'
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          QUESTOR_PORTAL_URL: ${{ vars.QUESTOR_PORTAL_URL || 'https://b4a.zen.questor.com.br/' }}
+          QUESTOR_MONDAY_ITEM: ${{ vars.QUESTOR_MONDAY_ITEM || 'Questor - Certidões - Ivo' }}
+        run: python -m classificacao_procons.questor.cli refresh
+
       - name: Validate Gmail send capability
+        if: github.event.schedule != '30 10 * * *'
         run: |
           python3 <<'PY'
           import sys
@@ -83,7 +95,9 @@ jobs:
           print("Credenciais Google OK (envio habilitado).")
           PY
 
+      # Fase 08:00 BRT (ou disparo manual): lê e alerta com os dados já atualizados.
       - name: Run Questor daily check
+        if: github.event.schedule != '30 10 * * *'
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           QUESTOR_PORTAL_URL: ${{ vars.QUESTOR_PORTAL_URL || 'https://b4a.zen.questor.com.br/' }}

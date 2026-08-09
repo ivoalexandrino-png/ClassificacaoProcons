@@ -14,6 +14,7 @@ from classificacao_procons.questor.pipeline import (
     QuestorPipelineError,
     QuestorPipelineOptions,
     run_questor_check,
+    run_questor_refresh,
 )
 from classificacao_procons.questor.policy import CAIXA_MODES, DEFAULT_CAIXA_MODE
 from classificacao_procons.questor.serialization import (
@@ -77,6 +78,8 @@ def _run_check(args: argparse.Namespace) -> int:
         empresa=args.empresa,
         cnpj=args.cnpj,
         headless=not args.headed,
+        refresh_certidoes=args.refresh_certidoes,
+        refresh_wait_seconds=args.refresh_wait_seconds,
         monday_api_token=os.environ.get("MONDAY_API_TOKEN"),
     )
 
@@ -104,6 +107,29 @@ def _run_check(args: argparse.Namespace) -> int:
     if result.analysis is not None:
         payload["analysis"] = analysis_to_dict(result.analysis)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_refresh(args: argparse.Namespace) -> int:
+    options = QuestorPipelineOptions(
+        portal_url=args.portal_url or os.environ.get("QUESTOR_PORTAL_URL"),
+        portal_login=args.portal_login or os.environ.get("QUESTOR_LOGIN"),
+        portal_password=args.portal_password or os.environ.get("QUESTOR_PASSWORD"),
+        headless=not args.headed,
+        monday_api_token=os.environ.get("MONDAY_API_TOKEN"),
+    )
+    try:
+        stale_ids, triggered = run_questor_refresh(options)
+    except QuestorPipelineError as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+    print(
+        json.dumps(
+            {"stale_ids": list(stale_ids), "triggered": triggered},
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
     return 0
 
 
@@ -186,6 +212,33 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Abre o navegador com interface (para resolver captcha/2FA).",
     )
+    check_parser.add_argument(
+        "--refresh-certidoes",
+        action="store_true",
+        help=(
+            "Antes de ler, dispara a recaptura das certidões não regulares no Questor "
+            "(assíncrono) e aguarda antes de reler — reduz dado desatualizado."
+        ),
+    )
+    check_parser.add_argument(
+        "--refresh-wait-seconds",
+        type=int,
+        default=120,
+        help="Espera (s) após disparar a recaptura antes de reler (default 120).",
+    )
+
+    refresh_parser = subparsers.add_parser(
+        "refresh",
+        help="Só dispara a recaptura das certidões não regulares (fase de gatilho).",
+    )
+    refresh_parser.add_argument("--portal-url", help="URL de login do Questor.")
+    refresh_parser.add_argument("--portal-login", help="Usuário do Questor.")
+    refresh_parser.add_argument("--portal-password", help="Senha do Questor.")
+    refresh_parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Abre o navegador com interface (para resolver captcha/2FA).",
+    )
 
     args = parser.parse_args(argv)
 
@@ -193,6 +246,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_analyze(args)
     if args.command == "check":
         return _run_check(args)
+    if args.command == "refresh":
+        return _run_refresh(args)
 
     parser.print_help()
     return 0
