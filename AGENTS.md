@@ -115,10 +115,10 @@ Coleta + análise + alerta (produção; credenciais vêm do Monday):
 
 ```bash
 questor check --portal-url https://b4a.zen.questor.com.br/ --empresa "B4A / MMKT" \
-  --to juridico@b4a.com.br,fisca@b4a.com.br --caixa-mode relevantes_por_assunto
+  --to juridico@b4a.com.br,fiscal@b4a.com.br --caixa-mode relevantes_por_assunto
 ```
 
-**Execução diária:** workflow `.github/workflows/questor-daily.yml` (cron `0 11 * * *` = 08:00 BRT, e `workflow_dispatch`). Destinatários atuais: `juridico@b4a.com.br` e `fisca@b4a.com.br`. Estado de dedup persiste via `actions/cache` (só alerta pendência **nova**). Secrets: `MONDAY_API_TOKEN`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`; vars opcionais `QUESTOR_PORTAL_URL`, `QUESTOR_MONDAY_ITEM`.
+**Execução diária:** workflow `.github/workflows/questor-daily.yml` (cron `0 11 * * *` = 08:00 BRT, e `workflow_dispatch`). Destinatários atuais: `juridico@b4a.com.br` e `fiscal@b4a.com.br`. Estado de dedup persiste via `actions/cache` (só alerta pendência **nova**). Secrets: `MONDAY_API_TOKEN`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`; vars opcionais `QUESTOR_PORTAL_URL`, `QUESTOR_MONDAY_ITEM`.
 
 Playwright: rodar `playwright install chromium` (o update script já faz). O login do Questor é sessão única — evite acessos concorrentes (o cron roda às 08:00 BRT).
 

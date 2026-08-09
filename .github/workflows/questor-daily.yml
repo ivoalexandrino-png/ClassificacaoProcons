@@ -90,7 +90,7 @@ jobs:
           QUESTOR_MONDAY_ITEM: ${{ vars.QUESTOR_MONDAY_ITEM || 'Questor - Certidões - Ivo' }}
         run: >
           python -m classificacao_procons.questor.cli check
-          --to juridico@b4a.com.br,fisca@b4a.com.br
+          --to juridico@b4a.com.br,fiscal@b4a.com.br
           --empresa "B4A / MMKT"
           --caixa-mode ${{ inputs.caixa_mode || 'relevantes_por_assunto' }}
           ${{ inputs.resend && '--resend' || '' }}
