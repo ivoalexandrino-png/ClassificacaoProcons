@@ -46,6 +46,8 @@ def _certidao_from_dict(data: dict[str, Any]) -> Certidao:
         uf=data.get("uf"),
         data_emissao=parse_brazilian_date(data.get("data_emissao")),
         data_validade=parse_brazilian_date(data.get("data_validade")),
+        protocolo=data.get("protocolo"),
+        conferida=data.get("conferida"),
         observacao=data.get("observacao"),
         url=data.get("url"),
     )

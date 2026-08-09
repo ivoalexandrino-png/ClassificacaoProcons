@@ -117,7 +117,8 @@ def certidao_from_api_row(row: dict[str, Any]) -> Certidao:
         uf=(row.get("UF") or "").strip() or None,
         data_emissao=parse_brazilian_date(row.get("CertidaoDataEmissao")),
         data_validade=parse_brazilian_date(row.get("CertidaoDataVencimento")),
-        observacao=(row.get("CertidaoProtocolo") or "").strip() or None,
+        protocolo=(row.get("CertidaoProtocolo") or "").strip() or None,
+        conferida=(row.get("Conferida") == 1) if row.get("Conferida") is not None else None,
     )
 
 
