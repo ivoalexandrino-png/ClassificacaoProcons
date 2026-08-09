@@ -97,6 +97,7 @@ class TestControleRegistration:
         assert luciano_call["group_id"] == "group-luciano"
         assert luciano_call["tipo_label"] is None
 
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
     @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
     @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
     @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
@@ -107,6 +108,7 @@ class TestControleRegistration:
         find_items_mock,
         fetch_mock,
         build_index_mock,
+        load_groups_mock,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("CONTROLE_PAUSE_CREATE", "true")
@@ -171,6 +173,81 @@ class TestControleRegistration:
 
         assert result.skipped_duplicate is True
         assert result.monday_item_id is None
+
+    @patch("classificacao_procons.contratos.controle_sync.reconcile_controle_from_document")
+    @patch("classificacao_procons.contratos.controle_sync.ensure_autentique_id_on_controle_items")
+    @patch("classificacao_procons.contratos.controle_sync.ensure_controle_dual_tracks_for_document")
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.controle_sync.fetch_document_summary")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
+    def test_should_link_legacy_assinado_without_creating_new_rows(
+        self,
+        create_item_mock,
+        find_items_mock,
+        fetch_mock,
+        build_index_mock,
+        load_groups_mock,
+        repair_mock,
+        link_mock,
+        reconcile_mock,
+    ) -> None:
+        from classificacao_procons.contratos.constants import CONTROLE_STATUS_ASSINADO
+        from classificacao_procons.contratos.controle_sync import ControleReconcileResult
+
+        title = "Contrato legado assinado"
+        find_items_mock.return_value = ()
+        legacy = ControleAssinaturasItem(
+            item_id="legacy-99",
+            name=title,
+            status=CONTROLE_STATUS_ASSINADO,
+            tipo="Contratos B2B",
+            signature_link="https://assina.ae/old",
+        )
+        fetch_mock.return_value = AutentiqueDocumentSummary(
+            document_id="doc-signed-legacy",
+            name=title,
+            created_at=None,
+            signed_pdf_url="https://example.com/s.pdf",
+            signatures=(
+                AutentiqueSigner(
+                    public_id="s1",
+                    name="Jan",
+                    email=SIGNER_EMAIL_JAN,
+                    short_link="https://assina.ae/x",
+                    signed_at="2026-01-01T00:00:00Z",
+                ),
+            ),
+        )
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset({title.casefold()}),
+            all_items=(legacy,),
+        )
+        load_groups_mock.return_value = {
+            "contratos pendentes de assinatura jan": "group-jan",
+            "contratos pendentes de assinatura luciano": "group-luciano",
+        }
+        reconcile_mock.return_value = ControleReconcileResult(
+            document_id="doc-signed-legacy",
+            document_name=title,
+            monday_item_id="legacy-99",
+            updated=True,
+            skipped=False,
+            group_id="group-assinados",
+            status_label=CONTROLE_STATUS_ASSINADO,
+        )
+
+        result = register_document_in_controle(
+            document_id="doc-signed-legacy",
+            monday_api_token="monday-token",
+        )
+
+        assert result.skipped_duplicate is True
+        assert result.monday_item_id == "legacy-99"
+        link_mock.assert_called_once()
+        create_item_mock.assert_not_called()
 
     @patch("classificacao_procons.contratos.controle_sync.register_document_in_controle")
     def test_should_process_document_created_webhook(self, register_mock) -> None:

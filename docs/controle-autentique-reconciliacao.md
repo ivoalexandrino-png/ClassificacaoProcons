@@ -72,6 +72,15 @@ contratos-webhook sync-controle --no-auto-link-legacy ...
 
 Workflow GitHub: **Sync Controle Assinaturas (Autentique)** — modos `compare`, `repair`, `reconcile-mismatches`, `sync`.
 
+### Catch-up operacional (Autentique → Monday, agora)
+
+Ordem recomendada no workflow **Sync Controle Assinaturas**:
+
+1. `mode=compare` — revisar `plan_action_counts` (`vincular` / `atualizar` / `criar` / `ignorar`).
+2. `mode=sync`, `dry_run=true`, `create_only=false`, `skip_signed_documents=true`, `allow_create=false` — simula **só vínculo + atualização** (criação pausada).
+3. `mode=sync`, `dry_run=false`, mesmos parâmetros — aplica vínculos legado e status.
+4. Só então `allow_create=true` + `create_only=true` para pendentes **CRIAR** genuínos (nunca `skip_signed_documents=false` em massa).
+
 ### Catch-up recomendado (após compare limpo em track/status/multi-ID)
 
 1. **compare** — artefato `controle-pending-export` (pending, signed missing, sugestões legado).

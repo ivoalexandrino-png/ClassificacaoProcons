@@ -45,7 +45,6 @@ from classificacao_procons.contratos.controle_create_policy import (
 )
 from classificacao_procons.contratos.controle_dedup import (
     controle_title_kind_conflict,
-    find_exact_title_matches,
 )
 from classificacao_procons.contratos.controle_legacy_guard import (
     should_block_create_for_signed_autentique,
@@ -263,41 +262,14 @@ def register_document_in_controle(
         )
 
     index = build_controle_assinaturas_index(api_token=monday_token)
-    if index.matches_document(document):
-        title_pool = index.pending_track_items or index.all_items
-        exact_matches = find_exact_title_matches(
-            document_name=document.name,
-            items=title_pool,
-        )
-        if exact_matches and document.document_id.casefold().strip() not in index.document_ids:
-            ensure_autentique_id_on_controle_items(
-                api_token=monday_token,
-                document_id=document.document_id,
-                items=exact_matches,
-            )
-        groups = load_controle_board_groups(api_token=monday_token)
-        jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
-        if jan_group_id and luciano_group_id:
-            ensure_controle_dual_tracks_for_document(
-                api_token=monday_token,
-                document=document,
-                jan_group_id=jan_group_id,
-                luciano_group_id=luciano_group_id,
-                tipo_label=_resolve_tipo_label(document_name=document.name),
-                status_label=_resolve_controle_status(document=document),
-                signed_at=_resolve_signed_at(document=document),
-                build_track_link=_build_track_signature_link,
-                allow_create=controle_may_create_new_item(document_name=document.name),
-            )
-        return ControleRegistrationResult(
-            document_id=document.document_id,
-            document_name=document.name,
-            monday_item_id=exact_matches[0].item_id if exact_matches else None,
-            monday_item_url=None,
-            skipped_duplicate=True,
-        )
+    plan_row = classify_autentique_document_for_controle(
+        document=document,
+        index=index,
+    )
 
-    if not controle_may_create_new_item(document_name=document.name):
+    if plan_row.action == ControlePlanAction.CRIAR and not controle_may_create_new_item(
+        document_name=document.name,
+    ):
         return ControleRegistrationResult(
             document_id=document.document_id,
             document_name=document.name,
@@ -307,7 +279,71 @@ def register_document_in_controle(
         )
 
     groups = load_controle_board_groups(api_token=monday_token)
+    jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
     tipo_label = _resolve_tipo_label(document_name=document.name)
+    status_label = _resolve_controle_status(document=document)
+    signed_at = _resolve_signed_at(document=document)
+    allow_create = controle_may_create_new_item(document_name=document.name)
+
+    def _repair_dual_tracks() -> None:
+        if jan_group_id and luciano_group_id:
+            ensure_controle_dual_tracks_for_document(
+                api_token=monday_token,
+                document=document,
+                jan_group_id=jan_group_id,
+                luciano_group_id=luciano_group_id,
+                tipo_label=tipo_label,
+                status_label=status_label,
+                signed_at=signed_at,
+                build_track_link=_build_track_signature_link,
+                allow_create=allow_create,
+            )
+
+    if plan_row.action == ControlePlanAction.ATUALIZAR:
+        _repair_dual_tracks()
+        linked = index.items_for_document_id(document.document_id)
+        primary_id = linked[0].item_id if linked else None
+        return ControleRegistrationResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=primary_id,
+            monday_item_url=None,
+            skipped_duplicate=True,
+        )
+
+    if plan_row.action == ControlePlanAction.VINCULAR:
+        link_targets = find_legacy_rows_to_link(document=document, index=index)
+        ensure_autentique_id_on_controle_items(
+            api_token=monday_token,
+            document_id=document.document_id,
+            items=link_targets,
+        )
+        reconcile_controle_from_document(
+            document=document,
+            controle_items=link_targets,
+            api_token=monday_token,
+            groups=groups,
+        )
+        _repair_dual_tracks()
+        return ControleRegistrationResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=link_targets[0].item_id if link_targets else None,
+            monday_item_url=None,
+            skipped_duplicate=True,
+        )
+
+    if plan_row.action == ControlePlanAction.IGNORAR:
+        return ControleRegistrationResult(
+            document_id=document.document_id,
+            document_name=document.name,
+            monday_item_id=plan_row.monday_item_ids[0] if plan_row.monday_item_ids else None,
+            monday_item_url=None,
+            skipped_duplicate=True,
+        )
+
+    if plan_row.action != ControlePlanAction.CRIAR:
+        raise ControleSyncError(f"Ação de plano inesperada: {plan_row.action}")
 
     try:
         item_id, item_url, mirror_id = _create_controle_track_pair(
