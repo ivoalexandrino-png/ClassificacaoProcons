@@ -61,6 +61,8 @@ class QuestorPipelineOptions:
     empresa: str | None = None
     cnpj: str | None = None
     headless: bool = True
+    refresh_certidoes: bool = False
+    refresh_wait_seconds: int = 120
     # Credenciais no Monday (usadas quando login/senha do portal não vêm nas opções).
     monday_api_token: str | None = None
 
@@ -104,19 +106,12 @@ def _resolve_snapshot(
     return provider(options)
 
 
-def _default_portal_provider(options: QuestorPipelineOptions) -> QuestorSnapshot:
-    # Import tardio: Playwright só é necessário para o scraping real.
-    from classificacao_procons.questor.portal import (
-        QuestorPortalError,
-        QuestorPortalOptions,
-        fetch_questor_snapshot,
-    )
-
+def _resolve_portal_login(options: QuestorPipelineOptions) -> tuple[str, str, str]:
+    """Resolve (portal_url, login, senha): das opções ou do board Acessos do Monday."""
     login = options.portal_login
     password = options.portal_password
     portal_url = options.portal_url
 
-    # Sem login/senha explícitos: tenta o board Acessos do Monday.
     if not login or not password:
         from classificacao_procons.questor.credentials import (
             QuestorCredentialsError,
@@ -136,6 +131,18 @@ def _default_portal_provider(options: QuestorPipelineOptions) -> QuestorSnapshot
             "Credenciais do portal Questor ausentes (portal_url/login/password) e "
             "nenhum snapshot injetado.",
         )
+    return portal_url, login, password
+
+
+def _default_portal_provider(options: QuestorPipelineOptions) -> QuestorSnapshot:
+    # Import tardio: Playwright só é necessário para o scraping real.
+    from classificacao_procons.questor.portal import (
+        QuestorPortalError,
+        QuestorPortalOptions,
+        fetch_questor_snapshot,
+    )
+
+    portal_url, login, password = _resolve_portal_login(options)
     try:
         return fetch_questor_snapshot(
             QuestorPortalOptions(
@@ -145,10 +152,39 @@ def _default_portal_provider(options: QuestorPipelineOptions) -> QuestorSnapshot
                 empresa=options.empresa,
                 cnpj=options.cnpj,
                 headless=options.headless,
+                refresh_stale_certidoes=options.refresh_certidoes,
+                refresh_wait_seconds=options.refresh_wait_seconds,
             ),
         )
     except QuestorPortalError as exc:
         raise QuestorPipelineError(str(exc)) from exc
+
+
+def run_questor_refresh(options: QuestorPipelineOptions) -> tuple[tuple[int, ...], int]:
+    """Dispara a recaptura das certidões não regulares (fase de gatilho).
+
+    Retorna ``(ids_recapturados, quantidade_aceita)``. A nova situação chega
+    depois (assíncrono); rode a leitura/alerta num segundo momento.
+    """
+    from classificacao_procons.questor.portal import (
+        QuestorPortalError,
+        QuestorPortalOptions,
+        refresh_stale_certidoes,
+    )
+
+    portal_url, login, password = _resolve_portal_login(options)
+    try:
+        result = refresh_stale_certidoes(
+            QuestorPortalOptions(
+                portal_url=portal_url,
+                login=login,
+                password=password,
+                headless=options.headless,
+            ),
+        )
+    except QuestorPortalError as exc:
+        raise QuestorPipelineError(str(exc)) from exc
+    return result.stale_ids, result.triggered
 
 
 def run_questor_check(

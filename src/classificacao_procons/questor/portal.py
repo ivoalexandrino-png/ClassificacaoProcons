@@ -40,6 +40,7 @@ PAGE_LOAD_WAIT_UNTIL: Final = "domcontentloaded"
 DEFAULT_TAKE: Final = 2000
 
 CERTIDOES_ENDPOINT: Final = "escritorio/cnd/certidaoempresa/listarcertidaoempresa"
+CERTIDAO_RENEW_ENDPOINT: Final = "escritorio/cnd/certidaoempresa/RenovarCertidao"
 CAIXA_POSTAL_ENDPOINT: Final = "escritorio/dte/capturacaixapostal/listar"
 NOTIFICATION_URL_TEMPLATE: Final = "https://www.dec.fazenda.sp.gov.br/DEC/UCLogin/login.aspx"
 
@@ -57,6 +58,49 @@ class QuestorPortalOptions:
     cnpj: str | None = None
     headless: bool = True
     take: int = DEFAULT_TAKE
+    # Recaptura: antes de ler, dispara "Renovar Certidão" para as certidões não
+    # regulares (assíncrono no Questor) e aguarda ``refresh_wait_seconds`` antes de
+    # reler. Reduz o risco de situação desatualizada (ex.: CND já emitida no órgão).
+    refresh_stale_certidoes: bool = False
+    refresh_wait_seconds: int = 120
+
+# SituacaoCertidao == 1 é "Regular"; as demais (Irregular/Neutro/Falha/Restrição)
+# podem estar defasadas e valem uma recaptura.
+_REGULAR_SITUACAO_CODE: Final = 1
+
+
+def select_stale_certidao_ids(rows: list[dict[str, Any]]) -> list[int]:
+    """IDs das certidões não regulares (candidatas a recaptura)."""
+    ids: list[int] = []
+    for row in rows:
+        if row.get("SituacaoCertidao") == _REGULAR_SITUACAO_CODE:
+            continue
+        raw_id = row.get("Id")
+        if raw_id is None:
+            continue
+        try:
+            ids.append(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+def trigger_certidao_refresh(request: Any, base_url: str, cert_id: int) -> bool:
+    """Dispara a recaptura de uma certidão. Retorna True se o Questor aceitou.
+
+    ``request`` é um objeto com ``.post(url, headers=...)`` (ex.: ``page.request``).
+    """
+    response = request.post(
+        f"{base_url}{CERTIDAO_RENEW_ENDPOINT}?certidaoEmpresaId={cert_id}",
+        headers={"x-requested-with": "XMLHttpRequest"},
+    )
+    if getattr(response, "status", 200) != 200:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    return bool(payload.get("sucesso"))
 
 
 def certidao_from_api_row(row: dict[str, Any]) -> Certidao:
@@ -159,6 +203,42 @@ def _fetch_dataset(page: Any, base_url: str, endpoint: str, *, take: int) -> lis
     return data
 
 
+@dataclass(frozen=True)
+class RefreshResult:
+    """Resultado do disparo de recaptura de certidões."""
+
+    stale_ids: tuple[int, ...]
+    triggered: int
+
+
+def refresh_stale_certidoes(options: QuestorPortalOptions) -> RefreshResult:
+    """Login e dispara a recaptura das certidões não regulares (sem reler/esperar).
+
+    Pensado para a fase de "gatilho" do fluxo em duas etapas: a nova situação
+    chega de forma assíncrona (pode levar minutos), então a leitura fica para um
+    segundo momento (ex.: o job de leitura ~30 min depois).
+    """
+    if not options.portal_url:
+        raise QuestorPortalError("URL do Questor não configurada.")
+    base_url = _base_url(options.portal_url)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=options.headless)
+        page = browser.new_context().new_page()
+        try:
+            _login(page, options)
+            rows = _fetch_dataset(page, base_url, CERTIDOES_ENDPOINT, take=options.take)
+            stale_ids = select_stale_certidao_ids(rows)
+            triggered = sum(
+                trigger_certidao_refresh(page.request, base_url, cert_id)
+                for cert_id in stale_ids
+            )
+        except PlaywrightTimeoutError as exc:
+            raise QuestorPortalError("Questor não respondeu a tempo durante o acesso.") from exc
+        finally:
+            browser.close()
+    return RefreshResult(stale_ids=tuple(stale_ids), triggered=triggered)
+
+
 def fetch_questor_snapshot(options: QuestorPortalOptions) -> QuestorSnapshot:
     """Login no Questor e coleta certidões + caixa postal via API interna."""
     if not options.portal_url:
@@ -174,6 +254,18 @@ def fetch_questor_snapshot(options: QuestorPortalOptions) -> QuestorSnapshot:
             certidoes_rows = _fetch_dataset(
                 page, base_url, CERTIDOES_ENDPOINT, take=options.take,
             )
+            if options.refresh_stale_certidoes:
+                stale_ids = select_stale_certidao_ids(certidoes_rows)
+                triggered = sum(
+                    trigger_certidao_refresh(page.request, base_url, cert_id)
+                    for cert_id in stale_ids
+                )
+                if triggered:
+                    # A recaptura é assíncrona; espera limitada e relê as certidões.
+                    page.wait_for_timeout(max(0, options.refresh_wait_seconds) * 1000)
+                    certidoes_rows = _fetch_dataset(
+                        page, base_url, CERTIDOES_ENDPOINT, take=options.take,
+                    )
             mensagens_rows = _fetch_dataset(
                 page, base_url, CAIXA_POSTAL_ENDPOINT, take=options.take,
             )

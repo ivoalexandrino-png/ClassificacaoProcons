@@ -22,6 +22,13 @@ def _msg(assunto: str, **kwargs) -> MensagemCaixaPostal:
         ("Inscrição em dívida ativa", "pagamento", "critical"),
         ("Vencimento de Certidão Conjunta", "certidao", "warning"),
         ("[e-Processo] Juntada de documentos", "processo", "warning"),
+        ("Comunicado Cadin - nº 4057014", "pagamento", "critical"),
+        ("Comunica Multa por Atraso na Entrega de Declaração", "lancamento", "critical"),
+        ("Comunicação para Compensação de Ofício nº 123", "pagamento", "critical"),
+        ("PER/DCOMP 123 - Despacho Decisório", "processo", "warning"),
+        ("Programa Nos Conformes", "fiscalizacao", "critical"),
+        ("Autorregularização de pendências", "autorregularizacao", "warning"),
+        ("PEP - Programa Especial de Parcelamento", "pagamento", "critical"),
     ],
 )
 def test_should_classify_relevant_subjects(
@@ -58,3 +65,11 @@ def test_should_consider_remetente_and_categoria() -> None:
     result = classify_caixa_message(msg)
     assert result is not None
     assert result[0] == "fiscalizacao"
+
+
+def test_env_extra_keywords_override(monkeypatch) -> None:
+    monkeypatch.setenv("QUESTOR_RELEVANCIA_EXTRA", "pagamento:redarf; processo:nota fiscal")
+    # "Redarf" normalmente é rotineiro; a env força classificá-lo.
+    result = classify_caixa_message(_msg("Redarf Net - Pedido de retificação"))
+    assert result is not None
+    assert result[0] == "pagamento"

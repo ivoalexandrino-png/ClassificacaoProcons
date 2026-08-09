@@ -10,8 +10,14 @@ A regra é allowlist: sem palavra-chave relevante → não classificado (ignorad
 
 from __future__ import annotations
 
+import os
+
 from classificacao_procons.credentials.mapping import normalize_label
 from classificacao_procons.questor.models import IssueSeverity, MensagemCaixaPostal
+
+# Env para acrescentar palavras-chave sem alterar código, conforme surgem assuntos
+# novos. Formato: "categoria:palavra" separado por ';' ou ','.
+ENV_EXTRA_KEYWORDS = "QUESTOR_RELEVANCIA_EXTRA"
 
 # Rótulo legível e severidade por categoria.
 CATEGORY_LABEL: dict[str, str] = {
@@ -19,6 +25,7 @@ CATEGORY_LABEL: dict[str, str] = {
     "lancamento": "Lançamento / auto de infração",
     "pagamento": "Débito / atraso de pagamento",
     "intimacao": "Intimação / exigência",
+    "autorregularizacao": "Autorregularização",
     "certidao": "Certidão (vencimento)",
     "processo": "Processo administrativo",
 }
@@ -27,11 +34,13 @@ CATEGORY_SEVERITY: dict[str, IssueSeverity] = {
     "lancamento": "critical",
     "pagamento": "critical",
     "intimacao": "critical",
+    "autorregularizacao": "warning",
     "certidao": "warning",
     "processo": "warning",
 }
 
 # Ordem importa: categorias críticas antes das de aviso; a primeira que casar vence.
+# Palavras já normalizadas (minúsculas, sem acento).
 _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "fiscalizacao",
@@ -43,15 +52,22 @@ _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "termo de exclusao",
             "exclusao do simples",
             "diligencia",
+            "nos conformes",
         ),
     ),
     (
         "lancamento",
-        ("auto de infrac", "lancamento", "notificacao de lancamento", "lancado de oficio"),
+        (
+            "auto de infrac",
+            "lancamento",
+            "notificacao de lancamento",
+            "lancado de oficio",
+            "multa",
+        ),
     ),
     (
         "intimacao",
-        ("intima", "exigenc", "notificacao fiscal", "termo de inicio"),
+        ("intima", "exigenc", "notificacao fiscal", "termo de inicio", "notificacao para"),
     ),
     (
         "pagamento",
@@ -66,7 +82,15 @@ _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "parcelament",
             "pendencia de pagamento",
             "guia nao paga",
+            "cadin",
+            "compensacao de oficio",
+            "programa especial de parcelamento",
+            "pep -",
         ),
+    ),
+    (
+        "autorregularizacao",
+        ("autorregulariza", "auto regulariza", "regularizacao"),
     ),
     (
         "certidao",
@@ -74,9 +98,35 @@ _RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "processo",
-        ("e-processo", "juntada", "processo administrativo", "andamento processual"),
+        (
+            "e-processo",
+            "juntada",
+            "processo administrativo",
+            "andamento processual",
+            "ciencia do processo",
+            "per/dcomp",
+            "despacho decis",
+        ),
     ),
 )
+
+
+def _extra_rules() -> list[tuple[str, str]]:
+    """Palavras-chave extras vindas da env (categoria:palavra)."""
+    raw = os.environ.get(ENV_EXTRA_KEYWORDS, "").strip()
+    if not raw:
+        return []
+    pairs: list[tuple[str, str]] = []
+    for token in raw.replace(";", ",").split(","):
+        token = token.strip()
+        if ":" not in token:
+            continue
+        category, keyword = token.split(":", 1)
+        category = category.strip().lower()
+        keyword = normalize_label(keyword)
+        if category in CATEGORY_LABEL and keyword:
+            pairs.append((category, keyword))
+    return pairs
 
 
 def classify_caixa_message(
@@ -96,6 +146,10 @@ def classify_caixa_message(
     )
     if not haystack:
         return None
+    # Extras da env têm prioridade (permitem corrigir rapidamente classificações).
+    for category, keyword in _extra_rules():
+        if keyword in haystack:
+            return category, CATEGORY_LABEL[category], CATEGORY_SEVERITY[category]
     for category, keywords in _RULES:
         if any(keyword in haystack for keyword in keywords):
             return category, CATEGORY_LABEL[category], CATEGORY_SEVERITY[category]
