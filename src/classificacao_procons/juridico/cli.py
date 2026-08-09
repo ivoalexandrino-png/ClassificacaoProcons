@@ -11,6 +11,7 @@ from pathlib import Path
 
 from classificacao_procons.email.gmail import GmailClientError
 from classificacao_procons.google_auth import has_drive_access, has_valid_token
+from classificacao_procons.juridico.casos_consumidor.aggregate import build_process_rows
 from classificacao_procons.juridico.casos_consumidor.benchmark import benchmark_similar_cases
 from classificacao_procons.juridico.casos_consumidor.pipeline import (
     CasosScanOptions,
@@ -20,6 +21,7 @@ from classificacao_procons.juridico.casos_consumidor.report import (
     load_cases_from_json,
     write_casos_csv,
     write_casos_json,
+    write_process_csv,
 )
 from classificacao_procons.juridico.cnj import extract_process_number
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
@@ -131,6 +133,7 @@ def _run_casos_scan(args: argparse.Namespace) -> int:
         deposits_json_path=Path(args.deposits_json),
         use_gemini=not args.no_gemini,
         max_gemini_calls=args.max_gemini_calls,
+        with_monday_kpi=args.with_monday,
     )
     result = scan_consumer_cases(options)
     csv_path = Path(args.output_csv)
@@ -138,12 +141,24 @@ def _run_casos_scan(args: argparse.Namespace) -> int:
     json_path = Path(args.output_json)
     write_casos_json(result=result, destination=json_path)
 
+    process_path = Path(args.output_process_csv)
+    kpi_index = result.kpi_by_process or {}
+    process_rows = build_process_rows(
+        cases=result.cases,
+        deposits_json_path=Path(args.deposits_json),
+        kpi_by_process=kpi_index,
+    )
+    write_process_csv(rows=process_rows, destination=process_path)
+
     summary = {
         "consumers_scanned": result.consumers_scanned,
         "consumers_with_deposits": result.consumers_with_deposits,
         "cases": len(result.cases),
+        "process_rows": len(process_rows),
+        "kpi_rows_matched": len(kpi_index),
         "output_csv": str(csv_path),
         "output_json": str(json_path),
+        "output_process_csv": str(process_path),
         "deposits_by_theme": _theme_deposit_totals(result.cases),
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
@@ -619,8 +634,13 @@ def main(argv: list[str] | None = None) -> int:
         "--output-json",
         default="data/casos-consumidor.json",
     )
+    casos_parser.add_argument(
+        "--output-process-csv",
+        default="data/casos-por-processo.csv",
+    )
     casos_parser.add_argument("--no-gemini", action="store_true")
-    casos_parser.add_argument("--max-gemini-calls", type=int, default=250)
+    casos_parser.add_argument("--with-monday", action="store_true")
+    casos_parser.add_argument("--max-gemini-calls", type=int, default=400)
 
     benchmark_parser = subparsers.add_parser(
         "casos-benchmark",
