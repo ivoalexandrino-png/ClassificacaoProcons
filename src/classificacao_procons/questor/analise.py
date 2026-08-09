@@ -27,6 +27,7 @@ from classificacao_procons.questor.models import (
     QuestorAnalysis,
     QuestorSnapshot,
 )
+from classificacao_procons.questor.relevancia import classify_caixa_message
 
 DEFAULT_WARN_WITHIN_DAYS = 15
 
@@ -43,7 +44,12 @@ def analyze_certidao(
 ) -> list[FiscalIssue]:
     """Avalia uma certidão e devolve as pendências (0, 1 ou mais)."""
     orgao = certidao.orgao
-    slug = _slug(orgao)
+    empresa = certidao.empresa
+    slug = _slug(f"{empresa or ''} {orgao}")
+    label = f"{orgao}" + (f" ({empresa})" if empresa else "")
+
+    if certidao.situacao == "neutra":
+        return []
 
     if certidao.situacao == "positiva":
         return [
@@ -51,14 +57,31 @@ def analyze_certidao(
                 kind="certidao_positiva",
                 severity="critical",
                 orgao=orgao,
-                title=f"Certidão POSITIVA — {orgao}",
+                title=f"Certidão IRREGULAR — {label}",
                 detail=(
-                    f"A certidão de {orgao} está positiva (com débitos/pendências). "
-                    "Regularizar junto ao órgão."
+                    f"A certidão de {label} está irregular/positiva (com débitos ou "
+                    "pendências). Regularizar junto ao órgão."
                 ),
                 due_date=certidao.data_validade,
                 source_url=certidao.url,
                 dedup_key=f"certidao_positiva:{slug}",
+            ),
+        ]
+
+    if certidao.situacao == "restricao":
+        return [
+            FiscalIssue(
+                kind="certidao_restricao",
+                severity="critical",
+                orgao=orgao,
+                title=f"Certidão com RESTRIÇÃO — {label}",
+                detail=(
+                    f"A certidão de {label} está com restrição. "
+                    "Verificar e regularizar junto ao órgão."
+                ),
+                due_date=certidao.data_validade,
+                source_url=certidao.url,
+                dedup_key=f"certidao_restricao:{slug}",
             ),
         ]
 
@@ -68,9 +91,9 @@ def analyze_certidao(
                 kind="certidao_indisponivel",
                 severity="warning",
                 orgao=orgao,
-                title=f"Certidão indisponível — {orgao}",
+                title=f"Certidão indisponível — {label}",
                 detail=(
-                    f"Não foi possível emitir/consultar a certidão de {orgao}. "
+                    f"Não foi possível emitir/consultar a certidão de {label}. "
                     "Verificar manualmente no órgão emissor."
                 ),
                 source_url=certidao.url,
@@ -88,9 +111,9 @@ def analyze_certidao(
                 kind="certidao_vencida",
                 severity="critical",
                 orgao=orgao,
-                title=f"Certidão vencida — {orgao}",
+                title=f"Certidão vencida — {label}",
                 detail=(
-                    f"A certidão de {orgao} está vencida"
+                    f"A certidão de {label} está vencida"
                     + (f" (validade {validade.strftime('%d/%m/%Y')})" if validade else "")
                     + ". Reemitir."
                 ),
@@ -108,9 +131,9 @@ def analyze_certidao(
                     kind="certidao_a_vencer",
                     severity="warning",
                     orgao=orgao,
-                    title=f"Certidão a vencer — {orgao}",
+                    title=f"Certidão a vencer — {label}",
                     detail=(
-                        f"A certidão de {orgao} vence em {days_left} dia(s) "
+                        f"A certidão de {label} vence em {days_left} dia(s) "
                         f"({validade.strftime('%d/%m/%Y')}). Reemitir preventivamente."
                     ),
                     due_date=validade,
@@ -131,7 +154,11 @@ def analyze_mensagem(
     """Avalia uma mensagem da caixa postal e devolve as pendências."""
     issues: list[FiscalIssue] = []
     orgao = mensagem.orgao
-    key_base = mensagem.protocolo or _slug(f"{orgao} {mensagem.assunto}")
+    empresa = mensagem.empresa
+    label = f"{orgao}" + (f", {empresa}" if empresa else "")
+    key_base = mensagem.nsu or mensagem.protocolo or _slug(
+        f"{empresa or ''} {orgao} {mensagem.assunto}",
+    )
     prazo = mensagem.prazo_ciencia
 
     if prazo is not None:
@@ -142,9 +169,9 @@ def analyze_mensagem(
                     kind="prazo_ciencia_vencido",
                     severity="critical",
                     orgao=orgao,
-                    title=f"Prazo de ciência VENCIDO — {orgao}",
+                    title=f"Prazo de ciência VENCIDO — {label}",
                     detail=(
-                        f"A mensagem \"{mensagem.assunto}\" ({orgao}) teve o prazo de "
+                        f"A mensagem \"{mensagem.assunto}\" ({label}) teve o prazo de "
                         f"ciência vencido em {prazo.strftime('%d/%m/%Y')}."
                     ),
                     due_date=prazo,
@@ -158,9 +185,9 @@ def analyze_mensagem(
                     kind="prazo_ciencia_proximo",
                     severity="critical",
                     orgao=orgao,
-                    title=f"Prazo de ciência próximo — {orgao}",
+                    title=f"Prazo de ciência próximo — {label}",
                     detail=(
-                        f"A mensagem \"{mensagem.assunto}\" ({orgao}) tem prazo de "
+                        f"A mensagem \"{mensagem.assunto}\" ({label}) tem prazo de "
                         f"ciência em {days_left} dia(s) ({prazo.strftime('%d/%m/%Y')})."
                     ),
                     due_date=prazo,
@@ -169,17 +196,36 @@ def analyze_mensagem(
                 ),
             )
 
+    # Já há problema de prazo genuíno para a mensagem: não duplica.
+    if issues:
+        return issues
+
+    # Aviso da mensagem não lida, com severidade pela relevância do assunto
+    # (fiscalização/lançamento/atraso → crítico; certidão/processo → aviso;
+    # rotineira → aviso genérico). A seleção do que chega aqui é da policy.
     if not mensagem.lida:
+        classification = classify_caixa_message(mensagem)
+        if classification is not None:
+            _category, cat_label, severity = classification
+            title = f"{cat_label} — {label}"
+            detail = (
+                f"Mensagem relevante ({cat_label.lower()}) não lida em {label}: "
+                f"\"{mensagem.assunto}\"."
+            )
+        else:
+            severity = "warning"
+            title = f"Mensagem não lida — {label}"
+            detail = (
+                f"Há mensagem não lida na caixa postal de {label}: "
+                f"\"{mensagem.assunto}\"."
+            )
         issues.append(
             FiscalIssue(
                 kind="mensagem_nao_lida",
-                severity="warning",
+                severity=severity,
                 orgao=orgao,
-                title=f"Mensagem não lida — {orgao}",
-                detail=(
-                    f"Há mensagem não lida na caixa postal de {orgao}: "
-                    f"\"{mensagem.assunto}\"."
-                ),
+                title=title,
+                detail=detail,
                 due_date=mensagem.prazo_ciencia,
                 source_url=mensagem.url,
                 dedup_key=f"mensagem_nao_lida:{key_base}",

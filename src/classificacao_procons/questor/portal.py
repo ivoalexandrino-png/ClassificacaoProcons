@@ -1,20 +1,27 @@
-"""Coleta do Questor via Playwright (login → certidões + caixa postal).
+"""Coleta do Questor Zen: login web + endpoints JSON internos (CND e DTE).
 
-O layout do Questor varia por versão/implantação; por isso o login usa seletores
-heurísticos (como em ``campinas/portal.py``) e a extração converte o texto das
-tabelas em modelos com os helpers de ``parser.py``. Os seletores/rotas precisam
-ser calibrados contra o ambiente real do cliente na primeira execução assistida.
+Calibrado contra ``https://<conta>.zen.questor.com.br`` (login ``#Email``/
+``#SenhaEntrar`` + consentimento de cookies), consumindo os endpoints DevExtreme
+usados pelos grids:
+
+- Certidões: ``POST /escritorio/cnd/certidaoempresa/listarcertidaoempresa``
+- Caixa postal: ``POST /escritorio/dte/capturacaixapostal/listar``
+
+Ambos aceitam ``skip/take/requireTotalCount`` e devolvem ``{data, totalCount}``.
+Buscamos o dataset completo (take alto) e filtramos em Python — mais robusto que
+raspar o DOM paginado.
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Final
+from html import unescape
+from typing import Any, Final
+from urllib.parse import urlparse
 
-from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
 
 from classificacao_procons.questor.models import (
     Certidao,
@@ -22,15 +29,19 @@ from classificacao_procons.questor.models import (
     QuestorSnapshot,
 )
 from classificacao_procons.questor.parser import (
+    leitura_is_lida,
     normalize_cnpj,
-    normalize_situacao,
     parse_brazilian_date,
+    situacao_from_questor_code,
 )
 
 DEFAULT_TIMEOUT_MS: Final = 90_000
 PAGE_LOAD_WAIT_UNTIL: Final = "domcontentloaded"
+DEFAULT_TAKE: Final = 2000
 
-_DATE_RE = re.compile(r"\d{2}/\d{2}/\d{4}")
+CERTIDOES_ENDPOINT: Final = "escritorio/cnd/certidaoempresa/listarcertidaoempresa"
+CAIXA_POSTAL_ENDPOINT: Final = "escritorio/dte/capturacaixapostal/listar"
+NOTIFICATION_URL_TEMPLATE: Final = "https://www.dec.fazenda.sp.gov.br/DEC/UCLogin/login.aspx"
 
 
 class QuestorPortalError(RuntimeError):
@@ -44,168 +55,139 @@ class QuestorPortalOptions:
     password: str
     empresa: str | None = None
     cnpj: str | None = None
-    certidoes_url: str | None = None
-    caixa_postal_url: str | None = None
     headless: bool = True
+    take: int = DEFAULT_TAKE
 
 
-def _fill_login_fields(page: Page, *, login: str, password: str) -> None:
-    login_filled = False
-    for selector in (
-        "input[name*='login' i]",
-        "input[id*='login' i]",
-        "input[name*='usuario' i]",
-        "input[id*='usuario' i]",
-        "input[name*='email' i]",
-        "input[type='email']",
-        "input[type='text']",
-    ):
-        locator = page.locator(selector)
-        if locator.count():
-            locator.first.fill(login)
-            login_filled = True
-            break
-    if not login_filled:
-        raise QuestorPortalError("Campo de login não encontrado no Questor.")
-
-    password_input = page.locator("input[type='password']")
-    if not password_input.count():
-        raise QuestorPortalError("Campo de senha não encontrado no Questor.")
-    password_input.first.fill(password)
+def certidao_from_api_row(row: dict[str, Any]) -> Certidao:
+    """Converte uma linha do endpoint de certidões em ``Certidao``."""
+    tipo = (row.get("TipoCertidaoDescricao") or "").strip() or None
+    categoria = (row.get("Categoria") or "").strip() or None
+    orgao = tipo or categoria or "Certidão"
+    return Certidao(
+        orgao=orgao,
+        situacao=situacao_from_questor_code(row.get("SituacaoCertidao")),
+        tipo=categoria,
+        cnpj=normalize_cnpj(row.get("EmpresaInscricaoFederal")),
+        empresa=(row.get("EmpresaNome") or row.get("EmpresaRazaoSocial") or "").strip() or None,
+        uf=(row.get("UF") or "").strip() or None,
+        data_emissao=parse_brazilian_date(row.get("CertidaoDataEmissao")),
+        data_validade=parse_brazilian_date(row.get("CertidaoDataVencimento")),
+        observacao=(row.get("CertidaoProtocolo") or "").strip() or None,
+    )
 
 
-def _submit_login(page: Page) -> None:
-    for label in ("Entrar", "Acessar", "Login", "Conectar"):
-        button = page.locator("button", has_text=label)
+def mensagem_from_api_row(row: dict[str, Any]) -> MensagemCaixaPostal:
+    """Converte uma linha do endpoint de caixa postal em ``MensagemCaixaPostal``."""
+    domicilio = (row.get("Domicilio") or "").strip() or None
+    categoria = (row.get("Categoria") or "").strip() or None
+    return MensagemCaixaPostal(
+        orgao=domicilio or categoria or "Caixa postal",
+        assunto=unescape((row.get("Assunto") or "").strip()) or "(sem assunto)",
+        categoria=categoria,
+        empresa=(row.get("EmpresaNome") or "").strip() or None,
+        cnpj=normalize_cnpj(row.get("EmpresaInscricaoFederal")),
+        remetente=unescape((row.get("Remetente") or "").strip()) or None,
+        relevante=row.get("Relevancia") == 1,
+        data_postagem=parse_brazilian_date(row.get("EnviadaEm")),
+        # ExibidaAte é "exibida até" (data de exibição, às vezes anos no futuro),
+        # não um prazo legal de ciência — não usar como prazo para evitar falso
+        # positivo. A relevância vem da classificação por assunto.
+        prazo_ciencia=None,
+        lida=leitura_is_lida(row.get("Leitura")),
+        nsu=(str(row["Nsu"]).strip() if row.get("Nsu") else None),
+        url=unescape((row.get("LinkMensagem") or "").strip()) or None,
+    )
+
+
+def _base_url(portal_url: str) -> str:
+    parsed = urlparse(portal_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise QuestorPortalError(f"URL do Questor inválida: {portal_url!r}")
+    return f"{parsed.scheme}://{parsed.netloc}/"
+
+
+def _login(page: Any, options: QuestorPortalOptions) -> None:
+    page.goto(options.portal_url, wait_until=PAGE_LOAD_WAIT_UNTIL, timeout=DEFAULT_TIMEOUT_MS)
+    page.wait_for_timeout(2500)
+    # Consentimento de cookies (bloqueia a navegação se não aceito).
+    consent = page.locator("text=PERMITIR")
+    if consent.count():
+        consent.first.click()
+        page.wait_for_timeout(800)
+
+    email = page.locator("#Email")
+    senha = page.locator("#SenhaEntrar")
+    if not email.count() or not senha.count():
+        raise QuestorPortalError("Formulário de login do Questor não encontrado.")
+    email.first.fill(options.login)
+    senha.first.fill(options.password)
+
+    for selector in ("button:has-text('ENTRAR')", "text=ENTRAR", "input[type=submit]"):
+        button = page.locator(selector)
         if button.count():
             button.first.click()
-            page.wait_for_timeout(4000)
-            return
-    submit = page.locator("input[type='submit']")
-    if submit.count():
-        submit.first.click()
-        page.wait_for_timeout(4000)
-        return
-    raise QuestorPortalError("Botão de login não encontrado no Questor.")
+            break
+    else:
+        raise QuestorPortalError("Botão ENTRAR não encontrado no login do Questor.")
+    page.wait_for_timeout(7000)
 
-
-def _page_lines(page: Page) -> list[str]:
-    return [line.strip() for line in page.inner_text("body").splitlines() if line.strip()]
-
-
-def parse_certidoes_lines(lines: list[str], *, cnpj: str | None = None) -> list[Certidao]:
-    """Converte linhas de texto da tela de certidões em modelos.
-
-    Heurística: cada linha com um rótulo de situação conhecido vira uma certidão;
-    o órgão é o começo da linha e as datas encontradas viram emissão/validade.
-    """
-    certidoes: list[Certidao] = []
-    for line in lines:
-        situacao = normalize_situacao(line)
-        if situacao == "desconhecida":
-            continue
-        dates = [parse_brazilian_date(match.group()) for match in _DATE_RE.finditer(line)]
-        dates = [value for value in dates if value is not None]
-        data_emissao = dates[0] if dates else None
-        data_validade = dates[-1] if len(dates) > 1 else None
-        orgao = _leading_label(line)
-        # Ignora cabeçalhos/títulos: o rótulo do órgão não pode ser, ele mesmo,
-        # uma situação (ex.: "Certidões negativas").
-        if not orgao or normalize_situacao(orgao) != "desconhecida":
-            continue
-        certidoes.append(
-            Certidao(
-                orgao=orgao,
-                situacao=situacao,
-                cnpj=normalize_cnpj(cnpj),
-                data_emissao=data_emissao,
-                data_validade=data_validade,
-                observacao=line,
-            ),
+    if "areatrabalho" not in page.url and "escritorio" not in page.url:
+        raise QuestorPortalError(
+            "Login no Questor não confirmado (verifique usuário/senha).",
         )
-    return certidoes
 
 
-def _leading_label(line: str) -> str:
-    """Rótulo do órgão: texto antes da primeira data ou de dois espaços/tab."""
-    cut = re.split(r"\s{2,}|\t|\d{2}/\d{2}/\d{4}", line, maxsplit=1)[0]
-    return cut.strip(" :-\u00a0")
-
-
-def _extract_certidoes(page: Page, *, cnpj: str | None) -> list[Certidao]:
-    return parse_certidoes_lines(_page_lines(page), cnpj=cnpj)
-
-
-def _extract_mensagens(page: Page) -> list[MensagemCaixaPostal]:
-    mensagens: list[MensagemCaixaPostal] = []
-    rows = page.locator("table tr")
-    for index in range(rows.count()):
-        row = rows.nth(index)
-        text = row.inner_text().strip()
-        if not text:
-            continue
-        folded = text.casefold()
-        if "prazo" in folded and "assunto" in folded:
-            continue  # cabeçalho
-        dates = [parse_brazilian_date(match.group()) for match in _DATE_RE.finditer(text)]
-        dates = [value for value in dates if value is not None]
-        lida = "lida" in folded and "não lida" not in folded and "nao lida" not in folded
-        mensagens.append(
-            MensagemCaixaPostal(
-                orgao=_leading_label(text) or "Caixa postal",
-                assunto=text,
-                data_postagem=dates[0] if dates else None,
-                prazo_ciencia=dates[-1] if len(dates) > 1 else None,
-                lida=lida,
-            ),
-        )
-    return mensagens
+def _fetch_dataset(page: Any, base_url: str, endpoint: str, *, take: int) -> list[dict[str, Any]]:
+    response = page.request.post(
+        base_url + endpoint,
+        data=f"skip=0&take={take}&requireTotalCount=true",
+        headers={
+            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "x-requested-with": "XMLHttpRequest",
+        },
+    )
+    if response.status != 200:
+        raise QuestorPortalError(f"Endpoint {endpoint} respondeu HTTP {response.status}.")
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise QuestorPortalError(f"Endpoint {endpoint} não devolveu JSON.") from exc
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise QuestorPortalError(f"Endpoint {endpoint} sem campo 'data'.")
+    return data
 
 
 def fetch_questor_snapshot(options: QuestorPortalOptions) -> QuestorSnapshot:
-    """Login no Questor e coleta certidões + mensagens da caixa postal."""
+    """Login no Questor e coleta certidões + caixa postal via API interna."""
     if not options.portal_url:
         raise QuestorPortalError("URL do Questor não configurada.")
+    base_url = _base_url(options.portal_url)
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=options.headless)
-        page = browser.new_page()
+        context = browser.new_context()
+        page = context.new_page()
         try:
-            page.goto(
-                options.portal_url,
-                wait_until=PAGE_LOAD_WAIT_UNTIL,
-                timeout=DEFAULT_TIMEOUT_MS,
+            _login(page, options)
+            certidoes_rows = _fetch_dataset(
+                page, base_url, CERTIDOES_ENDPOINT, take=options.take,
             )
-            page.wait_for_timeout(3000)
-            _fill_login_fields(page, login=options.login, password=options.password)
-            _submit_login(page)
-
-            if options.certidoes_url:
-                page.goto(
-                    options.certidoes_url,
-                    wait_until=PAGE_LOAD_WAIT_UNTIL,
-                    timeout=DEFAULT_TIMEOUT_MS,
-                )
-                page.wait_for_timeout(2000)
-            certidoes = _extract_certidoes(page, cnpj=options.cnpj)
-
-            if options.caixa_postal_url:
-                page.goto(
-                    options.caixa_postal_url,
-                    wait_until=PAGE_LOAD_WAIT_UNTIL,
-                    timeout=DEFAULT_TIMEOUT_MS,
-                )
-                page.wait_for_timeout(2000)
-            mensagens = _extract_mensagens(page)
-
-            return QuestorSnapshot(
-                captured_at=datetime.now(UTC),
-                empresa=options.empresa,
-                cnpj=normalize_cnpj(options.cnpj),
-                certidoes=tuple(certidoes),
-                mensagens=tuple(mensagens),
+            mensagens_rows = _fetch_dataset(
+                page, base_url, CAIXA_POSTAL_ENDPOINT, take=options.take,
             )
         except PlaywrightTimeoutError as exc:
             raise QuestorPortalError("Questor não respondeu a tempo durante o acesso.") from exc
         finally:
             browser.close()
+
+    certidoes = tuple(certidao_from_api_row(row) for row in certidoes_rows)
+    mensagens = tuple(mensagem_from_api_row(row) for row in mensagens_rows)
+    return QuestorSnapshot(
+        captured_at=datetime.now(UTC),
+        empresa=options.empresa,
+        cnpj=normalize_cnpj(options.cnpj),
+        certidoes=certidoes,
+        mensagens=mensagens,
+    )

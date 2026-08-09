@@ -16,10 +16,12 @@ GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
 DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file"
 DRIVE_READONLY_SCOPE = "https://www.googleapis.com/auth/drive.readonly"
 
+# Observação: NÃO incluir GMAIL_SEND_SCOPE aqui. Adicioná-lo força um upgrade de
+# escopo no refresh de tokens já emitidos (Google responde invalid_scope). O envio
+# de e-mail do agente Questor usa GMAIL_MODIFY_SCOPE, que também autoriza o send.
 GOOGLE_SCOPES = [
     GMAIL_READONLY_SCOPE,
     GMAIL_MODIFY_SCOPE,
-    GMAIL_SEND_SCOPE,
     DRIVE_FILE_SCOPE,
     DRIVE_READONLY_SCOPE,
 ]

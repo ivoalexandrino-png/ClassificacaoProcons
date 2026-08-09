@@ -58,7 +58,11 @@ def _issue_line(issue: FiscalIssue) -> str:
     return f"[{label}] {issue.title}{prazo}\n    {issue.detail}"
 
 
-def build_alert_bodies(analysis: QuestorAnalysis) -> tuple[str, str]:
+def build_alert_bodies(
+    analysis: QuestorAnalysis,
+    *,
+    extra_note: str | None = None,
+) -> tuple[str, str]:
     """Monta (texto puro, HTML) do e-mail a partir das pendências."""
     empresa = _empresa_label(analysis)
     captured = analysis.snapshot.captured_at.strftime("%d/%m/%Y %H:%M")
@@ -74,6 +78,9 @@ def build_alert_bodies(analysis: QuestorAnalysis) -> tuple[str, str]:
         text_lines.append(_issue_line(issue))
         if issue.source_url:
             text_lines.append(f"    Link: {issue.source_url}")
+        text_lines.append("")
+    if extra_note:
+        text_lines.append(extra_note)
         text_lines.append("")
     text_lines.append(
         "Favor providenciar a regularização junto ao time fiscal e de contabilidade.",
@@ -97,11 +104,13 @@ def build_alert_bodies(analysis: QuestorAnalysis) -> tuple[str, str]:
             f"<li><strong>[{label}]</strong> {escape(issue.title)}{prazo}"
             f"<br>{escape(issue.detail)}{link}</li>"
         )
+    note_html = f"<p><em>{escape(extra_note)}</em></p>" if extra_note else ""
     html_body = (
         f"<p>Análise automática do Questor — <strong>{escape(empresa)}</strong><br>"
         f"Coletado em: {escape(captured)}</p>"
         f"<p>Foram encontradas <strong>{len(analysis.issues)}</strong> pendência(s):</p>"
         f"<ul>{''.join(html_items)}</ul>"
+        f"{note_html}"
         "<p>Favor providenciar a regularização junto ao time fiscal e de contabilidade.</p>"
     )
     return text_body, html_body
@@ -112,9 +121,10 @@ def build_alert_email(
     *,
     to: list[str],
     cc: list[str] | None = None,
+    extra_note: str | None = None,
 ) -> BuiltEmail:
     """Monta o e-mail de alerta completo (assunto + corpos + destinatários)."""
-    text_body, html_body = build_alert_bodies(analysis)
+    text_body, html_body = build_alert_bodies(analysis, extra_note=extra_note)
     return BuiltEmail(
         subject=build_alert_subject(analysis),
         text_body=text_body,

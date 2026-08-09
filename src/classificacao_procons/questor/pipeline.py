@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 
@@ -25,6 +25,12 @@ from classificacao_procons.questor.notifier import (
     GmailSender,
     GmailSenderError,
     build_alert_email,
+)
+from classificacao_procons.questor.policy import (
+    DEFAULT_CAIXA_MODE,
+    DEFAULT_UNREAD_WINDOW_DAYS,
+    select_actionable_messages,
+    unread_summary,
 )
 
 DEFAULT_STATE_PATH = Path("data/questor-alerted.json")
@@ -42,6 +48,8 @@ class QuestorPipelineOptions:
     cc: tuple[str, ...] = ()
     sender: str | None = None
     warn_within_days: int = DEFAULT_WARN_WITHIN_DAYS
+    caixa_mode: str = DEFAULT_CAIXA_MODE
+    unread_window_days: int = DEFAULT_UNREAD_WINDOW_DAYS
     dry_run: bool = False
     only_new: bool = True
     state_path: Path = DEFAULT_STATE_PATH
@@ -53,6 +61,8 @@ class QuestorPipelineOptions:
     empresa: str | None = None
     cnpj: str | None = None
     headless: bool = True
+    # Credenciais no Monday (usadas quando login/senha do portal não vêm nas opções).
+    monday_api_token: str | None = None
 
 
 @dataclass(frozen=True)
@@ -102,7 +112,26 @@ def _default_portal_provider(options: QuestorPipelineOptions) -> QuestorSnapshot
         fetch_questor_snapshot,
     )
 
-    if not options.portal_url or not options.portal_login or not options.portal_password:
+    login = options.portal_login
+    password = options.portal_password
+    portal_url = options.portal_url
+
+    # Sem login/senha explícitos: tenta o board Acessos do Monday.
+    if not login or not password:
+        from classificacao_procons.questor.credentials import (
+            QuestorCredentialsError,
+            resolve_questor_credentials,
+        )
+
+        try:
+            credential = resolve_questor_credentials(api_token=options.monday_api_token)
+        except QuestorCredentialsError as exc:
+            raise QuestorPipelineError(str(exc)) from exc
+        login = login or credential.login
+        password = password or credential.password
+        portal_url = portal_url or credential.portal_url
+
+    if not portal_url or not login or not password:
         raise QuestorPipelineError(
             "Credenciais do portal Questor ausentes (portal_url/login/password) e "
             "nenhum snapshot injetado.",
@@ -110,9 +139,9 @@ def _default_portal_provider(options: QuestorPipelineOptions) -> QuestorSnapshot
     try:
         return fetch_questor_snapshot(
             QuestorPortalOptions(
-                portal_url=options.portal_url,
-                login=options.portal_login,
-                password=options.portal_password,
+                portal_url=portal_url,
+                login=login,
+                password=password,
                 empresa=options.empresa,
                 cnpj=options.cnpj,
                 headless=options.headless,
@@ -135,8 +164,20 @@ def run_questor_check(
         snapshot=snapshot,
         snapshot_provider=snapshot_provider,
     )
+
+    # Política de caixa postal: analisa só as mensagens acionáveis (o backlog
+    # completo vira uma nota de contexto no e-mail).
+    actionable = select_actionable_messages(
+        resolved.mensagens,
+        mode=options.caixa_mode,
+        window_days=options.unread_window_days,
+        today=today,
+    )
+    backlog_note = unread_summary(resolved.mensagens)
+    filtered = replace(resolved, mensagens=tuple(actionable))
+
     analysis = analyze_snapshot(
-        resolved,
+        filtered,
         today=today,
         warn_within_days=options.warn_within_days,
     )
@@ -174,11 +215,12 @@ def run_questor_check(
             "Token Gmail sem permissão de envio. Reautorize com: procon-email auth",
         )
 
-    alert_analysis = QuestorAnalysis(snapshot=resolved, issues=new_issues)
+    alert_analysis = QuestorAnalysis(snapshot=filtered, issues=new_issues)
     email = build_alert_email(
         alert_analysis,
         to=list(options.recipients),
         cc=list(options.cc),
+        extra_note=backlog_note,
     )
     try:
         sender = GmailSender.from_credentials(token_path=options.token_path)
