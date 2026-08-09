@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
@@ -29,6 +29,13 @@ from classificacao_procons.contratos.controle_autentique_link import (
     pick_primary_autentique_document_id_for_item,
     rebuild_controle_signature_link_text,
 )
+from classificacao_procons.contratos.controle_autentique_plan import (
+    ControlePlanAction,
+    build_controle_autentique_plan,
+    classify_autentique_document_for_controle,
+    find_legacy_rows_to_link,
+    plan_action_counts,
+)
 from classificacao_procons.contratos.controle_autentique_terminal import (
     document_is_refused_or_blocked,
 )
@@ -39,10 +46,8 @@ from classificacao_procons.contratos.controle_create_policy import (
 from classificacao_procons.contratos.controle_dedup import (
     controle_title_kind_conflict,
     find_exact_title_matches,
-    find_likely_name_matches,
 )
 from classificacao_procons.contratos.controle_legacy_guard import (
-    find_legacy_signed_name_matches,
     should_block_create_for_signed_autentique,
 )
 from classificacao_procons.contratos.controle_link_suggestions import (
@@ -144,6 +149,7 @@ class ControleAutentiqueCompareResult:
     ] = ()
     legacy_link_suggestions: tuple[ControleLinkSuggestion, ...] = ()
     monday_multiple_autentique_ids: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
+    plan_action_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -613,13 +619,16 @@ def compare_autentique_with_controle(
     }
     autentique_ids = set(documents_by_id.keys())
 
+    plan_rows = build_controle_autentique_plan(documents=documents, index=index)
+    plan_counts = plan_action_counts(plan_rows)
+
     pending_missing: list[tuple[str, str]] = []
     signed_missing: list[tuple[str, str]] = []
-    for document in documents:
-        if index.matches_document(document):
+    for row in plan_rows:
+        if row.action != ControlePlanAction.CRIAR:
             continue
-        pair = (document.document_id, document.name)
-        if document.is_fully_signed:
+        pair = (row.document_id, row.document_name)
+        if row.autentique_fully_signed:
             signed_missing.append(pair)
         else:
             pending_missing.append(pair)
@@ -668,6 +677,7 @@ def compare_autentique_with_controle(
         ),
         legacy_link_suggestions=link_suggestions,
         monday_multiple_autentique_ids=find_monday_items_with_multiple_autentique_ids(index),
+        plan_action_counts=plan_counts,
     )
 
 
@@ -1092,18 +1102,15 @@ def sync_controle_from_autentique(
                             ),
                         )
 
+        plan_row = classify_autentique_document_for_controle(
+            document=document,
+            index=index,
+            import_signed_as_new=import_signed_as_new,
+        )
+        plan_action = plan_row.action
+
         if skip_signed_documents and document.is_fully_signed:
-            if index.matches_document(document) or index.get_item(document.document_id):
-                already += 1
-                results.append(
-                    ControleSyncItemResult(
-                        document_id=document.document_id,
-                        document_name=document.name,
-                        action="unchanged",
-                        detail="signed_deferred",
-                    ),
-                )
-            else:
+            if plan_action == ControlePlanAction.CRIAR:
                 deferred_signed += 1
                 results.append(
                     ControleSyncItemResult(
@@ -1113,17 +1120,79 @@ def sync_controle_from_autentique(
                         detail="fully_signed_not_imported_in_this_phase",
                     ),
                 )
+                continue
+            if (
+                plan_action == ControlePlanAction.IGNORAR
+                and plan_row.reason == "signed_no_matching_legacy_row"
+            ):
+                deferred_signed += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="deferred_signed",
+                        detail="fully_signed_not_imported_in_this_phase",
+                    ),
+                )
+                continue
+
+        if plan_action == ControlePlanAction.IGNORAR:
+            if plan_row.reason == "ambiguous_legacy_match_manual_link":
+                skipped += 1
+                ignore_action = "ignored_ambiguous_legacy"
+            elif plan_row.reason == "signed_no_matching_legacy_row":
+                deferred_signed += 1
+                ignore_action = "deferred_signed_no_legacy_match"
+            else:
+                skipped += 1
+                ignore_action = "ignored"
+            results.append(
+                ControleSyncItemResult(
+                    document_id=document.document_id,
+                    document_name=document.name,
+                    action=ignore_action,
+                    monday_item_id=plan_row.monday_item_ids[0]
+                    if plan_row.monday_item_ids
+                    else None,
+                    detail=plan_row.reason,
+                ),
+            )
             continue
 
-        existing_item = index.get_item(document.document_id)
-        if existing_item and update_existing:
+        if plan_action == ControlePlanAction.ATUALIZAR:
+            existing_item = index.get_item(document.document_id)
+            linked_items = index.items_for_document_id(document.document_id)
+            primary_item = existing_item or (linked_items[0] if linked_items else None)
+            if primary_item is None:
+                already += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="unchanged",
+                        detail="autentique_id_already_on_monday",
+                    ),
+                )
+                continue
+            if not update_existing:
+                already += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="unchanged",
+                        monday_item_id=primary_item.item_id,
+                        detail="update_existing_disabled",
+                    ),
+                )
+                continue
             if dry_run:
                 reconcile = reconcile_controle_from_document(
                     document=document,
                     controle_items=_load_controle_items_for_document(
                         api_token=monday_token,
                         document_id=document.document_id,
-                        fallback_item=existing_item,
+                        fallback_item=primary_item,
                         index=index,
                     ),
                     api_token=monday_token,
@@ -1140,7 +1209,7 @@ def sync_controle_from_autentique(
                         document_id=document.document_id,
                         document_name=document.name,
                         action=action,
-                        monday_item_id=existing_item.item_id,
+                        monday_item_id=primary_item.item_id,
                         detail=json.dumps(
                             {
                                 "group_id": reconcile.group_id,
@@ -1159,7 +1228,7 @@ def sync_controle_from_autentique(
                     controle_items=_load_controle_items_for_document(
                         api_token=monday_token,
                         document_id=document.document_id,
-                        fallback_item=existing_item,
+                        fallback_item=primary_item,
                         index=index,
                     ),
                     api_token=monday_token,
@@ -1173,7 +1242,7 @@ def sync_controle_from_autentique(
                             document_id=document.document_id,
                             document_name=document.name,
                             action="skipped_inactive",
-                            monday_item_id=existing_item.item_id,
+                            monday_item_id=primary_item.item_id,
                             detail=str(exc),
                         ),
                     )
@@ -1184,7 +1253,7 @@ def sync_controle_from_autentique(
                             document_id=document.document_id,
                             document_name=document.name,
                             action="failed",
-                            monday_item_id=existing_item.item_id,
+                            monday_item_id=primary_item.item_id,
                             detail=str(exc),
                         ),
                     )
@@ -1197,7 +1266,7 @@ def sync_controle_from_autentique(
                         document_id=document.document_id,
                         document_name=document.name,
                         action="updated",
-                        monday_item_id=existing_item.item_id,
+                        monday_item_id=primary_item.item_id,
                         detail=json.dumps(
                             {
                                 "group_id": reconcile.group_id,
@@ -1214,125 +1283,71 @@ def sync_controle_from_autentique(
                         document_id=document.document_id,
                         document_name=document.name,
                         action="unchanged",
-                        monday_item_id=existing_item.item_id,
+                        monday_item_id=primary_item.item_id,
                         detail=reconcile.skip_reason,
                     ),
                 )
             continue
 
-        if index.matches_document(document):
-            likely = find_likely_name_matches(
-                document_name=document.name,
-                items=index.all_items,
-            )
-            missing_autentique_link = (
-                document.document_id.casefold().strip() not in index.document_ids
-            )
-            if likely and missing_autentique_link:
-                if not dry_run:
-                    ensure_autentique_id_on_controle_items(
-                        api_token=monday_token,
-                        document_id=document.document_id,
-                        items=likely,
-                    )
+        if plan_action == ControlePlanAction.VINCULAR:
+            link_targets = find_legacy_rows_to_link(document=document, index=index)
+            if dry_run:
                 already += 1
                 results.append(
                     ControleSyncItemResult(
                         document_id=document.document_id,
                         document_name=document.name,
-                        action="linked_existing_by_name"
-                        if not dry_run
-                        else "would_link_existing_by_name",
-                        monday_item_id=likely[0].item_id,
-                        detail=likely[0].name,
+                        action="would_link_legacy"
+                        if update_existing
+                        else "would_link_legacy_only",
+                        monday_item_id=link_targets[0].item_id if link_targets else None,
+                        detail=plan_row.reason,
                     ),
                 )
                 continue
 
-            already += 1
-            results.append(
-                ControleSyncItemResult(
-                    document_id=document.document_id,
-                    document_name=document.name,
-                    action="already_exists",
-                ),
-            )
-            continue
-
-        legacy_signed = find_legacy_signed_name_matches(
-            document_name=document.name,
-            items=index.all_items,
-        )
-        if should_block_create_for_signed_autentique(
-            document_name=document.name,
-            is_fully_signed=document.is_fully_signed,
-            items=index.all_items,
-            import_signed_as_new=import_signed_as_new,
-        ):
-            if legacy_signed:
-                if not dry_run:
-                    ensure_autentique_id_on_controle_items(
-                        api_token=monday_token,
-                        document_id=document.document_id,
-                        items=legacy_signed,
-                    )
-                already += 1
-                results.append(
-                    ControleSyncItemResult(
-                        document_id=document.document_id,
-                        document_name=document.name,
-                        action="linked_legacy_assinado_skip_create"
-                        if not dry_run
-                        else "would_link_legacy_assinado_skip_create",
-                        monday_item_id=legacy_signed[0].item_id,
-                        detail=legacy_signed[0].name,
-                    ),
-                )
-                continue
-            deferred_signed += 1
-            results.append(
-                ControleSyncItemResult(
-                    document_id=document.document_id,
-                    document_name=document.name,
-                    action="deferred_signed_no_legacy_match",
-                    detail="fully_signed; use link-controle or --import-signed-as-new",
-                ),
-            )
-            continue
-
-        if dry_run:
-            if not doc_may_create:
-                create_paused += 1
-                results.append(
-                    ControleSyncItemResult(
-                        document_id=document.document_id,
-                        document_name=document.name,
-                        action="create_paused",
-                        detail=controle_create_paused_message(),
-                    ),
-                )
-                continue
-            created += 1
-            results.append(
-                ControleSyncItemResult(
-                    document_id=document.document_id,
-                    document_name=document.name,
-                    action="would_create",
-                    detail=_describe_planned_item(document=document, groups=groups),
-                ),
-            )
-            continue
-
-        likely_unlinked = find_likely_name_matches(
-            document_name=document.name,
-            items=index.all_items,
-        )
-        if likely_unlinked and document.document_id.casefold().strip() not in index.document_ids:
             ensure_autentique_id_on_controle_items(
                 api_token=monday_token,
                 document_id=document.document_id,
-                items=likely_unlinked,
+                items=link_targets,
             )
+            reconcile_updated = False
+            reconcile_detail: str | None = plan_row.reason
+            if update_existing:
+                try:
+                    reconcile = reconcile_controle_from_document(
+                        document=document,
+                        controle_items=link_targets,
+                        api_token=monday_token,
+                        groups=groups,
+                    )
+                    reconcile_updated = reconcile.updated
+                    reconcile_detail = reconcile.skip_reason or plan_row.reason
+                except MondayClientError as exc:
+                    if _monday_inactive_item_error(exc):
+                        skipped += 1
+                        results.append(
+                            ControleSyncItemResult(
+                                document_id=document.document_id,
+                                document_name=document.name,
+                                action="skipped_inactive",
+                                monday_item_id=link_targets[0].item_id,
+                                detail=str(exc),
+                            ),
+                        )
+                        continue
+                    failed += 1
+                    results.append(
+                        ControleSyncItemResult(
+                            document_id=document.document_id,
+                            document_name=document.name,
+                            action="failed",
+                            monday_item_id=link_targets[0].item_id,
+                            detail=str(exc),
+                        ),
+                    )
+                    continue
+
             jan_group_id, luciano_group_id = _resolve_signer_group_ids(groups)
             if jan_group_id and luciano_group_id:
                 try:
@@ -1358,66 +1373,110 @@ def sync_controle_from_autentique(
                         ),
                     )
                     continue
-            already += 1
+
+            if reconcile_updated:
+                updated += 1
+                link_action = "linked_legacy_and_updated"
+            else:
+                already += 1
+                if document.is_fully_signed:
+                    link_action = "linked_legacy_assinado_skip_create"
+                else:
+                    link_action = "linked_existing_by_name"
             results.append(
                 ControleSyncItemResult(
                     document_id=document.document_id,
                     document_name=document.name,
-                    action="linked_existing_by_name",
-                    monday_item_id=likely_unlinked[0].item_id,
-                    detail=likely_unlinked[0].name,
+                    action=link_action,
+                    monday_item_id=link_targets[0].item_id,
+                    detail=reconcile_detail,
                 ),
             )
             continue
 
-        if not doc_may_create:
-            create_paused += 1
+        if plan_action == ControlePlanAction.CRIAR:
+            if dry_run:
+                if not doc_may_create:
+                    create_paused += 1
+                    results.append(
+                        ControleSyncItemResult(
+                            document_id=document.document_id,
+                            document_name=document.name,
+                            action="create_paused",
+                            detail=controle_create_paused_message(),
+                        ),
+                    )
+                    continue
+                created += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="would_create",
+                        detail=_describe_planned_item(document=document, groups=groups),
+                    ),
+                )
+                continue
+
+            if not doc_may_create:
+                create_paused += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="create_paused",
+                        detail=controle_create_paused_message(),
+                    ),
+                )
+                continue
+
+            try:
+                item_id, item_url, _mirror_id = _create_controle_track_pair(
+                    api_token=monday_token,
+                    autentique_api_token=autentique_api_token,
+                    document=document,
+                    groups=groups,
+                    tipo_label=_resolve_tipo_label(document_name=document.name),
+                )
+            except (MondayClientError, AutentiqueClientError) as exc:
+                failed += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="failed",
+                        detail=str(exc),
+                    ),
+                )
+                continue
+
+            created += 1
+            index = index.with_item(
+                document_id=document.document_id,
+                document_name=document.name,
+                signature_link=_build_signature_link_text(
+                    document=document,
+                    api_token=autentique_api_token,
+                ),
+            )
             results.append(
                 ControleSyncItemResult(
                     document_id=document.document_id,
                     document_name=document.name,
-                    action="create_paused",
-                    detail=controle_create_paused_message(),
+                    action="created",
+                    monday_item_id=item_id,
+                    monday_item_url=item_url,
                 ),
             )
             continue
 
-        try:
-            item_id, item_url, _mirror_id = _create_controle_track_pair(
-                api_token=monday_token,
-                autentique_api_token=autentique_api_token,
-                document=document,
-                groups=groups,
-                tipo_label=_resolve_tipo_label(document_name=document.name),
-            )
-        except (MondayClientError, AutentiqueClientError) as exc:
-            failed += 1
-            results.append(
-                ControleSyncItemResult(
-                    document_id=document.document_id,
-                    document_name=document.name,
-                    action="failed",
-                    detail=str(exc),
-                ),
-            )
-            continue
-
-        created += 1
-        index = index.with_item(
-            document_id=document.document_id,
-            document_name=document.name,
-            signature_link=_build_signature_link_text(
-                document=document,
-                api_token=autentique_api_token,
-            ),
-        )
+        skipped += 1
         results.append(
             ControleSyncItemResult(
                 document_id=document.document_id,
                 document_name=document.name,
-                action="created",
-                monday_item_id=item_id,
-                monday_item_url=item_url,
+                action="skipped",
+                detail=f"unhandled_plan_action:{plan_action}",
             ),
         )
 

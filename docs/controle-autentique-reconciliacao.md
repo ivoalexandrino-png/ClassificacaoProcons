@@ -42,6 +42,19 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 - **Corrigir só divergências do compare (rápido):** `mode: reconcile-mismatches` ou CLI `reconcile-controle-mismatches` (atualiza track/status onde `monday_track_status_mismatch` / `monday_status_behind_autentique`; itens **inativos** no Monday são ignorados, não falham o job).
 - **Como corrigir (varredura completa):** `sync-controle` (campo `legacy_linked` no JSON); workflow **Sync Controle Assinaturas** roda em cron (compare only no push/schedule).
 
+## Plano antes de gravar (sync)
+
+O sync classifica cada documento do Autentique **antes** de criar linha no Monday:
+
+| Ação | Quando |
+|------|--------|
+| **CRIAR** | Pendente no Autentique e não há linha legada com título exato sem ID |
+| **VINCULAR** | Existe linha (Jan/Luciano ou Assinado) com título exato **sem** Autentique ID |
+| **ATUALIZAR** | Autentique ID já está no link do item |
+| **IGNORAR** | Assinado sem legado correspondente (ou match ambíguo — revisão manual) |
+
+`compare-controle` expõe `plan_action_counts` (mesma lógica, somente leitura). Com `--skip-signed-documents`, o sync ainda **vincula** e **atualiza** assinados; só adia **CRIAR** de novos assinados.
+
 ## Comandos
 
 ```bash

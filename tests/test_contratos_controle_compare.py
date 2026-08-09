@@ -101,6 +101,9 @@ class TestControleCompare:
 
 
 class TestControleSyncSkipSigned:
+    @patch("classificacao_procons.contratos.controle_sync.ensure_autentique_id_on_controle_items")
+    @patch("classificacao_procons.contratos.controle_sync.reconcile_controle_from_document")
+    @patch("classificacao_procons.contratos.controle_sync.ensure_controle_dual_tracks_for_document")
     @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
     @patch("classificacao_procons.contratos.controle_sync.auto_link_unambiguous_legacy_controle")
     @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
@@ -115,6 +118,9 @@ class TestControleSyncSkipSigned:
         create_item_mock,
         auto_link_mock,
         find_items_mock,
+        repair_mock,
+        reconcile_mock,
+        link_mock,
     ) -> None:
         find_items_mock.return_value = ()
         auto_link_mock.return_value = LegacyAutoLinkResult(
@@ -145,7 +151,22 @@ class TestControleSyncSkipSigned:
             document_ids=frozenset(),
             exact_names=frozenset(),
         )
-        load_groups_mock.return_value = {"assinados": "novo_grupo"}
+        load_groups_mock.return_value = {
+            "assinados": "novo_grupo",
+            "contratos pendentes de assinatura jan": "group-jan",
+            "contratos pendentes de assinatura luciano": "group-luciano",
+        }
+        from classificacao_procons.contratos.controle_sync import ControleReconcileResult
+
+        reconcile_mock.return_value = ControleReconcileResult(
+            document_id="signed-1",
+            document_name="Contrato assinado",
+            monday_item_id="legacy-1",
+            updated=True,
+            skipped=False,
+            group_id="novo_grupo",
+            status_label="Assinado",
+        )
 
         result = sync_controle_from_autentique(
             monday_api_token="monday-token",
@@ -156,4 +177,95 @@ class TestControleSyncSkipSigned:
 
         assert result.created == 0
         assert result.deferred_signed == 1
+        create_item_mock.assert_not_called()
+
+    @patch("classificacao_procons.contratos.controle_sync.ensure_autentique_id_on_controle_items")
+    @patch("classificacao_procons.contratos.controle_sync.reconcile_controle_from_document")
+    @patch("classificacao_procons.contratos.controle_sync.ensure_controle_dual_tracks_for_document")
+    @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
+    @patch("classificacao_procons.contratos.controle_sync.auto_link_unambiguous_legacy_controle")
+    @patch("classificacao_procons.contratos.controle_sync.create_controle_assinatura_item")
+    @patch("classificacao_procons.contratos.controle_sync.load_controle_board_groups")
+    @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")
+    @patch("classificacao_procons.contratos.controle_sync.list_documents")
+    def test_should_link_signed_legacy_when_skip_signed_documents(
+        self,
+        list_documents_mock,
+        build_index_mock,
+        load_groups_mock,
+        create_item_mock,
+        auto_link_mock,
+        find_items_mock,
+        repair_mock,
+        reconcile_mock,
+        link_mock,
+    ) -> None:
+        from classificacao_procons.contratos.constants import CONTROLE_STATUS_ASSINADO
+        from classificacao_procons.contratos.controle_sync import ControleReconcileResult
+
+        find_items_mock.return_value = ()
+        auto_link_mock.return_value = LegacyAutoLinkResult(
+            applied=0,
+            would_apply=0,
+            ambiguous_skipped=0,
+            failed=0,
+            dry_run=False,
+            items=(),
+        )
+        title = "Contrato assinado legado"
+        signed = AutentiqueDocumentSummary(
+            document_id="signed-legacy",
+            name=title,
+            created_at=None,
+            signed_pdf_url="https://example.com/s.pdf",
+            signatures=(
+                AutentiqueSigner(
+                    public_id="s1",
+                    name="Jan",
+                    email="jan@example.com",
+                    short_link="https://assina.ae/x",
+                    signed_at="2026-01-01T00:00:00Z",
+                ),
+            ),
+        )
+        legacy = ControleAssinaturasItem(
+            item_id="legacy-1",
+            name=title,
+            status=CONTROLE_STATUS_ASSINADO,
+            tipo="Contratos B2B",
+            signature_link="https://assina.ae/old",
+        )
+        list_documents_mock.return_value = [signed]
+        build_index_mock.return_value = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset({title.casefold()}),
+            all_items=(legacy,),
+        )
+        load_groups_mock.return_value = {
+            "assinados": "novo_grupo",
+            "contratos pendentes de assinatura jan": "group-jan",
+            "contratos pendentes de assinatura luciano": "group-luciano",
+        }
+        reconcile_mock.return_value = ControleReconcileResult(
+            document_id="signed-legacy",
+            document_name=title,
+            monday_item_id="legacy-1",
+            updated=True,
+            skipped=False,
+            group_id="novo_grupo",
+            status_label=CONTROLE_STATUS_ASSINADO,
+        )
+
+        result = sync_controle_from_autentique(
+            monday_api_token="monday-token",
+            autentique_api_token="autentique-token",
+            dry_run=False,
+            skip_signed_documents=True,
+            allow_create=True,
+        )
+
+        assert result.created == 0
+        assert result.deferred_signed == 0
+        assert result.updated == 1
+        link_mock.assert_called_once()
         create_item_mock.assert_not_called()

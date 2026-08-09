@@ -230,6 +230,7 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
         "monday_track_status_mismatch_count": len(result.monday_track_status_mismatch),
         "legacy_link_suggestions_count": len(result.legacy_link_suggestions),
         "monday_multiple_autentique_ids_count": len(result.monday_multiple_autentique_ids),
+        "plan_action_counts": dict(result.plan_action_counts),
         "pending_missing_in_monday": [
             {"document_id": doc_id, "document_name": name}
             for doc_id, name in result.pending_missing_in_monday[:200]
