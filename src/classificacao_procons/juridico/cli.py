@@ -487,7 +487,7 @@ def main(argv: list[str] | None = None) -> int:
     depositos_parser.add_argument(
         "--max-gemini-calls",
         type=int,
-        default=80,
+        default=600,
         help="Limite de chamadas Gemini por execução (classificação estruturada).",
     )
 

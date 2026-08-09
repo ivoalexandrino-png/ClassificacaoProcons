@@ -33,6 +33,8 @@ _SKIP_PATH_KEYWORDS: tuple[str, ...] = (
     "audiencia",
     "audiência",
     "atendimento procon",
+    "pet. 001",
+    "peticao inicial",
 )
 
 _CUSTAS_PATH_KEYWORDS: tuple[str, ...] = (
@@ -42,7 +44,7 @@ _CUSTAS_PATH_KEYWORDS: tuple[str, ...] = (
     "preparo",
 )
 
-_PRIORITY_PATH_KEYWORDS: tuple[str, ...] = (
+_DEPOSIT_PATH_KEYWORDS: tuple[str, ...] = (
     "deposito",
     "dep jud",
     "dep. jud",
@@ -51,9 +53,28 @@ _PRIORITY_PATH_KEYWORDS: tuple[str, ...] = (
     "pagamento cond",
     "debito judicial",
     "comprov pagamento",
+    "comprov. pagamento",
     "comprovante de pagamento",
-    "guia",
+    "junt comprov",
+    "junt. comprov",
+    "juntada comprovante",
     "planilha debito",
+    "guia dep",
+    "guia de dep",
+    "pag. int",
+    "pagamento int",
+    "parcelamento",
+    "guia parcelamento",
+)
+
+_DEPOSIT_FILENAME_KEYWORDS: tuple[str, ...] = (
+    "guia dep",
+    "guia de dep",
+    "deposito",
+    "dep jud",
+    "debito judicial",
+    "planilha debito",
+    "comprov",
 )
 
 
@@ -75,13 +96,33 @@ def path_suggests_deposit_workflow(drive_path: str) -> bool:
     normalized = _normalize(drive_path)
     if path_suggests_court_fees(normalized):
         return False
-    return any(keyword in normalized for keyword in _PRIORITY_PATH_KEYWORDS)
+    return any(keyword in normalized for keyword in _DEPOSIT_PATH_KEYWORDS)
+
+
+def _filename_suggests_deposit(file_name: str) -> bool:
+    normalized = _normalize(file_name)
+    if any(keyword in normalized for keyword in ("entrega", "estorno", "cancelamento")):
+        return False
+    return any(keyword in normalized for keyword in _DEPOSIT_FILENAME_KEYWORDS)
 
 
 def should_analyze_pdf(*, drive_path: str, file_name: str) -> bool:
     if should_skip_pdf_by_path(drive_path):
         return False
+    if path_suggests_deposit_workflow(drive_path):
+        return True
     if not file_name.casefold().endswith(".pdf"):
-        # Guias às vezes vêm sem extensão; analisar se o caminho indicar depósito.
-        return path_suggests_deposit_workflow(drive_path)
-    return True
+        return False
+    return _filename_suggests_deposit(file_name)
+
+
+def deposit_document_priority(*, drive_path: str, file_name: str) -> int:
+    """Maior = preferir na deduplicação (comprovante > guia)."""
+    combined = _normalize(f"{drive_path}/{file_name}")
+    if "comprov" in combined:
+        return 3
+    if "guia" in combined:
+        return 2
+    if "planilha" in combined:
+        return 1
+    return 0
