@@ -20,16 +20,27 @@ def _signer(*, email: str, signed: bool) -> AutentiqueSigner:
 
 
 class TestIsDocumentFullySigned:
-    def test_should_return_false_when_signatures_pending(self) -> None:
+    def test_should_return_false_when_signatures_pending_without_signed_pdf(self) -> None:
         signatures = (
             _signer(email="a@example.com", signed=True),
             _signer(email="b@example.com", signed=False),
         )
 
         assert is_document_fully_signed(
-            signed_pdf_url="https://example.com/partial.pdf",
+            signed_pdf_url=None,
             signatures=signatures,
         ) is False
+
+    def test_should_return_true_when_signed_pdf_exists_even_if_signatures_incomplete(self) -> None:
+        signatures = (
+            _signer(email="a@example.com", signed=True),
+            _signer(email="b@example.com", signed=False),
+        )
+
+        assert is_document_fully_signed(
+            signed_pdf_url="https://example.com/signed.pdf",
+            signatures=signatures,
+        ) is True
 
     def test_should_return_true_when_all_signatures_complete(self) -> None:
         signatures = (
@@ -53,11 +64,11 @@ class TestIsDocumentFullySigned:
             document_id="doc-1",
             name="Contrato",
             created_at=None,
-            signed_pdf_url="https://example.com/partial.pdf",
+            signed_pdf_url="https://example.com/signed.pdf",
             signatures=(
                 _signer(email="matheus@example.com", signed=True),
                 _signer(email="b4a@example.com", signed=False),
             ),
         )
 
-        assert document.is_fully_signed is False
+        assert document.is_fully_signed is True

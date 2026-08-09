@@ -55,6 +55,8 @@ O sync classifica cada documento do Autentique **antes** de criar linha no Monda
 
 `compare-controle` expõe `plan_action_counts` (mesma lógica, somente leitura). Com `--skip-signed-documents`, o sync ainda **vincula** e **atualiza** assinados; só adia **CRIAR** de novos assinados.
 
+Regra rígida: se o Autentique já tem **PDF assinado** (`files.signed`) ou já existe linha **Assinado** no Monday com o **mesmo título**, o sistema **não cria** novo par Jan/Luciano (casos RH: férias/rescisão já concluídos).
+
 ## Comandos
 
 ```bash

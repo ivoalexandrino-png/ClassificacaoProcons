@@ -153,6 +153,39 @@ class TestControleAutentiquePlan:
         )
         assert row.action == ControlePlanAction.CRIAR
 
+    def test_should_ignore_when_monday_already_has_assinado_same_title(self) -> None:
+        title = "Declaração de Férias Antecipadas - Larissa Araújo Nascimento"
+        legacy = ControleAssinaturasItem(
+            item_id="legacy-1",
+            name=title,
+            status=CONTROLE_STATUS_ASSINADO,
+            tipo=None,
+            signature_link="Autentique ID: old-other-doc",
+        )
+        document = AutentiqueDocumentSummary(
+            document_id="new-signed-doc",
+            name=title,
+            created_at=None,
+            signed_pdf_url="https://example.com/signed.pdf",
+            signatures=(
+                AutentiqueSigner(
+                    public_id="s1",
+                    name="Larissa",
+                    email="l@example.com",
+                    short_link=None,
+                    signed_at="2026-01-01T00:00:00Z",
+                ),
+            ),
+        )
+        index = ControleAssinaturasIndex(
+            document_ids=frozenset({"old-other-doc"}),
+            exact_names=frozenset({title.casefold()}),
+            all_items=(legacy,),
+        )
+        row = classify_autentique_document_for_controle(document=document, index=index)
+        assert row.action == ControlePlanAction.IGNORAR
+        assert row.reason == "monday_assinado_same_title_do_not_create"
+
     def test_should_build_plan_counts(self) -> None:
         index = ControleAssinaturasIndex(
             document_ids=frozenset(),

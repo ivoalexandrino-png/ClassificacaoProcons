@@ -67,6 +67,16 @@ def find_legacy_rows_to_link(
     return exact
 
 
+def find_monday_assinado_rows_same_title(
+    *,
+    document_name: str,
+    index: ControleAssinaturasIndex,
+) -> tuple[ControleAssinaturasItem, ...]:
+    """Itens já **Assinado** no Monday com o mesmo título (não criar outro par)."""
+    exact = find_exact_title_matches(document_name=document_name, items=index.all_items)
+    return tuple(item for item in exact if status_is_assinado(item.status))
+
+
 def classify_autentique_document_for_controle(
     *,
     document: AutentiqueDocumentSummary,
@@ -108,6 +118,21 @@ def classify_autentique_document_for_controle(
             monday_item_ids=tuple(item.item_id for item in link_targets),
             monday_item_names=tuple(item.name for item in link_targets),
             reason="legacy_row_without_id_exact_title",
+        )
+
+    assinado_same_title = find_monday_assinado_rows_same_title(
+        document_name=document.name,
+        index=index,
+    )
+    if assinado_same_title:
+        return ControleDocumentPlanRow(
+            document_id=doc_id,
+            document_name=document.name,
+            action=ControlePlanAction.IGNORAR,
+            autentique_fully_signed=document.is_fully_signed,
+            monday_item_ids=tuple(item.item_id for item in assinado_same_title),
+            monday_item_names=tuple(item.name for item in assinado_same_title),
+            reason="monday_assinado_same_title_do_not_create",
         )
 
     if document.is_fully_signed:

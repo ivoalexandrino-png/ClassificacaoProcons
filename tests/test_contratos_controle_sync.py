@@ -49,7 +49,7 @@ class TestControleSync:
             document_id="doc-1",
             name="Contrato B2B - Empresa X",
             created_at="2026-01-01",
-            signed_pdf_url="https://example.com/signed.pdf",
+            signed_pdf_url=None,
             signatures=(
                 AutentiqueSigner(
                     public_id="sig-1",
