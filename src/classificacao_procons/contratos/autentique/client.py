@@ -88,14 +88,16 @@ def is_document_fully_signed(
     signed_pdf_url: str | None,
     signatures: tuple[AutentiqueSigner, ...] = (),
 ) -> bool:
-    """Indica se todas as assinaturas foram concluídas.
+    """Indica se o documento está concluído no Autentique.
 
-    O Autentique pode expor `files.signed` antes do último signatário; por isso
-    validamos cada assinatura quando a lista de signatários está disponível.
+    Quando existe ``files.signed``, tratamos como assinado mesmo que a lista de
+    signatários na API ainda mostre pendência (comum em documentos antigos/RH).
     """
+    if (signed_pdf_url or "").strip():
+        return True
     if signatures:
         return all(signer.signed_at for signer in signatures)
-    return bool(signed_pdf_url)
+    return False
 
 
 def get_api_token_from_env() -> str | None:

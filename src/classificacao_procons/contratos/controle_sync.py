@@ -1431,6 +1431,17 @@ def sync_controle_from_autentique(
             continue
 
         if plan_action == ControlePlanAction.CRIAR:
+            if document.is_fully_signed:
+                deferred_signed += 1
+                results.append(
+                    ControleSyncItemResult(
+                        document_id=document.document_id,
+                        document_name=document.name,
+                        action="deferred_signed",
+                        detail="signed_autentique_never_create",
+                    ),
+                )
+                continue
             if dry_run:
                 if not doc_may_create:
                     create_paused += 1
