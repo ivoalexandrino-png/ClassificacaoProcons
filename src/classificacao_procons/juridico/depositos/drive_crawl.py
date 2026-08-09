@@ -10,6 +10,18 @@ from classificacao_procons.juridico.depositos.path_rules import path_suggests_de
 
 _NON_DOWNLOADABLE_PREFIX = "application/vnd.google-apps."
 
+
+def _normalize_folder_name(name: str) -> str:
+    return name.casefold().strip()
+
+
+def _is_consumer_folder(name: str) -> bool:
+    normalized = _normalize_folder_name(name)
+    if normalized.startswith("01 - minutas"):
+        return False
+    return True
+
+
 @dataclass(frozen=True)
 class DrivePdfItem:
     file_id: str
@@ -61,6 +73,7 @@ def list_consumer_folders(
     service = _build_drive_service(token_path)
     children = list_children_paginated(service, folder_id=root_folder_id)
     folders = [item for item in children if item.mime_type == DRIVE_FOLDER_MIME]
+    folders = [item for item in folders if _is_consumer_folder(item.name)]
     folders.sort(key=lambda item: item.name.casefold())
     if max_consumers is not None:
         return folders[:max_consumers]
