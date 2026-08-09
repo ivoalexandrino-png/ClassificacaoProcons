@@ -27,6 +27,7 @@ from classificacao_procons.questor.models import (
     QuestorAnalysis,
     QuestorSnapshot,
 )
+from classificacao_procons.questor.relevancia import classify_caixa_message
 
 DEFAULT_WARN_WITHIN_DAYS = 15
 
@@ -195,19 +196,36 @@ def analyze_mensagem(
                 ),
             )
 
-    # Só emite o aviso genérico de "não lida" quando não há um problema de prazo
-    # para a mesma mensagem — evita duplicar a mesma pendência no e-mail.
-    if not mensagem.lida and not issues:
+    # Já há problema de prazo genuíno para a mensagem: não duplica.
+    if issues:
+        return issues
+
+    # Aviso da mensagem não lida, com severidade pela relevância do assunto
+    # (fiscalização/lançamento/atraso → crítico; certidão/processo → aviso;
+    # rotineira → aviso genérico). A seleção do que chega aqui é da policy.
+    if not mensagem.lida:
+        classification = classify_caixa_message(mensagem)
+        if classification is not None:
+            _category, cat_label, severity = classification
+            title = f"{cat_label} — {label}"
+            detail = (
+                f"Mensagem relevante ({cat_label.lower()}) não lida em {label}: "
+                f"\"{mensagem.assunto}\"."
+            )
+        else:
+            severity = "warning"
+            title = f"Mensagem não lida — {label}"
+            detail = (
+                f"Há mensagem não lida na caixa postal de {label}: "
+                f"\"{mensagem.assunto}\"."
+            )
         issues.append(
             FiscalIssue(
                 kind="mensagem_nao_lida",
-                severity="warning",
+                severity=severity,
                 orgao=orgao,
-                title=f"Mensagem não lida — {label}",
-                detail=(
-                    f"Há mensagem não lida na caixa postal de {label}: "
-                    f"\"{mensagem.assunto}\"."
-                ),
+                title=title,
+                detail=detail,
                 due_date=mensagem.prazo_ciencia,
                 source_url=mensagem.url,
                 dedup_key=f"mensagem_nao_lida:{key_base}",

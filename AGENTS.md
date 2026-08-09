@@ -91,9 +91,11 @@ Buscamos o dataset completo (`take` alto) e filtramos em Python — mais robusto
 - `SituacaoCertidao`: `0=Irregular`, `1=Regular`, `2=Neutro`, `3=Falha`, `5=Restrição`.
 - `Leitura`: `0=Não lido`, `1=Leitura pendente`, `2=Lido`. `Relevancia`: `0=Não`, `1=Sim`.
 
-**Regras (`questor/analise.py`, offline e testável):** certidão Irregular/Restrição → crítico; vencida (data/estado) → crítico; a vencer ≤ janela → aviso; Falha → aviso (indisponível); Regular/Neutro → ok. Caixa postal: prazo de ciência (`ExibidaAte`) vencido/próximo → crítico; não lida → aviso.
+**Regras (`questor/analise.py`, offline e testável):** certidão Irregular/Restrição → crítico; vencida (data/estado) → crítico; a vencer ≤ janela → aviso; Falha → aviso (indisponível); Regular/Neutro → ok. Caixa postal: severidade pela relevância do assunto (ver classificador).
 
-**Política de caixa postal (`questor/policy.py`):** o backlog de não lidas é grande e o flag "Relevante" é pouco usado; por isso a seleção é configurável (`--caixa-mode`): `relevante_ou_prazo` (default), `relevantes`, `recentes`, `todas`. O total não lido por domicílio vai como nota de contexto no e-mail.
+**Relevância da caixa postal (`questor/relevancia.py`):** classifica a mensagem por assunto/remetente (allowlist). Categorias e severidade: `fiscalização`, `lançamento`/auto de infração, `débito/atraso de pagamento`, `intimação/exigência` → **crítico**; `vencimento de certidão`, `processo administrativo` (e-Processo) → **aviso**. Sem palavra-chave relevante → ignorada (ex.: Escrituração Fiscal Digital, recibos DCTF, orientações). Obs.: `ExibidaAte` é "exibida até" (não é prazo legal de ciência) — não é usado para severidade.
+
+**Política de caixa postal (`questor/policy.py`, `--caixa-mode`):** `relevantes_por_assunto` (**default** — usa o classificador acima, + flag Relevante, + prazo se houver), `relevantes` (só flag), `relevante_ou_prazo`, `recentes`, `todas`. O total não lido por domicílio vai como nota de contexto no e-mail.
 
 **Credenciais:** lidas do board **Acessos** do Monday (`credentials/monday_board.py`, board `7591024769`) pelo item **"Questor - Certidões - Ivo"** (há dois itens homônimos; o com sufixo "- Ivo" é o ativo). Override: env `QUESTOR_MONDAY_ITEM`. Requer `MONDAY_API_TOKEN`.
 
@@ -113,10 +115,12 @@ Coleta + análise + alerta (produção; credenciais vêm do Monday):
 
 ```bash
 questor check --portal-url https://b4a.zen.questor.com.br/ --empresa "B4A / MMKT" \
-  --to fiscal@b4a.com,contabilidade@b4a.com --caixa-mode relevante_ou_prazo
+  --to juridico@b4a.com.br,fisca@b4a.com.br --caixa-mode relevantes_por_assunto
 ```
 
-Playwright: rodar `playwright install chromium` (o update script já faz). O login do Questor é sessão única — evite acessos concorrentes.
+**Execução diária:** workflow `.github/workflows/questor-daily.yml` (cron `0 11 * * *` = 08:00 BRT, e `workflow_dispatch`). Destinatários atuais: `juridico@b4a.com.br` e `fisca@b4a.com.br`. Estado de dedup persiste via `actions/cache` (só alerta pendência **nova**). Secrets: `MONDAY_API_TOKEN`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`; vars opcionais `QUESTOR_PORTAL_URL`, `QUESTOR_MONDAY_ITEM`.
+
+Playwright: rodar `playwright install chromium` (o update script já faz). O login do Questor é sessão única — evite acessos concorrentes (o cron roda às 08:00 BRT).
 
 ### Procon (backup SLA 30 min no GCP)
 

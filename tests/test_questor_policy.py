@@ -34,9 +34,23 @@ def test_mode_relevantes_returns_only_relevant_unread() -> None:
     assert [m.assunto for m in result] == ["relevante"]
 
 
-def test_default_mode_relevante_ou_prazo() -> None:
-    result = select_actionable_messages(MSGS, today=TODAY)
+def test_explicit_relevante_ou_prazo_mode() -> None:
+    result = select_actionable_messages(MSGS, mode="relevante_ou_prazo", today=TODAY)
     assert sorted(m.assunto for m in result) == ["com prazo", "relevante"]
+
+
+def test_default_mode_selects_by_subject() -> None:
+    msgs = [
+        _msg(assunto="Escrituração Fiscal Digital", lida=False),  # rotineira → fora
+        _msg(assunto="Auto de Infração nº 1", lida=False),  # relevante → dentro
+        _msg(assunto="Vencimento de Certidão Conjunta", lida=False),  # relevante → dentro
+        _msg(assunto="Auto de Infração antigo", lida=True),  # lida → fora
+    ]
+    result = select_actionable_messages(msgs, today=TODAY)
+    assert sorted(m.assunto for m in result) == [
+        "Auto de Infração nº 1",
+        "Vencimento de Certidão Conjunta",
+    ]
 
 
 def test_mode_recentes_includes_window() -> None:

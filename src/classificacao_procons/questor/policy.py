@@ -13,9 +13,16 @@ from collections import Counter
 from datetime import date, timedelta
 
 from classificacao_procons.questor.models import MensagemCaixaPostal
+from classificacao_procons.questor.relevancia import classify_caixa_message
 
-CAIXA_MODES = ("todas", "relevantes", "relevante_ou_prazo", "recentes")
-DEFAULT_CAIXA_MODE = "relevante_ou_prazo"
+CAIXA_MODES = (
+    "todas",
+    "relevantes",
+    "relevante_ou_prazo",
+    "relevantes_por_assunto",
+    "recentes",
+)
+DEFAULT_CAIXA_MODE = "relevantes_por_assunto"
 DEFAULT_UNREAD_WINDOW_DAYS = 15
 
 
@@ -29,8 +36,11 @@ def select_actionable_messages(
     """Seleciona as mensagens não lidas que merecem alerta, conforme ``mode``.
 
     - ``todas``: toda mensagem não lida.
-    - ``relevantes``: apenas não lidas marcadas como relevantes.
-    - ``relevante_ou_prazo`` (default): não lidas relevantes ou com prazo de ciência.
+    - ``relevantes``: apenas não lidas marcadas como relevantes (flag do Questor).
+    - ``relevantes_por_assunto`` (default): não lidas classificadas como relevantes
+      pelo assunto (fiscalização, lançamento, atraso de pagamento, intimação,
+      vencimento de certidão, processo) — ou com flag relevante, ou com prazo.
+    - ``relevante_ou_prazo``: não lidas relevantes (flag) ou com prazo de ciência.
     - ``recentes``: as de ``relevante_ou_prazo`` mais as recebidas na janela recente.
     """
     if mode not in CAIXA_MODES:
@@ -41,6 +51,14 @@ def select_actionable_messages(
         return unread
     if mode == "relevantes":
         return [m for m in unread if m.relevante]
+    if mode == "relevantes_por_assunto":
+        return [
+            m
+            for m in unread
+            if classify_caixa_message(m) is not None
+            or m.relevante
+            or m.prazo_ciencia is not None
+        ]
     if mode == "recentes":
         reference = today or date.today()
         cutoff = reference - timedelta(days=window_days)

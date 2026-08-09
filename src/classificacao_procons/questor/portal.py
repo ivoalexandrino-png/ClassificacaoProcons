@@ -90,7 +90,10 @@ def mensagem_from_api_row(row: dict[str, Any]) -> MensagemCaixaPostal:
         remetente=unescape((row.get("Remetente") or "").strip()) or None,
         relevante=row.get("Relevancia") == 1,
         data_postagem=parse_brazilian_date(row.get("EnviadaEm")),
-        prazo_ciencia=parse_brazilian_date(row.get("ExibidaAte")),
+        # ExibidaAte é "exibida até" (data de exibição, às vezes anos no futuro),
+        # não um prazo legal de ciência — não usar como prazo para evitar falso
+        # positivo. A relevância vem da classificação por assunto.
+        prazo_ciencia=None,
         lida=leitura_is_lida(row.get("Leitura")),
         nsu=(str(row["Nsu"]).strip() if row.get("Nsu") else None),
         url=unescape((row.get("LinkMensagem") or "").strip()) or None,

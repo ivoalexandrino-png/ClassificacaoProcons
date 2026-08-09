@@ -1,0 +1,104 @@
+name: Questor diário (certidões + caixa postal)
+
+on:
+  schedule:
+    # 11:00 UTC = 08:00 BRT (horário de Brasília). Login do Questor é sessão
+    # única — rode fora do horário de uso manual.
+    - cron: "0 11 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só mostra as pendências, sem enviar e-mail"
+        required: false
+        default: false
+        type: boolean
+      caixa_mode:
+        description: "Política da caixa postal"
+        required: false
+        default: relevantes_por_assunto
+        type: choice
+        options:
+          - relevantes_por_assunto
+          - relevante_ou_prazo
+          - relevantes
+          - recentes
+          - todas
+      resend:
+        description: "Reenviar pendências já alertadas (ignora o estado)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  questor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Cache imutável por chave: salva com chave nova a cada run e restaura a
+      # mais recente pelo prefixo — mantém o estado de dedup entre execuções.
+      - name: Restore alert state
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: questor-alert-state-${{ github.run_id }}
+          restore-keys: |
+            questor-alert-state-
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install .
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Configure Google credentials
+        env:
+          GMAIL_OAUTH_JSON: ${{ secrets.GMAIL_OAUTH_JSON }}
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+        run: |
+          mkdir -p credentials
+          printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
+          printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
+
+      - name: Validate Gmail send capability
+        run: |
+          python3 <<'PY'
+          import sys
+          from classificacao_procons.google_auth import has_gmail_send_access, has_valid_token
+
+          if not has_valid_token():
+              print("ERRO: token Google inválido/expirado. Rode Setup Google token.")
+              sys.exit(1)
+          if not has_gmail_send_access():
+              print("ERRO: token sem escopo de envio (gmail.modify/gmail.send).")
+              sys.exit(1)
+          print("Credenciais Google OK (envio habilitado).")
+          PY
+
+      - name: Run Questor daily check
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          QUESTOR_PORTAL_URL: ${{ vars.QUESTOR_PORTAL_URL || 'https://b4a.zen.questor.com.br/' }}
+          QUESTOR_MONDAY_ITEM: ${{ vars.QUESTOR_MONDAY_ITEM || 'Questor - Certidões - Ivo' }}
+        run: >
+          python -m classificacao_procons.questor.cli check
+          --to juridico@b4a.com.br,fisca@b4a.com.br
+          --empresa "B4A / MMKT"
+          --caixa-mode ${{ inputs.caixa_mode || 'relevantes_por_assunto' }}
+          ${{ inputs.resend && '--resend' || '' }}
+          ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      - name: Save alert state
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: data
+          key: questor-alert-state-${{ github.run_id }}

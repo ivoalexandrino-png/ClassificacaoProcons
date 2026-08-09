@@ -90,6 +90,26 @@ class TestAnalyzeMensagem:
         mensagem = MensagemCaixaPostal(orgao="e-CAC", assunto="Comunicado", lida=False)
         issues = analyze_mensagem(mensagem, today=TODAY)
         assert any(issue.kind == "mensagem_nao_lida" for issue in issues)
+        assert issues[0].severity == "warning"
+
+    def test_should_flag_relevant_subject_as_critical(self) -> None:
+        mensagem = MensagemCaixaPostal(
+            orgao="e-CAC",
+            assunto="Auto de Infração nº 123 - lançamento",
+            lida=False,
+        )
+        issues = analyze_mensagem(mensagem, today=TODAY)
+        assert issues[0].severity == "critical"
+        assert "Lançamento" in issues[0].title
+
+    def test_should_flag_payment_delay_subject_as_critical(self) -> None:
+        mensagem = MensagemCaixaPostal(
+            orgao="SEFAZ",
+            assunto="Comunicado de débito em atraso",
+            lida=False,
+        )
+        issues = analyze_mensagem(mensagem, today=TODAY)
+        assert issues[0].severity == "critical"
 
     def test_should_not_warn_on_read_message_without_deadline(self) -> None:
         mensagem = MensagemCaixaPostal(orgao="e-CAC", assunto="Comunicado", lida=True)
