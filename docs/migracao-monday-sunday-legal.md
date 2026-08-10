@@ -114,14 +114,41 @@ Proposta em fases; cada fase é aprovável isoladamente e **não** quebra a oper
 
 ### Fase 1 — Camada de abstração no código (comportamento inalterado)
 
-- Introduzir seleção de backend por configuração no **único choke point**
-  (`monday/client.py`): endpoint/base-URL, token e "dialeto" da API configuráveis
-  (ex.: `LEGAL_BACKEND=monday|sunday`, `LEGAL_API_URL`, `LEGAL_API_TOKEN`).
-- Mover os IDs fixos de Contratos (`constants.py`) para configuração parametrizável por
-  backend, para permitir Monday e Sunday sem editar código.
-- Nada de comportamento novo: com `LEGAL_BACKEND=monday`, tudo roda idêntico a hoje.
-- Cobertura de testes: os testes atuais mockam o transporte; manter verde e adicionar casos
-  do dialeto Sunday.
+**Parte A — transporte configurável: FEITO** (`monday/backend.py`).
+
+- Backend selecionável por `LEGAL_BACKEND` (`monday` **padrão** | `sunday`), resolvido no
+  **único choke point** (`monday/client.py::_graphql_request` e `upload_file_to_column`).
+- Endpoint/versão/token parametrizáveis: `LEGAL_API_URL`, `LEGAL_FILE_API_URL`,
+  `LEGAL_API_VERSION`, `LEGAL_API_TOKEN` (genéricos) e `SUNDAY_API_URL`, `SUNDAY_FILE_API_URL`,
+  `SUNDAY_API_VERSION`, `SUNDAY_API_TOKEN` (específicos do Sunday).
+- Token: prioridade backend-específico → `LEGAL_API_TOKEN` → `MONDAY_API_TOKEN` (fallback ao
+  segredo compartilhado no cutover). `get_api_token_from_env()` passou a delegar a isso.
+- Comportamento padrão **idêntico** a hoje: sem `LEGAL_BACKEND`, tudo aponta para o Monday
+  (`https://api.monday.com/v2`, versão `2024-10`, `MONDAY_API_TOKEN`). Cobertura: 943 testes
+  verdes (11 novos em `tests/test_monday_backend.py`).
+- `LEGAL_BACKEND=sunday` sem `SUNDAY_API_URL` falha com erro claro (não cai no Monday por engano).
+
+**Parte B — IDs por backend: PENDENTE (após discovery).**
+
+- Mover os IDs fixos de Contratos (`constants.py`) para configuração parametrizável por backend.
+  Fica para depois de termos o de-para do Sunday (§7), para não retrabalhar.
+
+#### Como usar a sonda de discovery (assim que houver endpoint/token do Sunday)
+
+O comando `juridico boards` lista os quadros visíveis (id, grupos, colunas) **do backend ativo** —
+serve para responder se o Sunday é GraphQL-compatível e para preencher o de-para (§7):
+
+```bash
+# hoje (Monday, comportamento atual)
+juridico boards --filter contratos
+
+# quando o Sunday estiver disponível (não muda nada no Monday):
+LEGAL_BACKEND=sunday SUNDAY_API_URL=https://sunday.b4a.ai/api/... \
+  SUNDAY_API_TOKEN=<token> juridico boards
+```
+
+Se o Sunday responder com o mesmo schema, o de-para sai direto daí. Se falhar/for outro
+formato, confirma-se a necessidade do adaptador de dialeto (§11.2).
 
 ### Fase 2 — Migração de dados
 
@@ -224,16 +251,13 @@ Nada pode ser migrado sem o *discovery* da API do Sunday (§5). Precisamos, do t
 5. Recriar no Sunday as **automações internas** que o quadro dependia (se houver).
 6. Cutover do quadro; manter rollback por variável (Fase 1).
 
-### 11.4 O que dá para adiantar em código agora (sem depender do Sunday)
+### 11.4 O que já foi adiantado em código (sem depender do Sunday)
 
-Trabalho de baixo risco, com `LEGAL_BACKEND=monday` como padrão (comportamento idêntico ao atual):
-
-- Extrair no `monday/client.py` a base-URL/endpoint/token para configuração (choke point).
-- Tirar os IDs fixos de Contratos (`constants.py`) para config parametrizável por backend.
-- Testes do "dialeto" mockado, mantendo os 932 testes atuais verdes.
-
-Isso só deve começar **após** a resposta do §11.2.2 (GraphQL ou não), para não retrabalhar o
-desenho do adaptador.
+- **FEITO**: transporte configurável no choke point (`monday/backend.py`) — base-URL/endpoint/
+  versão/token por backend, padrão Monday, 943 testes verdes. Ver Fase 1, Parte A.
+- **PENDENTE (após discovery)**: IDs fixos de Contratos (`constants.py`) por backend e, se o
+  Sunday não for GraphQL-compatível, o adaptador de dialeto — ambos dependem da resposta do
+  §11.2 para não retrabalhar.
 
 ## Perguntas em aberto
 
