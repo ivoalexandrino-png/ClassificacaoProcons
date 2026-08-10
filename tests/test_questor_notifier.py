@@ -85,6 +85,32 @@ class TestBuildAlertEmail:
         assert "última captura do Questor" in email.text_body
         assert "13.475.001/0001-34" in email.html_body
 
+    def test_weekly_digest_subject_and_intro(self) -> None:
+        email = build_alert_email(_analysis_with_issue(), to=["fiscal@b4a.com"], weekly=True)
+        assert "Resumo semanal" in email.subject
+        assert "em aberto" in email.text_body
+
+    def test_should_show_readable_questor_status(self) -> None:
+        from datetime import date, datetime
+
+        from classificacao_procons.questor.analise import analyze_snapshot
+        from classificacao_procons.questor.models import Certidao, QuestorSnapshot
+
+        snapshot = QuestorSnapshot(
+            captured_at=datetime(2026, 8, 8, 9, 0),
+            certidoes=(
+                Certidao(
+                    orgao="PGFN",
+                    situacao="positiva",
+                    protocolo="Aguardando conferencia",
+                    conferida=False,
+                ),
+            ),
+        )
+        analysis = analyze_snapshot(snapshot, today=date(2026, 8, 8))
+        email = build_alert_email(analysis, to=["fiscal@b4a.com"])
+        assert "Situação no Questor: Aguardando conferencia" in email.text_body
+
 
 class TestGmailSender:
     def test_should_send_multipart_message_with_raw_payload(self) -> None:
