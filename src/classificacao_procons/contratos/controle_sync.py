@@ -93,6 +93,10 @@ from classificacao_procons.contratos.controle_track_repair import (
     ensure_controle_dual_tracks_for_document,
     parse_autentique_created_date,
 )
+from classificacao_procons.contratos.controle_write_policy import (
+    require_controle_write_enabled,
+    require_controle_write_unless_dry_run,
+)
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
@@ -245,6 +249,7 @@ def register_document_in_controle(
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+    require_controle_write_enabled()
 
     try:
         document = fetch_document_summary(document_id=document_id, api_token=autentique_api_token)
@@ -455,6 +460,7 @@ def _process_signature_progress_webhook_event(
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+    require_controle_write_enabled()
 
     existing_items = find_controle_items_by_autentique_id(
         api_token=monday_token,
@@ -757,6 +763,7 @@ def repair_controle_canonical_autentique_links(
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+    require_controle_write_unless_dry_run(dry_run=dry_run)
 
     try:
         documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
@@ -903,6 +910,7 @@ def reconcile_controle_compare_mismatches(
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+    require_controle_write_unless_dry_run(dry_run=dry_run)
 
     index = build_controle_assinaturas_index(api_token=monday_token)
     documents_by_id = _documents_by_id_for_controle_reconcile(
@@ -1080,6 +1088,7 @@ def sync_controle_from_autentique(
     monday_token = monday_api_token or get_api_token_from_env()
     if not monday_token:
         raise ControleSyncError("MONDAY_API_TOKEN não configurada.")
+    require_controle_write_unless_dry_run(dry_run=dry_run)
 
     try:
         documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)

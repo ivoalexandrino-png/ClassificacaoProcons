@@ -31,6 +31,17 @@ def require_controle_write_enabled(*, allow_write: bool | None = None) -> None:
         )
 
 
+def require_controle_write_unless_dry_run(
+    *,
+    dry_run: bool,
+    allow_write: bool | None = None,
+) -> None:
+    """Bloqueia mutations reais; dry_run continua permitido para planejamento."""
+    if dry_run:
+        return
+    require_controle_write_enabled(allow_write=allow_write)
+
+
 def controle_write_disabled_message() -> str:
     return (
         f"Escrita no Controle Assinaturas desabilitada ({ENV_CONTROLE_WRITE_ENABLED}=false)."
