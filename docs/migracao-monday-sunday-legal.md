@@ -318,12 +318,28 @@ O PAT usado foi **colado em texto puro no chat** → recomendação: **revogar/r
 no Sunday e recadastrá-lo como **Runtime Secret** (`SUNDAY_API_TOKEN`) no Cloud Agents → Secrets. O
 token **não** foi gravado em arquivo nem versionado; só usado em memória para o discovery read-only.
 
-### 12.6 Próximo passo recomendado
+### 12.6 Cliente REST do Sunday — leitura FEITA
 
-1. Rotacionar o PAT e cadastrá-lo como Runtime Secret (`SUNDAY_API_TOKEN`) + `SUNDAY_API_URL`.
-2. Conseguir a **documentação da API REST do Sunday** (ou liberar um board sandbox p/ escrita).
-3. Implementar o **cliente REST do Sunday** (Fase 1B) começando pelo canário `78 Legal - Acessos`
-   em **leitura** (dry-run comparado com o Monday), que é zero-risco.
+Implementado o pacote `src/classificacao_procons/sunday/` (client + parser + modelos + CLI
+`sunday`), cobrindo o **caminho de leitura** e validado **ao vivo** contra a API real:
+
+- `sunday me` → perfil autenticado (`/auth/me`).
+- `sunday workspaces` / `sunday boards --workspace-id 22` → workspaces e os 6 boards legais.
+- `sunday board <id>` → board + colunas + grupos + itens (ex.: `78 Legal - Acessos`).
+
+Configuração por `SUNDAY_API_URL` + `SUNDAY_API_TOKEN` (auth `Bearer`). Testes offline com os
+payloads reais (`tests/test_sunday_parser.py`, `tests/test_sunday_client.py`) — suíte em 965 verdes.
+
+### 12.7 Próximos passos (após leitura)
+
+1. **Escrita**: mapear/confirmar os endpoints `POST`/`PATCH` (criar item, setar coluna, criar
+   grupo, upload) — precisa de doc da API ou board sandbox (não sondamos escrita no sistema ao vivo).
+2. **Colunas de domínio**: os boards do Sunday estão com colunas genéricas; definir quem cria as
+   colunas (Login/Senha/Link em Acessos etc.) — nós via API ou o time no app.
+3. **Canário Acessos**: quando o board `78` tiver dados, comparar a leitura Sunday × Monday (dry-run).
+4. **Roteamento por backend**: unificar Monday (GraphQL) e Sunday (REST) atrás de uma interface de
+   "board provider" comum, selecionada por `LEGAL_BACKEND`.
+5. **Rotacionar o PAT** exposto no chat (pendente — o usuário optou por pular por ora).
 
 ## Perguntas em aberto
 
