@@ -129,6 +129,7 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
           CONTROLE_PAUSE_CREATE: "true"
+          CONTROLE_WRITE_ENABLED: "false"
         run: |
           contratos-webhook compare-controle \
             --max-pages "${{ steps.params.outputs.max_pages }}" \
@@ -162,6 +163,7 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          CONTROLE_WRITE_ENABLED: "false"
         run: |
           ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
@@ -174,6 +176,7 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          CONTROLE_WRITE_ENABLED: "false"
         run: |
           ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
@@ -190,6 +193,7 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
           CONTROLE_PAUSE_CREATE: ${{ steps.params.outputs.allow_create == 'true' && 'false' || 'true' }}
+          CONTROLE_WRITE_ENABLED: "false"
         run: |
           ARGS="--max-pages ${{ steps.params.outputs.max_pages }}"
           if [ "${{ steps.params.outputs.dry_run }}" = "true" ]; then
