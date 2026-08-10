@@ -25,7 +25,7 @@ class TestControleCompare:
     ) -> None:
         pending = AutentiqueDocumentSummary(
             document_id="pending-1",
-            name="Contrato pendente",
+            name="Contrato B2B - Pendente",
             created_at=None,
             signed_pdf_url=None,
             signatures=(
@@ -50,7 +50,7 @@ class TestControleCompare:
             autentique_api_token="token",
         )
 
-        assert result.pending_missing_in_monday == (("pending-1", "Contrato pendente"),)
+        assert result.pending_missing_in_monday == (("pending-1", "Contrato B2B - Pendente"),)
         assert result.signed_missing_in_monday == ()
 
     @patch("classificacao_procons.contratos.controle_sync.build_controle_assinaturas_index")

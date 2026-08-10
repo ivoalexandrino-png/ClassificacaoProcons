@@ -477,6 +477,7 @@ def create_controle_assinatura_item(
     signer_label: str | None = None,
     platform_name: str | None = None,
     inclusion_date: date | None = None,
+    idempotency_key: str | None = None,
 ) -> tuple[str, str | None]:
     """Cria item no Controle Assinaturas."""
     board_context = load_board_metadata(
@@ -504,6 +505,7 @@ def create_controle_assinatura_item(
         group_id=group_id,
         item_name=item_name,
         column_values={},
+        idempotency_key=idempotency_key,
     )
     _apply_controle_column_values(
         api_token=api_token,
@@ -672,6 +674,7 @@ def _create_controle_item(
     group_id: str,
     item_name: str,
     column_values: dict[str, Any],
+    idempotency_key: str | None = None,
 ) -> str:
     data = _graphql_request(
         api_token=api_token,
@@ -691,6 +694,7 @@ def _create_controle_item(
             "itemName": item_name,
             "columnValues": json.dumps(column_values) if column_values else None,
         },
+        idempotency_key=idempotency_key,
     )
     return str(data["create_item"]["id"])
 

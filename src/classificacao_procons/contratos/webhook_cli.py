@@ -24,6 +24,7 @@ from classificacao_procons.contratos.contratos_enrichment import (
     ContratosEnrichmentError,
     process_contratos_item_created,
 )
+from classificacao_procons.contratos.controle_compare_diagnostics import diagnostic_row_to_dict
 from classificacao_procons.contratos.controle_link_suggestions import apply_controle_link_suggestion
 from classificacao_procons.contratos.controle_monday_status import (
     CONTROLE_STATUS_LABELS_REQUIRED,
@@ -231,6 +232,30 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
         "legacy_link_suggestions_count": len(result.legacy_link_suggestions),
         "monday_multiple_autentique_ids_count": len(result.monday_multiple_autentique_ids),
         "plan_action_counts": dict(result.plan_action_counts),
+        "diagnostic_summary": (
+            {
+                "documents_analyzed": result.diagnostic_summary.documents_analyzed,
+                "expected_tracks_jan_only": result.diagnostic_summary.expected_tracks_jan_only,
+                "expected_tracks_luciano_only": (
+                    result.diagnostic_summary.expected_tracks_luciano_only
+                ),
+                "expected_tracks_both": result.diagnostic_summary.expected_tracks_both,
+                "expected_tracks_none": result.diagnostic_summary.expected_tracks_none,
+                "scope_eligible": result.diagnostic_summary.scope_eligible,
+                "scope_ineligible": result.diagnostic_summary.scope_ineligible,
+                "scope_manual_review": result.diagnostic_summary.scope_manual_review,
+                "proposed_action_counts": dict(result.diagnostic_summary.proposed_action_counts),
+                "missing_track_total": result.diagnostic_summary.missing_track_total,
+                "unexpected_track_total": result.diagnostic_summary.unexpected_track_total,
+                "status_divergence_total": result.diagnostic_summary.status_divergence_total,
+            }
+            if result.diagnostic_summary
+            else None
+        ),
+        "document_diagnostics": [
+            diagnostic_row_to_dict(row)
+            for row in result.document_diagnostics[:500]
+        ],
         "pending_missing_in_monday": [
             {"document_id": doc_id, "document_name": name}
             for doc_id, name in result.pending_missing_in_monday[:200]

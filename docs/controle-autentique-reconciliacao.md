@@ -16,8 +16,8 @@ Comparar “abrindo o arquivo” no Autentique, no sentido ideal, significa cons
 
 ### 1 — Tudo do Autentique está no Monday (Controle)
 
-- **Pendente no Autentique** → deve existir par Jan/Luciano no Controle (ou item legado vinculado com o mesmo `Autentique ID`).
-- **Como medir:** `compare-controle` → `pending_missing_in_monday`.
+- **Pendente no Autentique** → deve existir **somente as filas exigidas pelos signatários internos** (Jan e/ou Luciano), não mais “sempre par Jan+Luciano”. A fonte de verdade é `resolve_expected_tracks` (e-mail/ID do signatário no Autentique).
+- **Como medir:** `compare-controle` → `pending_missing_in_monday` (só documentos com escopo **eligible**) e `diagnostic_summary` / `document_diagnostics` (tracks esperadas vs existentes, `proposed_action`, escopo RH/contrato).
 - **Como corrigir:** `sync-controle` (modo seguro: só pendentes, `create_only` / `skip_signed_documents` conforme workflow).
 - **Pausa operacional:** enquanto o quadro estiver sendo saneado, a **criação** de novos itens fica desligada por padrão (`CONTROLE_PAUSE_CREATE`). O sync ainda atualiza, repara filas e faz auto-link legado inequívoco. Reativar criação só quando `compare-controle` estiver limpo o suficiente: `--allow-create` ou `CONTROLE_PAUSE_CREATE=false`.
 
@@ -48,14 +48,18 @@ O sync classifica cada documento do Autentique **antes** de criar linha no Monda
 
 | Ação | Quando |
 |------|--------|
-| **CRIAR** | Pendente no Autentique e não há linha legada com título exato sem ID |
+| **CRIAR** | Pendente, escopo **eligible**, signatário interno reconhecido, e não há linha legada com título exato sem ID |
 | **VINCULAR** | Existe linha (Jan/Luciano ou Assinado) com título exato **sem** Autentique ID |
 | **ATUALIZAR** | Autentique ID já está no link do item |
-| **IGNORAR** | Assinado sem legado correspondente (ou match ambíguo — revisão manual) |
+| **IGNORAR** | Assinado sem legado, escopo RH/não contratual, `manual_review`, ou match ambíguo |
 
-`compare-controle` expõe `plan_action_counts` (mesma lógica, somente leitura). Com `--skip-signed-documents`, o sync ainda **vincula** e **atualiza** assinados; só adia **CRIAR** de novos assinados.
+`compare-controle` expõe `plan_action_counts` e, por documento, `document_diagnostics` (signatários, `expected_tracks`, `missing_tracks`, `unexpected_tracks`, status por fila, `scope_classification`, `proposed_action`). Nenhuma ação proposta é executada no modo compare.
 
-Regra rígida: se o Autentique já tem **PDF assinado** (`files.signed`) ou já existe linha **Assinado** no Monday com o **mesmo título**, o sistema **não cria** novo par Jan/Luciano (casos RH: férias/rescisão já concluídos).
+Regra rígida: se o Autentique já tem **PDF assinado** (`files.signed`) ou já existe linha **Assinado** no Monday com o **mesmo título**, o sistema **não cria** novos itens (casos RH: férias/rescisão já concluídos).
+
+Criação futura usa chave lógica `(autentique_document_id, track)` e header **Idempotency-Key** do Monday (`controle:{document_id}:{track}`) em retries de `create_item`.
+
+Com `--skip-signed-documents`, o sync ainda **vincula** e **atualiza** assinados; só adia **CRIAR** de novos assinados.
 
 ## Comandos
 

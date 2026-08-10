@@ -135,6 +135,7 @@ def _graphql_request(
     query: str,
     variables: dict | None = None,
     max_retries: int = GRAPHQL_MAX_RETRIES,
+    idempotency_key: str | None = None,
 ) -> dict:
     last_error: MondayClientError | None = None
 
@@ -143,14 +144,18 @@ def _graphql_request(
         if variables:
             payload["variables"] = variables
 
+        headers: dict[str, str] = {
+            "Authorization": api_token,
+            "Content-Type": "application/json",
+            "API-Version": MONDAY_API_VERSION,
+        }
+        if idempotency_key:
+            headers["Idempotency-Key"] = idempotency_key
+
         request = urllib.request.Request(
             MONDAY_API_URL,
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": api_token,
-                "Content-Type": "application/json",
-                "API-Version": MONDAY_API_VERSION,
-            },
+            headers=headers,
             method="POST",
         )
 

@@ -77,6 +77,33 @@ class TestDocumentRequiredControleTracks:
 
         assert document_required_controle_tracks(document) == frozenset({"luciano"})
 
+    def test_should_require_only_jan_when_only_jan_signs(self) -> None:
+        document = AutentiqueDocumentSummary(
+            document_id="doc-jan",
+            name="Contrato",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(
+                AutentiqueSigner(
+                    public_id="1",
+                    name="Jan",
+                    email=SIGNER_EMAIL_JAN,
+                    short_link=None,
+                    signed_at=None,
+                ),
+            ),
+        )
+        assert document_required_controle_tracks(document) == frozenset({"jan"})
+
+    def test_should_return_empty_tracks_when_no_internal_signer(self) -> None:
+        document = AutentiqueDocumentSummary(
+            document_id="doc-none",
+            name="Contrato",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=(),
+        )
+        assert document_required_controle_tracks(document) == frozenset()
 
 class TestControleDualTracksSatisfied:
     def test_should_be_satisfied_when_both_tracks_present(self) -> None:

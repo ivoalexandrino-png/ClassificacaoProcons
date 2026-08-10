@@ -18,6 +18,11 @@ from classificacao_procons.contratos.controle_legacy_guard import (
 from classificacao_procons.contratos.controle_link_suggestions import (
     _item_has_autentique_link,
 )
+from classificacao_procons.contratos.controle_required_tracks import resolve_expected_tracks
+from classificacao_procons.contratos.controle_scope import (
+    ControleScopeClassification,
+    classify_controle_scope,
+)
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import ControleAssinaturasIndex
 
@@ -154,6 +159,29 @@ def classify_autentique_document_for_controle(
             monday_item_ids=(),
             monday_item_names=(),
             reason="signed_no_matching_legacy_row",
+        )
+
+    expected = resolve_expected_tracks(document)
+    scope, scope_reason = classify_controle_scope(document, expected_tracks=expected)
+    if scope == ControleScopeClassification.INELIGIBLE:
+        return ControleDocumentPlanRow(
+            document_id=doc_id,
+            document_name=document.name,
+            action=ControlePlanAction.IGNORAR,
+            autentique_fully_signed=False,
+            monday_item_ids=(),
+            monday_item_names=(),
+            reason=f"scope_{scope_reason}",
+        )
+    if scope == ControleScopeClassification.MANUAL_REVIEW:
+        return ControleDocumentPlanRow(
+            document_id=doc_id,
+            document_name=document.name,
+            action=ControlePlanAction.IGNORAR,
+            autentique_fully_signed=False,
+            monday_item_ids=(),
+            monday_item_names=(),
+            reason=f"scope_{scope_reason}",
         )
 
     return ControleDocumentPlanRow(

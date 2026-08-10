@@ -119,10 +119,18 @@ class TestControleRegistration:
         )
         fetch_mock.return_value = AutentiqueDocumentSummary(
             document_id="doc-paused",
-            name="Contrato",
+            name="Contrato B2B - Pausado",
             created_at=None,
             signed_pdf_url=None,
-            signatures=(),
+            signatures=(
+                AutentiqueSigner(
+                    public_id="s1",
+                    name="Jan",
+                    email="jan@example.com",
+                    short_link="https://assina.ae/x",
+                    signed_at=None,
+                ),
+            ),
         )
 
         result = register_document_in_controle(

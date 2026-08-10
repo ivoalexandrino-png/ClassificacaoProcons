@@ -129,7 +129,7 @@ class TestSignatureAccepted:
             api_token="monday-token",
             item_id="222",
             group_id="group-luciano",
-            status_label=CONTROLE_STATUS_AGUARDANDO_OUTROS,
+            status_label=CONTROLE_STATUS_ASSINADO,
             signed_at=date(2026, 7, 16),
             current_group_id="group-luciano",
         )
