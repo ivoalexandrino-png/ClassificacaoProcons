@@ -170,15 +170,19 @@ formato, confirma-se a necessidade do adaptador de dialeto (§11.2).
 
 ## 7. Tabela de-para de IDs (a preencher na Fase 0)
 
-| Board (legal) | Monday ID | Sunday ID | Colunas/grupos a remapear |
-|---------------|-----------|-----------|----------------------------|
-| Controle Assinaturas | `5301515799` | _(a levantar)_ | `status`, `status_1__1` (Tipo), `data0`, `link`, `long_text_mkvnwp6d`, grupos Jan/Luciano/Assinados |
-| Contratos | `5385471914` | _(a levantar)_ | grupos por Tipo (`topics`, `novo_grupo*`, `contratos_jan__1`, …) |
-| Acessos (credenciais) | `7591024769` | _(a levantar)_ | Login/Senha/Link, grupos Procon/TJ's |
-| prazos | por nome/env | _(a levantar)_ | resolvidas por título (validar títulos) |
-| audiencias | por nome/env | _(a levantar)_ | resolvidas por título |
-| processos judiciais / trabalhista / KPI | por nome/env | _(a levantar)_ | `board_relation`, status/labels |
-| procons | por nome/env | _(a levantar)_ | resolvidas por título |
+Sunday workspace **22** = "Support - Finance, Legal, People" (ver §12). IDs confirmados no
+discovery de 2026-08-10; quadros ainda **vazios** e com colunas genéricas do template.
+
+| Board (legal) | Monday ID | Sunday ID (ws 22) | Colunas/grupos a remapear |
+|---------------|-----------|-------------------|----------------------------|
+| Controle Assinaturas | `5301515799` | **`77`** "Legal - Controle de Assinaturas - Jan & Luciano" | `status`, `status_1__1` (Tipo), `data0`, `link`, `long_text_mkvnwp6d`, grupos Jan/Luciano/Assinados |
+| Contratos | `5385471914` | _(não existe no ws 22 — definir)_ | grupos por Tipo (`topics`, `novo_grupo*`, `contratos_jan__1`, …) |
+| Acessos (credenciais) | `7591024769` | **`78`** "Legal - Acessos" | Login/Senha/Link (hoje o board Sunday só tem colunas genéricas `name/status/owner/date/area`) |
+| prazos | por nome/env | _(não localizado — talvez `74` "Cronograma + Processos Finance")_ | resolvidas por título |
+| audiencias | por nome/env | **`72`** "Legal - Audiências" | resolvidas por título |
+| processos judiciais / trabalhista / KPI | por nome/env | _(a definir — possível `74`)_ | `board_relation`, status/labels |
+| procons | por nome/env | _(não existe no ws 22 — definir)_ | resolvidas por título |
+| _(sem correspondente Monday)_ | — | `79` "Legal - Seguros", `70` "Weekly Support" | novos no Sunday |
 
 ## 8. Estado de deduplicação (risco no cutover)
 
@@ -236,9 +240,8 @@ de escrita. Só avançar para 4–7 após validar 1–2.
 Nada pode ser migrado sem o *discovery* da API do Sunday (§5). Precisamos, do time B4A:
 
 1. **Endpoint + token do Sunday** (de teste, para este ambiente ou sessão assistida).
-2. **Tipo de API**: GraphQL compatível com o Monday? Isso decide o desenho da Fase 1:
-   - compatível → basta parametrizar base-URL + token no `monday/client.py`;
-   - incompatível → precisamos de um **adaptador de dialeto** atrás do mesmo choke point.
+2. **Tipo de API**: ~~GraphQL compatível?~~ **Respondido (§12): REST próprio (NestJS), auth
+   `Bearer`.** → precisamos do **cliente REST do Sunday** atrás do mesmo choke point (Fase 1B).
 3. **Upload de arquivo** e **formato de URL de item** no Sunday.
 4. Existe **ferramenta oficial de migração de dados** Monday→Sunday, ou faremos export/import?
 
@@ -259,10 +262,78 @@ Nada pode ser migrado sem o *discovery* da API do Sunday (§5). Precisamos, do t
   Sunday não for GraphQL-compatível, o adaptador de dialeto — ambos dependem da resposta do
   §11.2 para não retrabalhar.
 
+## 12. Discovery do Sunday — CONFIRMADO (2026-08-10)
+
+Sondagem read-only com um Personal Access Token (`sun_pat_…`) real. **Resultado decisivo: o
+Sunday NÃO é o Monday.** É uma API **REST própria** (NestJS em Cloud Run), não o GraphQL do Monday.
+
+### 12.1 Transporte e autenticação
+
+- Base da API: `https://sunday-api-757613635701.us-central1.run.app` (descoberto no bundle do
+  front: `environment.apiBaseUrl`). O front web fica em `https://sunday.b4a.ai` (Angular SPA).
+- **Auth: `Authorization: Bearer <PAT>`** (confirmado: `GET /auth/me` → 200 com o perfil do
+  usuário). Token **cru** estilo Monday (`Authorization: <token>`) → **401**.
+- Tokens são gerenciados em `/auth/me/api-tokens` (create/list/revoke) — origem dos `sun_pat_…`.
+- Modelo de permissão por token/perfil: algumas rotas retornam 403 conforme o papel.
+
+### 12.2 Superfície REST mapeada (somente leitura testada)
+
+| Método | Rota | Retorno |
+|--------|------|---------|
+| GET | `/auth/me` | perfil do usuário |
+| GET | `/workspaces` / `/workspaces/{id}` | workspaces (id, name, slug, board_count, …) |
+| GET | `/boards` e `/boards?workspace_id={id}` | lista de boards (com `status_set` de labels) |
+| GET | `/boards/{id}` | board (inclui `status_set`, `capabilities`, `members`) |
+| GET | `/boards/{id}/items` | itens (array; vazio nos boards atuais) |
+| GET | `/boards/{id}/groups` | grupos (`id`, `board_id`, `name`, `color`, `position`) |
+| GET | `/boards/{id}/columns` | colunas (`id`, `key`, `type`, `label`, `settings`, `is_system`) |
+
+Colunas têm `key`/`type`/`label` (ex.: `name/text/Nome`, `status/status/Status`, `owner/people`,
+`target_date/date`, `area/dropdown`). Nada de `items_page_by_column_values`, `change_multiple_
+column_values`, subitens Monday, etc. — a semântica é REST por recurso.
+
+### 12.3 Estado dos boards legais no Sunday
+
+Workspace `22` "Support - Finance, Legal, People" (6 boards): `78` Legal - Acessos, `72` Legal -
+Audiências, `77` Legal - Controle de Assinaturas - Jan & Luciano, `79` Legal - Seguros, `74`
+Cronograma + Processos Finance, `70` Weekly Support. Os boards estão **vazios** (0 itens) e com as
+**colunas genéricas do template** (ex.: Acessos não tem Login/Senha/Link ainda). Ou seja, o lado
+Sunday é andaime: falta criar colunas de domínio e importar dados.
+
+### 12.4 Impacto na estratégia (revisão)
+
+- **Fase 1A (transporte configurável) continua válida e necessária**, mas **insuficiente** sozinha:
+  além de base-URL/token/versão, o Sunday exige **auth `Bearer`** (hoje o cliente manda o token cru).
+- **Fase 1B deixa de ser "adaptador só se preciso" e passa a ser obrigatória**: um **cliente REST
+  do Sunday** implementando nossas operações (listar/criar item, setar valores de coluna, mover
+  grupo, upload) atrás do **mesmo choke point**. Não é troca de base-URL — é uma implementação nova.
+- **Escrita ainda não mapeada**: os endpoints de `POST`/`PATCH` (criar item, setar coluna, criar
+  grupo, upload de arquivo) **não** foram sondados de propósito — escrever num sistema legal ao vivo
+  exige confirmação humana (regra interna). Precisamos da **doc da API** ou de **permissão para
+  escritas de teste** num board sandbox.
+
+### 12.5 Segurança
+
+O PAT usado foi **colado em texto puro no chat** → recomendação: **revogar/rotacionar** esse token
+no Sunday e recadastrá-lo como **Runtime Secret** (`SUNDAY_API_TOKEN`) no Cloud Agents → Secrets. O
+token **não** foi gravado em arquivo nem versionado; só usado em memória para o discovery read-only.
+
+### 12.6 Próximo passo recomendado
+
+1. Rotacionar o PAT e cadastrá-lo como Runtime Secret (`SUNDAY_API_TOKEN`) + `SUNDAY_API_URL`.
+2. Conseguir a **documentação da API REST do Sunday** (ou liberar um board sandbox p/ escrita).
+3. Implementar o **cliente REST do Sunday** (Fase 1B) começando pelo canário `78 Legal - Acessos`
+   em **leitura** (dry-run comparado com o Monday), que é zero-risco.
+
 ## Perguntas em aberto
 
-- O Sunday expõe API GraphQL compatível com o Monday, ou precisaremos de um adaptador?
+- ~~O Sunday expõe API GraphQL compatível com o Monday?~~ **Respondido (§12): não — é REST próprio
+  (NestJS), auth `Bearer`. Precisamos do cliente REST do Sunday (Fase 1B).**
+- Onde está a **documentação da API REST do Sunday** (endpoints de escrita: criar item, setar
+  coluna, criar grupo, upload)? Há board sandbox para escritas de teste?
 - Existe migração de dados oficial Monday→Sunday (ferramenta do B4A) ou faremos export/import?
+- Os boards do Sunday (ws 22) estão vazios e sem colunas de domínio — quem cria as colunas
+  (Login/Senha/Link em Acessos, Tipo/Status no Controle etc.): nós via API ou o time no app?
 - As automações internas (Jan/Luciano, Controle→Contratos) já existem no Sunday ou serão
   recriadas por nós?
 - O cutover será por tema (contratos, jurídico, procon, acessos) ou tudo de uma vez?
