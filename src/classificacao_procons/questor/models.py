@@ -110,6 +110,7 @@ class FiscalIssue:
     data_emissao: date | None = None
     data_referencia: date | None = None
     remetente: str | None = None
+    protocolo: str | None = None
     orientacao: str | None = None
 
 

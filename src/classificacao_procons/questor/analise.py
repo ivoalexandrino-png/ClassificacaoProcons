@@ -118,6 +118,7 @@ def analyze_certidao(
         "cnpj": format_cnpj(certidao.cnpj),
         "uf": certidao.uf,
         "data_emissao": certidao.data_emissao,
+        "protocolo": certidao.protocolo,
         "source_url": certidao.url,
     }
 

@@ -114,6 +114,43 @@ class TestRunQuestorCheck:
         assert second.status == "no_new_issues"
         assert sender.send.call_count == 1
 
+    @patch("classificacao_procons.questor.pipeline.GmailSender")
+    @patch(
+        "classificacao_procons.questor.pipeline.has_gmail_send_access",
+        return_value=True,
+    )
+    def test_weekly_digest_resends_already_alerted(
+        self,
+        _send_access,
+        sender_cls,
+        tmp_path,
+    ) -> None:
+        sender = MagicMock()
+        sender.send.return_value = "gmail-1"
+        sender_cls.from_credentials.return_value = sender
+        state_path = tmp_path / "state.json"
+        base = QuestorPipelineOptions(
+            recipients=("fiscal@b4a.com",),
+            state_path=state_path,
+        )
+        first = run_questor_check(base, snapshot=_snapshot_with_problem(), today=TODAY)
+        assert first.status == "alert_sent"
+
+        # Dia comum: nada novo → não envia.
+        again = run_questor_check(base, snapshot=_snapshot_with_problem(), today=TODAY)
+        assert again.status == "no_new_issues"
+
+        # Resumo semanal: reenvia mesmo já alertado, com weekly=True.
+        weekly = QuestorPipelineOptions(
+            recipients=("fiscal@b4a.com",),
+            state_path=state_path,
+            weekly_digest=True,
+        )
+        result = run_questor_check(weekly, snapshot=_snapshot_with_problem(), today=TODAY)
+        assert result.status == "alert_sent"
+        assert len(result.new_issues) == 1
+        assert sender.send.call_count == 2
+
     def test_should_raise_when_no_recipients(self, tmp_path) -> None:
         options = QuestorPipelineOptions(state_path=tmp_path / "state.json")
         with pytest.raises(QuestorPipelineError, match="destinatário"):
