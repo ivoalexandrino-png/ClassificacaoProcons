@@ -269,8 +269,8 @@ Sunday NÃO é o Monday.** É uma API **REST própria** (NestJS em Cloud Run), n
 
 ### 12.1 Transporte e autenticação
 
-- Base da API: `https://sunday-api-757613635701.us-central1.run.app` (descoberto no bundle do
-  front: `environment.apiBaseUrl`). O front web fica em `https://sunday.b4a.ai` (Angular SPA).
+- Base da API: valor do secret `SUNDAY_API_URL` (serviço Cloud Run `sunday-api-*`, descoberto no
+  bundle do front como `environment.apiBaseUrl`). O front web fica em `sunday.b4a.ai` (Angular SPA).
 - **Auth: `Authorization: Bearer <PAT>`** (confirmado: `GET /auth/me` → 200 com o perfil do
   usuário). Token **cru** estilo Monday (`Authorization: <token>`) → **401**.
 - Tokens são gerenciados em `/auth/me/api-tokens` (create/list/revoke) — origem dos `sun_pat_…`.
@@ -330,10 +330,18 @@ Implementado o pacote `src/classificacao_procons/sunday/` (client + parser + mod
 Configuração por `SUNDAY_API_URL` + `SUNDAY_API_TOKEN` (auth `Bearer`). Testes offline com os
 payloads reais (`tests/test_sunday_parser.py`, `tests/test_sunday_client.py`) — suíte em 965 verdes.
 
-### 12.7 Próximos passos (após leitura)
+### 12.7 Endpoints de escrita — MAPEADOS (engenharia reversa)
 
-1. **Escrita**: mapear/confirmar os endpoints `POST`/`PATCH` (criar item, setar coluna, criar
-   grupo, upload) — precisa de doc da API ou board sandbox (não sondamos escrita no sistema ao vivo).
+Não há OpenAPI/Swagger exposto (404 em todos os caminhos padrão). Os endpoints de escrita foram
+reconstruídos do front e documentados em **`docs/sunday-api-endpoints.md`** (criar/editar/excluir
+item, valores de coluna, grupos, colunas, comentários, upload multipart). Confirmado que a API usa
+**escopos por PAT** (`/boards/search` → 403 por falta de escopo) — a escrita provavelmente exige um
+PAT com os escopos certos; e os campos dos DTOs de criação ainda precisam de confirmação/sandbox.
+
+### 12.8 Próximos passos (após leitura)
+
+1. **Escrita**: implementar sobre `docs/sunday-api-endpoints.md`, validando num board **sandbox**
+   (a API tem escopos por token e os DTOs de criação precisam de confirmação).
 2. **Colunas de domínio**: os boards do Sunday estão com colunas genéricas; definir quem cria as
    colunas (Login/Senha/Link em Acessos etc.) — nós via API ou o time no app.
 3. **Canário Acessos**: quando o board `78` tiver dados, comparar a leitura Sunday × Monday (dry-run).
