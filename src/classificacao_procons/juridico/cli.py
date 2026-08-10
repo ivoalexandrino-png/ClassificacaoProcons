@@ -41,6 +41,7 @@ from classificacao_procons.juridico.pipeline import (
     JuridicoPipelineOptions,
     process_new_intimacoes,
 )
+from classificacao_procons.monday.backend import BackendConfigError
 
 AUTH_HINT = "Google não conectado. Rode: procon-email auth"
 DRIVE_AUTH_HINT = "Drive ainda não autorizado. Rode: procon-email auth"
@@ -389,7 +390,7 @@ def _run_portal(args: argparse.Namespace) -> int:
 def _run_boards(args: argparse.Namespace) -> int:
     try:
         boards = describe_boards(name_filter=args.filter)
-    except MondayClientError as exc:
+    except (MondayClientError, BackendConfigError) as exc:
         print(json.dumps({"error": str(exc)}), file=sys.stderr)
         return 1
 

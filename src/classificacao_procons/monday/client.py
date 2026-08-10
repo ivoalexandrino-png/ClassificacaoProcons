@@ -15,6 +15,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from classificacao_procons.models import ProcessedComplaint
+from classificacao_procons.monday.backend import (
+    get_api_token,
+    get_backend_config,
+)
 from classificacao_procons.monday.mapping import (
     FIELD_CPF,
     FIELD_PDF_URL,
@@ -29,9 +33,8 @@ from classificacao_procons.monday.mapping import (
     sanitize_column_values,
 )
 
-MONDAY_API_URL = "https://api.monday.com/v2"
-MONDAY_FILE_API_URL = "https://api.monday.com/v2/file"
-MONDAY_API_VERSION = "2024-10"
+# Endpoint, versão e token são resolvidos por requisição via ``get_backend_config()``
+# / ``get_api_token()`` (``monday.backend``), mantendo o Monday como padrão.
 DEFAULT_BOARD_NAME = "procons"
 DEFAULT_GROUP_NAME = "pendentes de resposta"
 ENV_API_TOKEN = "MONDAY_API_TOKEN"
@@ -73,8 +76,8 @@ class MondayBoardContext:
 
 
 def get_api_token_from_env() -> str | None:
-    token = os.environ.get(ENV_API_TOKEN, "").strip()
-    return token or None
+    """Token do backend ativo (padrão: ``MONDAY_API_TOKEN``)."""
+    return get_api_token()
 
 
 def get_board_name_from_env() -> str:
@@ -137,20 +140,24 @@ def _graphql_request(
     max_retries: int = GRAPHQL_MAX_RETRIES,
 ) -> dict:
     last_error: MondayClientError | None = None
+    config = get_backend_config()
 
     for attempt in range(max_retries):
         payload: dict[str, object] = {"query": query}
         if variables:
             payload["variables"] = variables
 
+        headers = {
+            "Authorization": api_token,
+            "Content-Type": "application/json",
+        }
+        if config.api_version:
+            headers["API-Version"] = config.api_version
+
         request = urllib.request.Request(
-            MONDAY_API_URL,
+            config.api_url,
             data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": api_token,
-                "Content-Type": "application/json",
-                "API-Version": MONDAY_API_VERSION,
-            },
+            headers=headers,
             method="POST",
         )
 
@@ -236,14 +243,18 @@ def upload_file_to_column(
     body.extend(file_bytes)
     body.extend(f"\r\n--{boundary}--\r\n".encode())
 
+    config = get_backend_config()
+    headers = {
+        "Authorization": api_token,
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+    }
+    if config.api_version:
+        headers["API-Version"] = config.api_version
+
     request = urllib.request.Request(
-        MONDAY_FILE_API_URL,
+        config.file_api_url,
         data=bytes(body),
-        headers={
-            "Authorization": api_token,
-            "Content-Type": f"multipart/form-data; boundary={boundary}",
-            "API-Version": MONDAY_API_VERSION,
-        },
+        headers=headers,
         method="POST",
     )
 
