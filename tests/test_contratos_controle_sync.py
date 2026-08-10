@@ -9,7 +9,12 @@ from classificacao_procons.contratos.autentique.client import (
     AutentiqueDocumentSummary,
     AutentiqueSigner,
 )
-from classificacao_procons.contratos.constants import SIGNER_EMAIL_JAN, SIGNER_EMAIL_LUCIANO
+from classificacao_procons.contratos.constants import (
+    CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
+    CONTROLE_STATUS_ASSINADO,
+    SIGNER_EMAIL_JAN,
+    SIGNER_EMAIL_LUCIANO,
+)
 from classificacao_procons.contratos.controle_link_suggestions import LegacyAutoLinkResult
 from classificacao_procons.contratos.controle_sync import sync_controle_from_autentique
 from classificacao_procons.contratos.models import ControleAssinaturasItem
@@ -92,10 +97,14 @@ class TestControleSync:
         assert result.created == 1
         assert result.failed == 0
         assert create_item_mock.call_count == 2
-        call_kwargs = create_item_mock.call_args_list[0].kwargs
-        assert call_kwargs["item_name"] == "Contrato B2B - Empresa X"
-        assert call_kwargs["status_label"] == "Aguardando outros"
-        assert call_kwargs["signed_at"] == date(2026, 1, 2)
+        jan_call = create_item_mock.call_args_list[0].kwargs
+        luc_call = create_item_mock.call_args_list[1].kwargs
+        assert jan_call["item_name"] == "Contrato B2B - Empresa X"
+        assert jan_call["status_label"] == CONTROLE_STATUS_ASSINADO
+        assert jan_call["signed_at"] == date(2026, 1, 2)
+        assert jan_call["idempotency_key"] == "controle:doc-1:jan"
+        assert luc_call["status_label"] == CONTROLE_STATUS_AGUARDANDO_ASSINATURA
+        assert luc_call["idempotency_key"] == "controle:doc-1:luciano"
 
     @patch("classificacao_procons.contratos.controle_sync.find_controle_items_by_autentique_id")
     @patch("classificacao_procons.contratos.controle_sync.auto_link_unambiguous_legacy_controle")
@@ -119,7 +128,15 @@ class TestControleSync:
             name="Aditivo Locação Imóvel - Tower Bridge",
             created_at="2026-01-01",
             signed_pdf_url=None,
-            signatures=(),
+            signatures=(
+                AutentiqueSigner(
+                    public_id="sig-jan",
+                    name="Jan",
+                    email=SIGNER_EMAIL_JAN,
+                    short_link="https://assina.ae/aditivo",
+                    signed_at=None,
+                ),
+            ),
         )
         list_documents_mock.return_value = [document]
         build_index_mock.return_value = ControleAssinaturasIndex(
@@ -215,10 +232,18 @@ class TestControleSyncCreatePaused:
         auto_link_mock.return_value = _empty_legacy_link()
         document = AutentiqueDocumentSummary(
             document_id="doc-new",
-            name="Contrato novo",
+            name="Contrato B2B - Novo",
             created_at="2026-01-01",
             signed_pdf_url=None,
-            signatures=(),
+            signatures=(
+                AutentiqueSigner(
+                    public_id="sig-jan",
+                    name="Jan",
+                    email=SIGNER_EMAIL_JAN,
+                    short_link="https://assina.ae/x",
+                    signed_at=None,
+                ),
+            ),
         )
         list_documents_mock.return_value = [document]
         build_index_mock.return_value = ControleAssinaturasIndex(

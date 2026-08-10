@@ -39,12 +39,21 @@ from classificacao_procons.contratos.controle_autentique_plan import (
 from classificacao_procons.contratos.controle_autentique_terminal import (
     document_is_refused_or_blocked,
 )
+from classificacao_procons.contratos.controle_compare_diagnostics import (
+    ControleCompareDiagnosticSummary,
+    ControleDocumentDiagnosticRow,
+    build_controle_compare_diagnostics,
+    summarize_controle_compare_diagnostics,
+)
 from classificacao_procons.contratos.controle_create_allowlist import controle_may_create_new_item
 from classificacao_procons.contratos.controle_create_policy import (
     controle_create_paused_message,
 )
 from classificacao_procons.contratos.controle_dedup import (
     controle_title_kind_conflict,
+)
+from classificacao_procons.contratos.controle_idempotency import (
+    build_controle_create_idempotency_key,
 )
 from classificacao_procons.contratos.controle_legacy_guard import (
     should_block_create_for_signed_autentique,
@@ -63,6 +72,11 @@ from classificacao_procons.contratos.controle_reconcile import (
 )
 from classificacao_procons.contratos.controle_required_tracks import (
     document_required_controle_tracks,
+    resolve_expected_tracks,
+)
+from classificacao_procons.contratos.controle_scope import (
+    ControleScopeClassification,
+    classify_controle_scope,
 )
 from classificacao_procons.contratos.controle_status import (
     resolve_controle_status_document,
@@ -149,6 +163,8 @@ class ControleAutentiqueCompareResult:
     legacy_link_suggestions: tuple[ControleLinkSuggestion, ...] = ()
     monday_multiple_autentique_ids: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
     plan_action_counts: dict[str, int] = field(default_factory=dict)
+    document_diagnostics: tuple[ControleDocumentDiagnosticRow, ...] = ()
+    diagnostic_summary: ControleCompareDiagnosticSummary | None = None
 
 
 @dataclass(frozen=True)
@@ -657,11 +673,22 @@ def compare_autentique_with_controle(
 
     plan_rows = build_controle_autentique_plan(documents=documents, index=index)
     plan_counts = plan_action_counts(plan_rows)
+    diagnostic_rows = build_controle_compare_diagnostics(documents=documents, index=index)
+    diagnostic_summary = summarize_controle_compare_diagnostics(diagnostic_rows)
 
     pending_missing: list[tuple[str, str]] = []
     signed_missing: list[tuple[str, str]] = []
     for row in plan_rows:
         if row.action != ControlePlanAction.CRIAR:
+            continue
+        document = documents_by_id.get(row.document_id.casefold().strip())
+        if document is None:
+            continue
+        scope, _ = classify_controle_scope(
+            document,
+            expected_tracks=resolve_expected_tracks(document),
+        )
+        if scope != ControleScopeClassification.ELIGIBLE:
             continue
         pair = (row.document_id, row.document_name)
         if row.autentique_fully_signed:
@@ -714,6 +741,8 @@ def compare_autentique_with_controle(
         legacy_link_suggestions=link_suggestions,
         monday_multiple_autentique_ids=find_monday_items_with_multiple_autentique_ids(index),
         plan_action_counts=plan_counts,
+        document_diagnostics=diagnostic_rows,
+        diagnostic_summary=diagnostic_summary,
     )
 
 
@@ -1723,6 +1752,10 @@ def _create_controle_track_pair(
             signer_label=CONTROLE_SIGNER_LABEL_JAN,
             platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
             inclusion_date=inclusion_date,
+            idempotency_key=build_controle_create_idempotency_key(
+                autentique_document_id=document.document_id,
+                track="jan",
+            ),
         )
     if "luciano" in required:
         luciano_id, _luciano_url = create_controle_assinatura_item(
@@ -1741,6 +1774,10 @@ def _create_controle_track_pair(
             signer_label=CONTROLE_SIGNER_LABEL_LUCIANO,
             platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
             inclusion_date=inclusion_date,
+            idempotency_key=build_controle_create_idempotency_key(
+                autentique_document_id=document.document_id,
+                track="luciano",
+            ),
         )
 
     primary_id = jan_id or luciano_id

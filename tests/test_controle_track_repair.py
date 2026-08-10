@@ -68,7 +68,15 @@ class TestEnsureControleDualTracks:
             name="GE Beauty",
             created_at="2026-07-31T12:00:00+00:00",
             signed_pdf_url=None,
-            signatures=(),
+            signatures=(
+                AutentiqueSigner(
+                    public_id="b4a",
+                    name="Beauty For All",
+                    email=None,
+                    short_link=None,
+                    signed_at=None,
+                ),
+            ),
         )
         duplicate = ControleAssinaturasItem(
             item_id="dup",
