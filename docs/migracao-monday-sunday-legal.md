@@ -128,8 +128,9 @@ Este é o domínio mais crítico e o único com **entrada** de eventos vindos do
    Fase 0). Nada muda em produção por ora.
 2. **Token de serviço**: Fase 0 usa os secrets `SUNDAY_API_TOKEN` + `SUNDAY_API_URL` já
    cadastrados. Antes do cutover, será emitido token por conta de serviço dedicada B4A.
-   *Nota operacional: esses dois secrets não foram injetados na VM desta sessão (segredos
-   entram só em VMs novas); a parte autenticada da descoberta segue pendente.*
+   *Nota operacional (atualizada 2026-08-10): os secrets `SUNDAY_API_TOKEN` +
+   `SUNDAY_API_URL` foram injetados numa VM nova e a parte autenticada, somente-leitura, da
+   descoberta foi executada — ver a seção ["Validação autenticada da Fase 0"](#validação-autenticada-da-fase-0-somente-leitura).*
 3. **Tipos de coluna**: catálogo completo confirmado via bundle do frontend (23 tipos) —
    ver seção da Fase 0. Payloads por tipo confirmados na fonte do SPA; validação final por
    leitura autenticada de um board real.
@@ -236,10 +237,13 @@ Este é o domínio mais crítico e o único com **entrada** de eventos vindos do
 > Executada em 2026-08-10, **somente leitura**. Fontes: (a) inspeção do bundle público do
 > SPA (`https://sunday.b4a.ai`, Angular, 36 arquivos JS — serviços HTTP minificados mas com
 > rotas e payloads literais); (b) sondagens não autenticadas na API; (c) inventário
-> read-only do Monday via `MONDAY_API_TOKEN`. Os secrets `SUNDAY_API_TOKEN`/`SUNDAY_API_URL`
-> **não foram injetados nesta VM** (segredos só entram em VMs novas), então a validação
-> autenticada contra boards reais do Sunday ficou pendente (ver F0.11). Nada foi inventado:
-> o que não pôde ser confirmado está marcado como **pendente**.
+> read-only do Monday via `MONDAY_API_TOKEN`. **Atualização 2026-08-10:** os secrets
+> `SUNDAY_API_TOKEN`/`SUNDAY_API_URL` foram injetados numa VM nova e a **validação
+> autenticada somente-leitura** contra a API real do Sunday foi executada — resultados,
+> confirmações e correções na seção
+> ["Validação autenticada da Fase 0"](#validação-autenticada-da-fase-0-somente-leitura).
+> Nada foi inventado: o que não pôde ser confirmado (ou exige escrita) está marcado como
+> **pendente**.
 
 ### F0.1 Plataforma e autenticação (confirmado)
 
@@ -474,13 +478,16 @@ O board Acessos (74 itens) está **excluído** (decisão 6).
 
 ### F0.11 Pendências que exigem token e/ou teste de escrita autorizado
 
-**Somente leitura (assim que os secrets entrarem numa VM nova):**
-- `GET /auth/me` (identidade do token), `GET /workspaces/mine` e `GET /workspaces/22`
+**Somente leitura — ✅ EXECUTADO em 2026-08-10** (ver
+["Validação autenticada da Fase 0"](#validação-autenticada-da-fase-0-somente-leitura)):
+- ✅ `GET /auth/me` (identidade do token), `GET /workspaces/mine` e `GET /workspaces/22`
   (workspace de destino: boards já existentes, membros).
-- Ler um board existente qualquer: formato dos IDs, shape completo de board/columns/
-  groups/items/values/comments/attachments, capabilities e `status_set` reais.
-- Listar automações de um board existente (se houver) para ver o shape persistido da ação
-  `webhook` (pode revelar campos além de `url`).
+- ✅ Ler boards existentes: formato dos IDs (numéricos em string), shape completo de
+  board/columns/groups/items/values/comments/attachments, `capabilities` e `status_set`
+  reais.
+- ⚠️ Listar automações de boards existentes: **todos os boards do workspace 22 têm 0
+  automações**, então o shape persistido da ação `webhook` **continua pendente** (exige
+  criar uma automação → escrita).
 
 **Exigem escrita (não executar sem nova autorização; propor board sandbox dedicado):**
 1. **Ação `webhook` de automação**: criar board sandbox + automação `item_created` →
@@ -502,3 +509,219 @@ O board Acessos (74 itens) está **excluído** (decisão 6).
   foi consultado além do nome/contagem no inventário de boards do workspace.
 - As consultas ao Monday foram exclusivamente de leitura (boards, grupos, colunas,
   contagens e datas de criação de itens; nenhum conteúdo de item foi exportado).
+
+---
+
+## Validação autenticada da Fase 0 (somente leitura)
+
+> Executada em **2026-08-10** numa **VM nova com os secrets `SUNDAY_API_TOKEN` e
+> `SUNDAY_API_URL` já injetados**. **100% somente leitura**: apenas `GET` e um `OPTIONS`
+> (preflight CORS). **Nenhum** `POST`/`PATCH`/`PUT`/`DELETE`, nenhuma criação/alteração de
+> board, item, coluna, automação ou upload — no Sunday **ou** no Monday. O token nunca foi
+> impresso, logado ou versionado; a base-URL segue `[REDACTED]` neste documento.
+
+### VA.0 Como foi feito
+
+Sondas `curl -H "X-Sunday-Token: $SUNDAY_API_TOKEN"` contra `$SUNDAY_API_URL` (variáveis de
+ambiente; valores nunca expostos). Cada resposta teve status HTTP, corpo e **cabeçalhos**
+capturados para checar paginação e rate limit. Confirmou-se `401` sem token e `200` com
+token no mesmo endpoint (`/auth/me`).
+
+### VA.1 Secrets, autenticação e identidade — ✅ confirmado
+
+- **Secrets injetados**: `SUNDAY_API_TOKEN` **disponível**, `SUNDAY_API_URL` **disponível**
+  (base `https://…`, Cloud Run atrás de `Google Frontend`; `x-powered-by: Express`).
+- **Auth por `X-Sunday-Token`** confirmada: `GET /auth/me` → `401
+  {"message":"Unauthorized","statusCode":401}` sem token e `200` com token. `GET /health`
+  → `200` sem auth.
+- **Identidade do token** (`GET /auth/me`, endpoint que a F0.11 listava como pendente —
+  agora ✅): o token é **pessoal do usuário Ivo Alexandrino** (`id 37`,
+  `ivo.alexandrino@b4a.com.br`, `job_title` "Gerente Jurídico", `access_level`
+  `contributor`, `admin_scopes: []`, `team_id 20`). No workspace 22 seu papel é `member`
+  (`my_role: "member"`). **Implicação**: não é conta de serviço; a decisão 5.2 (emitir
+  token por conta de serviço dedicada antes do cutover) permanece válida e necessária.
+
+### VA.2 Permissões do token — escopos e camadas de acesso (novo)
+
+Não há um endpoint que liste os escopos do token para tokens de API (`GET
+/auth/me/api-tokens` → `403` "Excluir ou alterar configurações exige login"). As
+permissões foram inferidas pelo comportamento real das rotas. Existem **três camadas**
+distintas de negação, cada uma com mensagem própria:
+
+1. **Rota só-sessão (token de API proibido):** `403` "Este token de acesso não pode usar
+   esta rota. Excluir ou alterar configurações exige login." — atinge, em leitura:
+   `GET /boards/{id}/views`, `GET /boards/{id}/links`, `GET /boards/{id}/mirror-values`,
+   `GET /boards/me/items|approvals|ratings`, `GET /auth/me/api-tokens`.
+2. **Escopo ausente:** `GET /boards/search` → `403` "Este token não tem o escopo
+   \"search\" necessário para esta ação." → **tokens carregam escopos nomeados** e este
+   token **não tem `search`**.
+3. **Papel/perfil:** `GET /users` → `403` "Acesso restrito à equipe de People e à
+   liderança"; `GET /catalogs` → `403` "Requer pelo menos: admin.".
+
+**Correção à F0.2/F0.9:** `/boards/search` (o substituto textual de
+`items_page_by_column_values`) e `/boards/{id}/links` + `/mirror-values` (leitura de
+conexões/espelho) **não são utilizáveis pelo token atual** — o primeiro por escopo, os
+demais por serem só-sessão. Um **token de serviço** precisará dos escopos `search` e de
+acesso a links/mirror (ou uma rota de API equivalente) para dedup e `board_relation`.
+
+### VA.3 Acesso ao workspace 22 e boards encontrados — ✅ confirmado (diverge da F0.7)
+
+`GET /workspaces/22` → `200`. **Workspace 22 = "Support - Finance, Legal, People"** (slug
+`support`, `business_unit: shared`, `board_count: 6`, `member_count: 5`). Os boards e
+membros vêm **embutidos** nesse payload (ver VA.4).
+
+**6 boards já existem no workspace 22** (nome ↔ ID canônico `board_id`):
+
+| board_id | Nome | Criado | Itens | Colunas | Grupos | Automações |
+|---:|---|---|---:|---:|---:|---:|
+| `70` | Weekly Support | 2026-07-27 | 12 | 5 | 1 | 0 |
+| `72` | Legal - Audiências | 2026-07-27 | 9 | 5 | 2 | 0 |
+| `74` | Cronograma + Processos Finance | 2026-08-07 | 166 | 8 | 9 | 0 |
+| `77` | Legal - Controle de Assinaturas - Jan & Luciano | 2026-08-10 | 0 | 5 | 1 | 0 |
+| `78` | Legal - Acessos | 2026-08-10 | 0 | 5 | 1 | 0 |
+| `79` | Legal - Seguros | 2026-08-10 | 0 | 5 | 1 | 0 |
+
+**Divergência importante vs. o plano (Fase 1 assumia criar boards do zero):** o workspace
+22 **já contém** boards de Legal. Os de `2026-08-10` (`77`, `78`, `79`) são **esqueletos
+vazios** — só as **5 colunas de sistema** do template (`name`, `status`, `owner`,
+`target_date`, `area`), 1 grupo "Itens", **0 itens** e **0 automações**. Ou seja: estrutura
+iniciada, **nenhum dado migrado** e **nenhuma coluna/automação real** ainda. `74`
+(Cronograma + Processos Finance) é o único com colunas customizadas e dados de verdade
+(166 itens). **Nota de escopo:** o board **Legal - Acessos (78)** existe (vazio) no Sunday,
+apesar de a decisão 6 mantê-lo **fora do escopo** (credenciais → Secret Manager); nenhum
+segredo foi lido dele (0 itens).
+
+### VA.4 Shape real de board / grupos / colunas / itens / values — ✅ confirmado
+
+- **Board** (`GET /boards/{id}`): inclui `status_set` (padrão `to_do`/`follow_up`/`done`
+  com `color`+`terminal`), **`capabilities` embutido** (`{process, subitems, approvals,
+  time_tracking, calendar_anchor}`), `hierarchy_depth`, `owner_user_id`, `members[]`,
+  `area_options`, timestamps. **Correção F0.2:** não há `GET /boards/{id}/capabilities`
+  (→ `404`); `capabilities` vem no objeto do board.
+- **Colunas** (`GET /boards/{id}/columns`): `{id, board_id, key, type, label, position,
+  is_system, settings, default_visible, on_form, form_required, ...}`. O template padrão
+  cria 5 colunas de sistema: `name`(text), `status`(status, `settings.use_board_status_set:
+  true`), `owner`(people, `multi:false`), `target_date`(date, `include_time:false`),
+  `area`(dropdown, `options:[]`). Colunas customizadas confirmadas no board 74 (tipo
+  `text`).
+- **Grupos** (`GET /boards/{id}/groups`): `{id, board_id, name, color, position,
+  is_collapsed_default, ...}`.
+- **Itens** (`GET /boards/{id}/items`): array com `{id, board_id, group_id,
+  parent_item_id, position, name, description, status, owner_user_id, creator_user_id,
+  target_date, area, custom_fields, pushed_forward_count, done_at, approval_state,
+  assignee_user_ids, created_at, updated_at}`. `status` é a **chave do `status_set` de
+  sistema** (ex.: `to_do`/`done`); `target_date` é **ISO datetime** no item
+  (ex.: `2026-07-28T12:00:00.000Z`), embora a coluna `date` grave `YYYY-MM-DD`.
+- **Values** (`GET /boards/items/{id}/values`): array de
+  `{id, item_id, column_id, value, updated_at, updated_by_user}`. **Correção F0.4:** o
+  shape é mais rico que o `[{column_id, value}]` documentado.
+- **Comentários** (`GET /boards/items/{id}/comments`) e **anexos**
+  (`GET /boards/items/{id}/attachments`): rotas válidas (`200`), retornando `[]` nos itens
+  amostrados (itens sem comentário/anexo).
+- **Membros**: `GET /workspaces/22` traz `members[]`
+  (`{id, user_id, name, email, role, job_title, hierarchy_label}`); **não há**
+  `GET /workspaces/{id}/members` nem `GET /boards/{id}/members` (ambos `404`).
+
+### VA.5 `custom_fields` inline reduz o N+1 (correção da F0.8 #1 e F0.10)
+
+O objeto de item traz **`custom_fields`** — um mapa `chave_da_coluna → valor` com **todos
+os valores das colunas não-sistema**. Comparado com o endpoint `/values` item a item, o
+mapa **coincide exatamente** (validado em vários itens do board 74). **Consequência:** para
+**leitura**, `GET /boards/{id}/items` **já entrega os valores inline**, então o "N+1"
+descrito na F0.8 #1 **não se aplica à leitura** — 1 request por board basta para itens +
+valores. O endpoint `/values` por item só é necessário para metadados (quem/quando alterou)
+ou para escrita. Isso favorece o **polling** (F0.10): sync completo de um board = ~1
+request de itens, não ~N.
+
+### VA.6 Paginação e rate limit (confirmado)
+
+- **Sem paginação:** `GET /boards/{id}/items` retorna a lista completa; `?limit=`,
+  `?offset=`, `?page=`, `?per_page=` são **ignorados** (mesma contagem retornada). Confirma
+  a F0.8 #1.
+- **Sem rate limit observável:** nenhuma resposta trouxe `RateLimit-*`, `X-RateLimit-*`,
+  `Retry-After` ou `X-Request-Id`. Cabeçalhos vistos: `x-powered-by: Express`, `etag`
+  (fraca, `W/"…"`), `x-cloud-trace-context`, `server: Google Frontend`, `alt-svc`,
+  `access-control-allow-credentials`. **Resolve a F0.8 #7** (rate limit não é exposto **nem
+  com token**) e sugere usar **ETag/`If-None-Match`** para cache condicional no polling.
+- **CORS** (`OPTIONS /boards/{id}/items`): `access-control-allow-methods:
+  GET,HEAD,PUT,PATCH,POST,DELETE`, origem `https://sunday.b4a.ai`. Confirma F0.1.
+
+### VA.7 Formato dos IDs — ✅ confirmado (resolve F0.8 #8)
+
+**Todos os IDs são inteiros serializados como string.** Exemplos reais: usuário `37`,
+team `20`, workspace `22`, board `72`/`77`, grupo `219`/`227`, coluna `396`/`428`, item
+`7043`/`7386`, value `10188`, membro de workspace `98`. Não há UUIDs. **Correção da F0.8
+#8** (era pendente). O objeto de board dentro do workspace tem **dois IDs**: `id` (vínculo
+workspace↔board, ex.: `66`) e `board_id` (ID canônico do board, ex.: `77`) — usar sempre o
+`board_id` nas rotas `/boards/{id}`. URL canônica de item ainda **não** confirmada (não há
+`GET /boards/items/{id}` — retorna `404`; item só via lista do board).
+
+### VA.8 Endpoints — status real observado (correções à F0.2)
+
+| Endpoint | Método | Resultado |
+|---|---|---|
+| `/health` | GET | `200` (sem auth) |
+| `/auth/me` | GET | `200` — identidade do token |
+| `/auth/me/api-tokens` | GET | `403` só-sessão |
+| `/workspaces`, `/workspaces/mine`, `/workspaces/{id}` | GET | `200` (boards+members embutidos em `/{id}`) |
+| `/workspaces/{id}/boards`, `/workspaces/{id}/members` | GET | **`404`** (não existem; **correção F0.2**) |
+| `/boards`, `/boards/{id}` | GET | `200` |
+| `/boards/{id}/columns`, `/groups`, `/items`, `/automations` | GET | `200` |
+| `/boards/{id}/capabilities` | GET | **`404`** (embutido no board; **correção F0.2**) |
+| `/boards/{id}/members` | GET | **`404`** (**correção F0.2**) |
+| `/boards/{id}/views`, `/links`, `/mirror-values` | GET | **`403` só-sessão** (**correção F0.2/F0.9**) |
+| `/boards/search` | GET | **`403` escopo `search` ausente** (**correção F0.2**) |
+| `/boards/me/items|approvals|ratings` | GET | `403` só-sessão |
+| `/boards/items/{id}/values|comments|attachments` | GET | `200` |
+| `/boards/items/{id}` (item único) | GET | `404` (não existe rota; item vem da lista) |
+| `/notifications` | GET | `200` |
+| `/users` | GET | `403` (People/liderança) |
+| `/catalogs` | GET | `403` (admin) |
+| `/work-calendar`, `/processes` | GET | `404` (não alcançáveis por este token/rota) |
+
+### VA.9 Placar da Fase 0 após a validação autenticada
+
+**Hipóteses confirmadas pela API real:**
+1. Plataforma REST em Cloud Run (Express/NestJS) e formato de erro Nest.
+2. Autenticação por header `X-Sunday-Token` (401 sem / 200 com).
+3. `/health` público; identidade via `/auth/me`.
+4. Endpoints de workspaces/boards/columns/groups/items/values/comments/attachments/
+   automations existem e respondem em leitura.
+5. Board com `status_set` + `capabilities` + `hierarchy_depth`; template de 5 colunas de
+   sistema.
+6. `GET /boards/{id}/items` sem paginação (params ignorados).
+7. IDs numéricos em string.
+8. Sem rate limit exposto nos cabeçalhos.
+9. Ausência de webhook de saída (nenhuma rota `/webhooks`; entrega externa só via ação
+   `webhook` de automação).
+
+**Hipóteses corrigidas:**
+1. `GET /workspaces/{id}/boards`, `/workspaces/{id}/members`, `/boards/{id}/members` e
+   `/boards/{id}/capabilities` **não existem** (`404`) — boards/members/capabilities vêm
+   **embutidos** nos objetos de workspace/board.
+2. `/boards/search` **exige o escopo `search`** (o token atual não tem) → o substituto de
+   `items_page_by_column_values` não está disponível para este token.
+3. `/boards/{id}/links` e `/mirror-values` são **só-sessão** para tokens de API (`403`) →
+   leitura de conexões/espelho de `board_relation` **indisponível** por esta via com o
+   token atual.
+4. Shape de `values` é `{id,item_id,column_id,value,updated_at,updated_by_user}` (mais rico
+   que o documentado).
+5. **N+1 de leitura não existe**: `custom_fields` inline no item já traz todos os valores
+   não-sistema (1 request por board).
+6. **Workspace 22 não está vazio**: já há 6 boards (4 de Legal), então a Fase 1 vai
+   **adequar/popular boards existentes**, não só criar do zero.
+7. O token é **pessoal** (Ivo), não de serviço.
+
+**Pendências que ainda exigem escrita (não executar sem nova autorização — board sandbox):**
+1. Shape persistido e comportamento HTTP da ação `webhook` de automação (método, headers,
+   payload, retries, timeout) — **nenhum** board tem automação para inspecionar em leitura.
+2. Validação de `values` por tipo (status/date/dropdown/people/timeline/board_relation/
+   files…): só o tipo `text` apareceu em dados reais; os demais precisam de escrita em
+   sandbox.
+3. Upload de anexo (`attachments/file`): limite de tamanho e shape da resposta.
+4. `board_relation`/`mirror` cross-workspace e leitura de links/mirror por API (hoje
+   só-sessão) — depende de token com escopo adequado **ou** de rota de API alternativa.
+5. `time_tracking` via `POST /columns`.
+6. URL canônica de item (não há `GET` de item único).
+7. Escopos necessários para uma **conta de serviço** (mínimo: `search`; acesso a
+   links/mirror), a definir com o time do Sunday.
