@@ -8,6 +8,7 @@ from classificacao_procons.juridico.custas.classify import (
     is_court_fees_document,
 )
 from classificacao_procons.juridico.custas.dedupe import dedupe_court_fee_records
+from classificacao_procons.juridico.custas.fields import extract_custas_amount_brl
 from classificacao_procons.juridico.custas.models import (
     CourtFeeRecord,
     CourtFeeType,
@@ -17,7 +18,6 @@ from classificacao_procons.juridico.custas.path_rules import (
     should_analyze_pdf,
     should_skip_pdf_by_path_for_custas,
 )
-from classificacao_procons.juridico.depositos.fields import extract_amount_brl
 
 
 def test_custas_does_not_skip_recurso_inominado_path() -> None:
@@ -118,6 +118,25 @@ def test_aggregate_sums_by_process_number() -> None:
     assert rows[0].fee_line_count == 2
 
 
+def test_extract_custas_amount_prefers_valor_documento_not_causa() -> None:
+    text = (
+        "VALOR DA CAUSA: R$ 20.000,00\n"
+        "R$ 645,80VALOR TOTAL\n"
+        "(=) Valor Documento\n"
+        "R$ 645,80\n"
+    )
+    extracted = extract_custas_amount_brl(text)
+    assert extracted.amount_brl == Decimal("645.80")
+    assert extracted.reference_base_brl == Decimal("20000.00")
+
+
+def test_extract_custas_amount_total_dotted_line() -> None:
+    text = "VALOR DA CAUSA: R$ 11.241,36\nTOTAL: ................................512,00\n"
+    extracted = extract_custas_amount_brl(text)
+    assert extracted.amount_brl == Decimal("512.00")
+
+
 def test_extract_amount_on_custas_guia_text() -> None:
     text = "Custas processuais — valor R$ 89,40"
-    assert extract_amount_brl(text) == Decimal("89.40")
+    extracted = extract_custas_amount_brl(text)
+    assert extracted.amount_brl == Decimal("89.40")

@@ -19,6 +19,7 @@ _CSV_FIELDS = (
     "drive_url",
     "process_number",
     "amount_brl",
+    "reference_base_brl",
     "payment_date",
     "fee_type",
     "extraction_method",
@@ -39,6 +40,9 @@ def _record_to_dict(record: CourtFeeRecord) -> dict[str, str | None]:
     amount: str | None = None
     if record.amount_brl is not None:
         amount = f"{record.amount_brl:.2f}"
+    reference_base: str | None = None
+    if record.reference_base_brl is not None:
+        reference_base = f"{record.reference_base_brl:.2f}"
     return {
         "consumer_folder": record.consumer_folder,
         "drive_file_id": record.drive_file_id,
@@ -46,6 +50,7 @@ def _record_to_dict(record: CourtFeeRecord) -> dict[str, str | None]:
         "drive_url": record.drive_url,
         "process_number": record.process_number,
         "amount_brl": amount,
+        "reference_base_brl": reference_base,
         "payment_date": record.payment_date,
         "fee_type": record.fee_type.value,
         "extraction_method": record.extraction_method,

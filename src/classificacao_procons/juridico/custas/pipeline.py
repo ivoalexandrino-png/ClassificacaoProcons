@@ -16,6 +16,7 @@ from classificacao_procons.juridico.custas.classify import (
     is_court_fees_document,
 )
 from classificacao_procons.juridico.custas.dedupe import dedupe_court_fee_records
+from classificacao_procons.juridico.custas.fields import extract_custas_amount_brl
 from classificacao_procons.juridico.custas.gemini_custas import (
     CustasGeminiError,
     analyze_custas_pdf_with_gemini,
@@ -36,7 +37,6 @@ from classificacao_procons.juridico.depositos.drive_crawl import (
     walk_pdfs_under_folder,
 )
 from classificacao_procons.juridico.depositos.fields import (
-    extract_amount_brl,
     extract_payment_date,
     extract_process_number,
 )
@@ -138,11 +138,17 @@ def _analyze_pdf_item(
     kind = classify_document_text(text)
     is_fees = _is_custas_candidate(kind=kind, text=text, drive_path=item.drive_path)
 
-    amount = extract_amount_brl(text)
+    amount_extraction = extract_custas_amount_brl(text)
+    amount = amount_extraction.amount_brl
+    reference_base_brl = amount_extraction.reference_base_brl
     process_number = extract_process_number(text)
     payment_date = extract_payment_date(text)
     fee_type = infer_fee_type(text=text, drive_path=item.drive_path)
-    method = extracted.method
+    method = (
+        f"{extracted.method}+{amount_extraction.method}"
+        if amount_extraction.method != "custas_none"
+        else extracted.method
+    )
     confidence = _confidence_for_rules(
         is_fees=is_fees,
         amount=amount,
@@ -208,6 +214,7 @@ def _analyze_pdf_item(
         extraction_method=method,
         confidence=confidence,
         notes=notes,
+        reference_base_brl=reference_base_brl,
     )
 
 

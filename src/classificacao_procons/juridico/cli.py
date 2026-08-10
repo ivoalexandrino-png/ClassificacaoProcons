@@ -30,6 +30,10 @@ from classificacao_procons.juridico.custas.pipeline import (
     CustasScanOptions,
     scan_court_fees,
 )
+from classificacao_procons.juridico.custas.reconcile import (
+    build_reconcile_rows,
+    write_reconcile_csv,
+)
 from classificacao_procons.juridico.custas.report import (
     write_custas_csv,
     write_custas_process_csv,
@@ -142,6 +146,28 @@ def _run_custas_scan(args: argparse.Namespace) -> int:
     if args.output_process_csv:
         summary["output_process_csv"] = args.output_process_csv
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _run_custas_reconcile(args: argparse.Namespace) -> int:
+    rows = build_reconcile_rows(
+        custas_json_path=Path(args.custas_json),
+        deposits_json_path=Path(args.deposits_json),
+    )
+    out = Path(args.output_csv)
+    write_reconcile_csv(rows=rows, destination=out)
+    suspect = sum(1 for row in rows if row.amount_suspect)
+    print(
+        json.dumps(
+            {
+                "custas_lines": len(rows),
+                "suspect_lines": suspect,
+                "output_csv": str(out),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -703,6 +729,23 @@ def main(argv: list[str] | None = None) -> int:
         help="Limite de chamadas Gemini por execução (classificação estruturada).",
     )
 
+    custas_reconcile_parser = subparsers.add_parser(
+        "custas-reconcile",
+        help="Audita valores de custas vs base de cálculo e depósitos (mesmo CNJ)",
+    )
+    custas_reconcile_parser.add_argument(
+        "--custas-json",
+        default="data/custas-processuais.json",
+    )
+    custas_reconcile_parser.add_argument(
+        "--deposits-json",
+        default="data/depositos-judiciais.json",
+    )
+    custas_reconcile_parser.add_argument(
+        "--output-csv",
+        default="data/custas-reconcile.csv",
+    )
+
     casos_parser = subparsers.add_parser(
         "casos-scan",
         help="Classifica temas dos casos e cruza com depósitos judiciais",
@@ -776,6 +819,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.max_consumers == 0:
             args.max_consumers = None
         return _run_custas_scan(args)
+    if args.command == "custas-reconcile":
+        return _run_custas_reconcile(args)
     if args.command == "casos-scan":
         if args.max_consumers == 0:
             args.max_consumers = None

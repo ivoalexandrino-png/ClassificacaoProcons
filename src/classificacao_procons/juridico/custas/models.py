@@ -35,6 +35,7 @@ class CourtFeeRecord:
     extraction_method: str
     confidence: ExtractionConfidence
     notes: str | None = None
+    reference_base_brl: Decimal | None = None
 
 
 @dataclass
