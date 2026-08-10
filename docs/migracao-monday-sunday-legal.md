@@ -191,3 +191,73 @@ Proposta em fases; cada fase é aprovável isoladamente e **não** quebra a oper
 - As automações internas (Jan/Luciano, Controle→Contratos) já existem no Sunday ou serão
   recriadas por nós?
 - O cutover será por tema (contratos, jurídico, procon, acessos) ou tudo de uma vez?
+
+---
+
+## Resultado da Fase 0 - Sunday API
+
+### Validação autenticada de leitura (2026-08-10)
+
+Esta validação usou exclusivamente requisições `GET` autenticadas com o token injetado na
+VM. Não houve criação, alteração, upload ou exclusão de qualquer recurso no Sunday ou no
+Monday.
+
+**Autenticação e identidade**
+
+- O token foi aceito pelo Sunday: `GET /health`, `GET /auth/me`,
+  `GET /workspaces/mine`, `GET /workspaces/22` e `GET /boards` retornaram `200`.
+- Há endpoint de identidade (`GET /auth/me`). O token está associado a um usuário Sunday
+  habilitado, com `access_level` **`contributor`**, sem `admin_scopes`.
+- No workspace 22, esse usuário tem papel **`member`**. Portanto, o token não tem privilégio
+  administrativo nem leitura detalhada de boards.
+
+**Workspace e boards confirmados**
+
+- O workspace de destino existe e usa ID textual **`"22"`**: `Support - Finance, Legal,
+  People`.
+- A resposta informa `board_count: 6` e retorna os seis boards abaixo. Todos os IDs de
+  workspace e board observados são strings, não inteiros.
+
+| Sunday ID | Board |
+|---|---|
+| `"57"` | Weekly Support |
+| `"59"` | Legal - Audiências |
+| `"63"` | Cronograma + Processos Finance |
+| `"66"` | Legal - Controle de Assinaturas - Jan & Luciano |
+| `"67"` | Legal - Acessos |
+| `"68"` | Legal - Seguros |
+
+**Correção importante das hipóteses da descoberta não autenticada**
+
+- A API REST, o header `X-Sunday-Token` e os endpoints de listagem de workspace/boards foram
+  confirmados com autenticação real.
+- A hipótese de que o token permitiria levantar o shape completo dos boards foi corrigida:
+  para todos os seis boards, o token retorna **`403 Forbidden`** em `GET /boards/{id}`,
+  `GET /boards/{id}/groups`, `GET /boards/{id}/columns`, `GET /boards/{id}/items` e
+  `GET /boards/{id}/automations`.
+- Consequentemente, os endpoints de `values`, comentários e anexos não puderam ser
+  alcançados por item nesta credencial. Não é possível confirmar grupos, colunas, tipos de
+  coluna, itens, values, comentários, anexos, automações, nem o formato dos IDs desses
+  recursos sem acesso de leitura a pelo menos um board.
+- Não foram observados headers de paginação ou de rate limit nas respostas `200` e `403`.
+  O endpoint `GET /boards` retornou uma lista plana com seis elementos; isso não confirma a
+  inexistência de paginação ou limites em endpoints autorizados.
+
+**Pendências para concluir a parte somente leitura**
+
+1. Usar um token que tenha acesso de leitura a um board do workspace 22, ou conceder ao token
+   atual permissão de visualização em um board sandbox. Então repetir as leituras de grupos,
+   colunas, itens, values, comentários, anexos e automações.
+2. Com essa leitura autorizada, confirmar os tipos e formatos reais de IDs de grupo, coluna,
+   item, value, comentário e anexo, além de paginação e rate limit eventualmente expostos
+   nesses endpoints.
+
+**Pendências que exigem teste de escrita autorizado em sandbox**
+
+1. Criar uma automação `webhook` e gerar um evento para confirmar método HTTP, headers,
+   payload, retries e timeout.
+2. Criar colunas e gravar values válidos e inválidos para confirmar validação e coerção por
+   tipo.
+3. Fazer upload de um anexo pequeno para confirmar limite, resposta e associação ao item.
+4. Criar uma relação entre boards para verificar a restrição entre workspaces.
+5. Criar uma coluna `time_tracking` para confirmar se esse tipo é aceito pela API.
