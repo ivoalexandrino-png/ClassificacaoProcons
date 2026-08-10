@@ -128,11 +128,12 @@ Este é o domínio mais crítico e o único com **entrada** de eventos vindos do
    Fase 0). Nada muda em produção por ora.
 2. **Token de serviço**: Fase 0 usa os secrets `SUNDAY_API_TOKEN` + `SUNDAY_API_URL` já
    cadastrados. Antes do cutover, será emitido token por conta de serviço dedicada B4A.
-   *Nota operacional: esses dois secrets não foram injetados na VM desta sessão (segredos
-   entram só em VMs novas); a parte autenticada da descoberta segue pendente.*
+   Na VM nova de 2026-08-10, ambos foram injetados e a descoberta autenticada foi
+   concluída exclusivamente com `GET` e `OPTIONS` (F0.13).
 3. **Tipos de coluna**: catálogo completo confirmado via bundle do frontend (23 tipos) —
-   ver seção da Fase 0. Payloads por tipo confirmados na fonte do SPA; validação final por
-   leitura autenticada de um board real.
+   ver seção da Fase 0. A API real confirmou cinco tipos presentes no workspace 22
+   (`text`, `status`, `people`, `date`, `dropdown`); os demais ainda exigem exemplares
+   reais ou teste de escrita em sandbox.
 4. **Automações nativas**: catálogo mapeado (8 gatilhos, 14 ações). A ação `create_item`
    **não** tem seletor de board de destino (cria no mesmo board) → as automações A e B
    (Assinado→Contratos; mestre→audiências) **não** têm equivalente nativo cross-board e
@@ -236,10 +237,10 @@ Este é o domínio mais crítico e o único com **entrada** de eventos vindos do
 > Executada em 2026-08-10, **somente leitura**. Fontes: (a) inspeção do bundle público do
 > SPA (`https://sunday.b4a.ai`, Angular, 36 arquivos JS — serviços HTTP minificados mas com
 > rotas e payloads literais); (b) sondagens não autenticadas na API; (c) inventário
-> read-only do Monday via `MONDAY_API_TOKEN`. Os secrets `SUNDAY_API_TOKEN`/`SUNDAY_API_URL`
-> **não foram injetados nesta VM** (segredos só entram em VMs novas), então a validação
-> autenticada contra boards reais do Sunday ficou pendente (ver F0.11). Nada foi inventado:
-> o que não pôde ser confirmado está marcado como **pendente**.
+> read-only do Monday via `MONDAY_API_TOKEN`; (d) validação autenticada na API real do
+> Sunday, com os secrets `SUNDAY_API_TOKEN`/`SUNDAY_API_URL` injetados na VM nova.
+> Nenhum valor de secret foi impresso ou registrado. Nada foi inventado: o que não pôde
+> ser confirmado está marcado como **pendente**.
 
 ### F0.1 Plataforma e autenticação (confirmado)
 
@@ -254,6 +255,8 @@ Este é o domínio mais crítico e o único com **entrada** de eventos vindos do
 - CORS: `access-control-allow-methods: GET,HEAD,PUT,PATCH,POST,DELETE` (origem restrita a
   `https://sunday.b4a.ai`; irrelevante para chamadas server-to-server).
 - `GET /health` → 200 sem auth.
+- `GET /auth/me` → 200 com `X-Sunday-Token`. O token pertence a usuário ativo e habilitado
+  no Sunday, com `access_level=contributor`, `user_type=employee` e `admin_scopes=[]`.
 
 ### F0.2 Endpoints confirmados (extraídos dos services do SPA)
 
@@ -264,6 +267,11 @@ Este é o domínio mais crítico e o único com **entrada** de eventos vindos do
 `POST /{id}/members` (`{user_id, role}` — default `"member"`),
 `PATCH /{id}/members/{userId}/role`, `DELETE /{id}/members/{userId}`,
 `GET/PUT /{id}/context-doc`.
+
+Na API real, `GET /workspaces/22` inclui os arrays `boards` e `members`; as rotas
+`GET /workspaces/22/boards` e `GET /workspaces/22/members` retornaram 404. Em
+`boards[]`, `id` é o ID do **vínculo workspace-board** e `board_id` é o ID que deve ser
+usado nas rotas `/boards/{id}`. Confundir os dois produz 403.
 
 **Boards** (`/boards`): `GET /` (`?template=`, `?archived=true`), `POST /`
 (`{name, description?, template_key, area_options?, workspace_id}`), `GET/PATCH /{id}`,
@@ -440,9 +448,10 @@ O board Acessos (74 itens) está **excluído** (decisão 6).
    feito client-side sobre a lista de items+values, com cache local.
 5. Coluna de arquivo é por link; binários entram como anexos do item (sem coluna).
 6. Sem tipo location e sem data-com-hora.
-7. Rate limits e limites de tamanho de upload: **não identificáveis** sem token.
-8. Formato dos IDs (numérico/UUID) e URLs canônicas de item: **pendente** de leitura
-   autenticada.
+7. Nenhum header de rate limit foi retornado nas leituras autenticadas; isso não prova
+   ausência de limite. Limites de upload continuam pendentes de teste de escrita.
+8. IDs reais de workspace, board, vínculo, grupo, coluna, item e value são **strings
+   numéricas decimais**, não UUIDs. A URL canônica de item continua pendente.
 
 ### F0.9 Gaps em relação ao Monday (consolidado)
 
@@ -474,13 +483,9 @@ O board Acessos (74 itens) está **excluído** (decisão 6).
 
 ### F0.11 Pendências que exigem token e/ou teste de escrita autorizado
 
-**Somente leitura (assim que os secrets entrarem numa VM nova):**
-- `GET /auth/me` (identidade do token), `GET /workspaces/mine` e `GET /workspaces/22`
-  (workspace de destino: boards já existentes, membros).
-- Ler um board existente qualquer: formato dos IDs, shape completo de board/columns/
-  groups/items/values/comments/attachments, capabilities e `status_set` reais.
-- Listar automações de um board existente (se houver) para ver o shape persistido da ação
-  `webhook` (pode revelar campos além de `url`).
+**Somente leitura concluída:** identidade e permissões do token; workspace 22; boards,
+grupos, colunas, itens, values, comentários, anexos, automações, formato de IDs,
+paginação aparente e headers de rate limit. Resultado detalhado em F0.13.
 
 **Exigem escrita (não executar sem nova autorização; propor board sandbox dedicado):**
 1. **Ação `webhook` de automação**: criar board sandbox + automação `item_created` →
@@ -498,7 +503,93 @@ O board Acessos (74 itens) está **excluído** (decisão 6).
 
 ### F0.12 Segurança
 
-- Nenhum segredo foi lido, copiado ou registrado em log nesta fase. O board Acessos não
-  foi consultado além do nome/contagem no inventário de boards do workspace.
+- Nenhum secret foi impresso, copiado ou registrado em log. No Sunday, o board
+  `Legal - Acessos` está vazio; foram consultados apenas seu esquema e a lista vazia de
+  itens, sem leitura de values.
 - As consultas ao Monday foram exclusivamente de leitura (boards, grupos, colunas,
   contagens e datas de criação de itens; nenhum conteúdo de item foi exportado).
+
+### F0.13 Resultado autenticado na API real (2026-08-10)
+
+Todas as chamadas desta subseção foram `GET` ou `OPTIONS`. Não houve criação, alteração,
+upload, arquivamento ou exclusão no Sunday nem no Monday.
+
+**Autenticação e acesso**
+
+- Os dois secrets esperados estavam disponíveis na VM. O conteúdo do token não foi
+  exibido.
+- `GET /auth/me`, `GET /workspaces/mine`, `GET /workspaces/22` e `GET /boards`
+  responderam 200.
+- Workspace `22`: **Support - Finance, Legal, People**, slug `support`, ativo; o token é
+  `member`. A resposta informou 6 boards e 5 membros.
+- O token lê board, colunas, grupos, itens e automações. `GET /boards/{id}/views` e
+  `GET /boards/{id}/links` responderam 403: essas rotas exigem login e não aceitam este
+  token de API. `GET /boards/{id}/members` e `/capabilities` responderam 404; membros e
+  capabilities vêm embutidos em outras respostas.
+
+**Boards, grupos e colunas reais**
+
+| Board (ID real) | Grupos (`id`: nome) | Colunas (`id`: nome — tipo) |
+|---|---|---|
+| Weekly Support (`70`) | `216`: Itens | `386`: Nome — `text`; `387`: Status — `status`; `388`: Responsável — `people`; `389`: Data — `date`; `390`: Área — `dropdown` |
+| Legal - Audiências (`72`) | `218`: Itens; `219`: Audiencias Pendentes | `396`: Nome — `text`; `397`: Status — `status`; `398`: Responsável — `people`; `399`: Data — `date`; `400`: Área — `dropdown` |
+| Cronograma + Processos Finance (`74`) | `224`: teste; `221`: teste; `232`: Tarefas - Fechamento mensal - Interno; `231`: Tarefas Diárias; `233`: Fechamento mensal - Envios Contamac; `234`: Fechamento Brain - Dashboard Finance; `235`: Check list Contábil; `236`: Automatizações - Eficiência, eficiência e eficiência; `237`: Auditoria | `409`: Nome — `text`; `424`: COMO FAZER/DESCRIÇÃO — `text`; `413`: Área — `dropdown`; `411`: Responsável — `people`; `427`: Mês — `text`; `412`: PRAZO — `date`; `410`: Status — `status`; `426`: Drive/Evidência — `text` |
+| Legal - Controle de Assinaturas - Jan & Luciano (`77`) | `227`: Itens | `428`: Nome — `text`; `429`: Status — `status`; `430`: Responsável — `people`; `431`: Data — `date`; `432`: Área — `dropdown` |
+| Legal - Acessos (`78`) | `228`: Itens | `433`: Nome — `text`; `434`: Status — `status`; `435`: Responsável — `people`; `436`: Data — `date`; `437`: Área — `dropdown` |
+| Legal - Seguros (`79`) | `229`: Itens | `438`: Nome — `text`; `439`: Status — `status`; `440`: Responsável — `people`; `441`: Data — `date`; `442`: Área — `dropdown` |
+
+O `id` do vínculo retornado por `GET /workspaces/22` é, respectivamente, `57`, `59`,
+`63`, `66`, `67` e `68`; não deve ser usado como board ID. Os IDs reais são os da tabela.
+
+**Conteúdo e shapes observados**
+
+| Board | Itens | Values | Comentários | Anexos | Automações |
+|---|---:|---:|---:|---:|---:|
+| Weekly Support (`70`) | 12 | 0 | 0 | 0 | 0 |
+| Legal - Audiências (`72`) | 9 | 0 | 0 | 0 | 0 |
+| Cronograma + Processos Finance (`74`) | 166 | 273 | 0 | 0 | 0 |
+| Legal - Controle de Assinaturas - Jan & Luciano (`77`) | 0 | 0 | 0 | 0 | 0 |
+| Legal - Acessos (`78`) | 0 | 0 | 0 | 0 | 0 |
+| Legal - Seguros (`79`) | 0 | 0 | 0 | 0 | 0 |
+
+- Itens são retornados diretamente como array. O shape real inclui `id`, `board_id`,
+  `group_id`, `parent_item_id`, `name`, `description`, `status`, `target_date`,
+  responsáveis, campos de auditoria e `custom_fields`. Dois dos 12 itens de Weekly
+  Support têm `parent_item_id`.
+- Values são buscados por item em `GET /boards/items/{id}/values` e têm as chaves
+  `id`, `item_id`, `column_id`, `value`, `updated_at`, `updated_by_user`. Os 273 values
+  reais encontrados são strings nas colunas `text` `424`, `426` e `427`; os demais
+  formatos da tabela F0.4 ainda não foram comprovados contra valores persistidos.
+- Todas as consultas de comentários e anexos responderam 200 com arrays vazios. Isso
+  confirma as rotas de leitura, mas não o shape de um registro preenchido.
+- `GET /boards/{id}/automations` respondeu 200 para os seis boards, todos com array vazio.
+  Portanto, o shape persistido de automação e a ação `webhook` não foram confirmados por
+  leitura real.
+- Os seis boards usam `hierarchy_depth=1`, status de sistema `to_do`/`follow_up`/`done` e
+  capabilities `process=false`, `subitems=false`, `approvals=false`,
+  `time_tracking=false`, `calendar_anchor=true`.
+
+**Paginação e rate limit**
+
+- `GET /boards?limit=1` retornou os 6 boards.
+- `GET /boards/72/items?limit=1` retornou os 9 itens e
+  `GET /boards/74/items?limit=1&page=1` retornou os 166 itens.
+- Não houve campos nem headers de paginação. Para essas coleções, `limit` e `page` foram
+  ignorados e a resposta foi a lista completa.
+- Nenhuma resposta trouxe `RateLimit-*`, `X-RateLimit-*` ou `Retry-After`. Não se conclui
+  que a API seja ilimitada; apenas que ela não publica esses dados nas respostas testadas.
+
+**Correções sobre as hipóteses anteriores**
+
+1. O workspace 22 já tem seis boards, mas só **Legal - Audiências** e **Legal - Controle
+   de Assinaturas - Jan & Luciano** correspondem diretamente ao escopo integrado. Não
+   existem ainda os boards `procons`, `prazos`, `processos judiciais`, `processos
+   trabalhista`, `kpi - processos consumidores` e `Contratos`.
+2. O Controle (`77`) ainda é um template vazio, com um grupo e cinco colunas genéricas;
+   não possui as filas Jan/Luciano nem o esquema necessário à migração.
+3. A listagem de boards dentro do workspace usa dois IDs distintos (`id` do vínculo e
+   `board_id` real), detalhe ausente no levantamento pelo bundle.
+4. As rotas de coleção `/workspaces/22/boards` e `/workspaces/22/members` não existem;
+   boards e membros vêm embutidos em `GET /workspaces/22`.
+5. O catálogo de 23 tipos continua confirmado no SPA, mas a API real do workspace só
+   comprovou cinco tipos de coluna e values persistidos apenas para `text`.
