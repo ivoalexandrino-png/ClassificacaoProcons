@@ -128,10 +128,18 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
+          CONTROLE_PAUSE_CREATE: "true"
         run: |
           contratos-webhook compare-controle \
             --max-pages "${{ steps.params.outputs.max_pages }}" \
-            --export-pending-json pending-export.json
+            --export-pending-json pending-export.json \
+            --export-compare-json compare-controle-full.json \
+            --git-ref "${{ github.ref }}" \
+            --git-sha "${{ github.sha }}"
+          echo "compare_git_ref=${{ github.ref }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "compare_git_sha=${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "controle_pause_create=true" >> "$GITHUB_STEP_SUMMARY"
+          echo "allow_create=false" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload pending export
         if: ${{ steps.params.outputs.mode == 'compare' }}
@@ -140,6 +148,14 @@ jobs:
           name: controle-pending-export
           path: pending-export.json
           if-no-files-found: ignore
+
+      - name: Upload compare full JSON
+        if: ${{ steps.params.outputs.mode == 'compare' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-controle-full
+          path: compare-controle-full.json
+          if-no-files-found: error
 
       - name: Repair canonical Autentique links (Controle)
         if: ${{ steps.params.outputs.mode == 'repair' }}
