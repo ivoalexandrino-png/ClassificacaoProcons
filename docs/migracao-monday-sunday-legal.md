@@ -184,6 +184,57 @@ Proposta em fases; cada fase é aprovável isoladamente e **não** quebra a oper
 2. Confirmar as incógnitas do §5 (acesso assistido ao Sunday) e preencher o de-para do §7.
 3. Só então abrir as tarefas de implementação (Fase 1 em diante), uma por tema.
 
+## 11. Próximos passos — migrar os quadros menos relevantes primeiro
+
+Estratégia de "canário": começar pelos quadros de **menor criticidade e menor acoplamento**,
+para provar a integração com o Sunday ponta a ponta antes de tocar Contratos/prazos.
+
+### 11.1 Ranking por relevância/risco (do mais fácil ao mais crítico)
+
+| Ordem | Quadro | Escrita? | Acoplamento | Por que nesta posição |
+|-------|--------|----------|-------------|------------------------|
+| 1 | **Acessos** (credenciais) | **Só leitura** | Nenhum (resolve por título) | Zero risco de escrita: dá para ler do Sunday em *dry-run* e comparar com o Monday. Canário técnico ideal. Atenção: guarda senhas (sensível) e é dependência de Questor/Procon — manter Monday como fonte até validar. |
+| 2 | **KPI - Processos Consumidores** | Escrita (status/data) | Médio (busca por CNJ) | Quadro de métricas/relatório, menor criticidade operacional. Bom primeiro quadro de **escrita**. |
+| 3 | **audiencias** | Escrita | Médio (alimentado por automação do Monday a partir de Processos) | Secundário ao de prazos; volume menor. |
+| 4 | **procons** | Escrita | Baixo (standalone, por título) | Operacionalmente relevante (prazos regulatórios), mas isolado. |
+| 5 | **prazos** | Escrita | Alto (prazos fatais + dedup por CNJ) | Erro aqui = prazo perdido; migrar só depois de validar o fluxo. |
+| 6 | **processos judiciais / trabalhista** | Escrita | Alto (`board_relation`, quadro-mestre) | Origem dos casos; conecta prazos/audiências/KPI. |
+| 7 | **Contratos** (Controle + Contratos) | Escrita | Máximo (IDs fixos, webhook Autentique, automações internas Jan/Luciano) | Mais crítico e mais frágil; **por último**. |
+
+Recomendação: **Acessos (dry-run de leitura) como canário**, depois **KPI** como primeiro quadro
+de escrita. Só avançar para 4–7 após validar 1–2.
+
+### 11.2 Bloqueio comum a TODOS os quadros (o que precisamos primeiro)
+
+Nada pode ser migrado sem o *discovery* da API do Sunday (§5). Precisamos, do time B4A:
+
+1. **Endpoint + token do Sunday** (de teste, para este ambiente ou sessão assistida).
+2. **Tipo de API**: GraphQL compatível com o Monday? Isso decide o desenho da Fase 1:
+   - compatível → basta parametrizar base-URL + token no `monday/client.py`;
+   - incompatível → precisamos de um **adaptador de dialeto** atrás do mesmo choke point.
+3. **Upload de arquivo** e **formato de URL de item** no Sunday.
+4. Existe **ferramenta oficial de migração de dados** Monday→Sunday, ou faremos export/import?
+
+### 11.3 Checklist por quadro (repetir para cada canário)
+
+1. Criar/localizar o quadro correspondente no Sunday e preencher o de-para de IDs (§7).
+2. (Escrita) Migrar dados preservando as **chaves estáveis** (§8): protocolo/CPF, CNJ, NSU.
+3. Repontar **apenas** a config daquele quadro (env/secret) para o Sunday.
+4. Rodar em *dry-run*/paralelo e comparar com o Monday.
+5. Recriar no Sunday as **automações internas** que o quadro dependia (se houver).
+6. Cutover do quadro; manter rollback por variável (Fase 1).
+
+### 11.4 O que dá para adiantar em código agora (sem depender do Sunday)
+
+Trabalho de baixo risco, com `LEGAL_BACKEND=monday` como padrão (comportamento idêntico ao atual):
+
+- Extrair no `monday/client.py` a base-URL/endpoint/token para configuração (choke point).
+- Tirar os IDs fixos de Contratos (`constants.py`) para config parametrizável por backend.
+- Testes do "dialeto" mockado, mantendo os 932 testes atuais verdes.
+
+Isso só deve começar **após** a resposta do §11.2.2 (GraphQL ou não), para não retrabalhar o
+desenho do adaptador.
+
 ## Perguntas em aberto
 
 - O Sunday expõe API GraphQL compatível com o Monday, ou precisaremos de um adaptador?
