@@ -34,6 +34,7 @@ from classificacao_procons.contratos.controle_autentique_link import (
 from classificacao_procons.contratos.controle_board_scope import (
     is_controle_pending_track_group_title,
 )
+from classificacao_procons.contratos.controle_write_policy import require_controle_write_enabled
 from classificacao_procons.contratos.drive_routing import infer_category, infer_monday_tipo
 from classificacao_procons.contratos.gemini_extractor import ContractMetadata
 from classificacao_procons.contratos.models import ControleAssinaturasItem
@@ -480,6 +481,7 @@ def create_controle_assinatura_item(
     idempotency_key: str | None = None,
 ) -> tuple[str, str | None]:
     """Cria item no Controle Assinaturas."""
+    require_controle_write_enabled()
     board_context = load_board_metadata(
         api_token=api_token,
         board_id=MONDAY_CONTROLE_ASSINATURAS_BOARD_ID,
@@ -717,6 +719,7 @@ def update_controle_tipo(
     tipo_label: str,
 ) -> None:
     """Preenche coluna Tipo no item gatilho (sem alterar status)."""
+    require_controle_write_enabled()
     column_details = _load_controle_column_details(api_token=api_token)
     column_by_title = {detail.column.title.casefold(): detail.column for detail in column_details}
     tipo_col = columns_by_id_or_title(column_by_title, CONTROLE_COL_TIPO, ("tipo",))
@@ -793,6 +796,7 @@ def ensure_autentique_id_on_controle_items(
     items: tuple[ControleAssinaturasItem, ...] | list[ControleAssinaturasItem],
 ) -> None:
     """Grava o ID do Autentique no link de assinatura de itens legados (um ID por item)."""
+    require_controle_write_enabled()
     normalized_id = document_id.casefold().strip()
     if not normalized_id:
         return
@@ -843,6 +847,7 @@ def update_controle_item_signature_link(
     signature_link_text: str,
 ) -> None:
     """Atualiza somente o campo de link de assinatura no Controle."""
+    require_controle_write_enabled()
     column_details = _load_controle_column_details(api_token=api_token)
     column_by_title = {detail.column.title.casefold(): detail.column for detail in column_details}
     link_col = columns_by_id_or_title(
@@ -868,6 +873,7 @@ def update_controle_item_signature_link(
 
 def archive_controle_item(*, api_token: str, item_id: str) -> None:
     """Arquiva item duplicado no quadro Controle Assinaturas (reversível no Monday)."""
+    require_controle_write_enabled()
     _graphql_request(
         api_token=api_token,
         query="""
@@ -889,6 +895,7 @@ def update_controle_item_progress(
     current_group_id: str | None = None,
 ) -> None:
     """Atualiza status/grupo de item pendente no Controle (sem alterar Tipo)."""
+    require_controle_write_enabled()
     column_values: dict[str, object] = {
         CONTROLE_COL_STATUS: {"label": status_label},
     }
@@ -941,6 +948,7 @@ def update_controle_item_fields(
     clear_tipo: bool = False,
 ) -> None:
     """Atualiza colunas do Controle sem recriar o item."""
+    require_controle_write_enabled()
     column_details = _load_controle_column_details(api_token=api_token)
     column_by_title = {detail.column.title.casefold(): detail.column for detail in column_details}
     values: dict[str, Any] = {}
@@ -1027,6 +1035,7 @@ def update_controle_assinado(
     signed_at: date,
 ) -> None:
     """Atualiza item do Controle Assinaturas para Assinado e move para grupo Assinados."""
+    require_controle_write_enabled()
     column_values = {
         CONTROLE_COL_STATUS: {"label": CONTROLE_STATUS_ASSINADO},
         CONTROLE_COL_DATA_ASSINATURA: {"date": signed_at.isoformat()},

@@ -220,6 +220,10 @@ def _build_compare_controle_payload(
         ENV_PAUSE_CREATE,
         is_controle_create_paused,
     )
+    from classificacao_procons.contratos.controle_write_policy import (
+        ENV_CONTROLE_WRITE_ENABLED,
+        is_controle_write_enabled,
+    )
 
     diagnostic_rows = getattr(result, "document_diagnostics", ()) or ()
     diag_summary = getattr(result, "diagnostic_summary", None)
@@ -273,6 +277,8 @@ def _build_compare_controle_payload(
             "mode": "compare_controle_read_only",
             "controle_pause_create_active": is_controle_create_paused(),
             "controle_pause_create_env": os.environ.get(ENV_PAUSE_CREATE, "true"),
+            "controle_write_enabled": is_controle_write_enabled(),
+            "controle_write_enabled_env": os.environ.get(ENV_CONTROLE_WRITE_ENABLED, "false"),
             "allow_create_cli": False,
             "mutations_executed": False,
         },
