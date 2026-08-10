@@ -135,3 +135,23 @@ def test_trigger_certidao_refresh_success() -> None:
 def test_trigger_certidao_refresh_failure() -> None:
     request = _FakeRequest(_FakeResponse({"sucesso": False}))
     assert trigger_certidao_refresh(request, "https://b4a.zen.questor.com.br/", 1) is False
+
+
+def test_latest_historico_and_diagnostico_enrichment() -> None:
+    from classificacao_procons.questor.portal import latest_historico_by_certidao
+
+    hist = [
+        {"CertidaoEmpresaId": 15, "Data": "2025-04-24T20:00", "Situacao": "antigo",
+         "ProximaCapturaStr": "x"},
+        {"CertidaoEmpresaId": 15, "Data": "2026-08-10T15:26", "Situacao": "Fila de Processamento",
+         "ProximaCapturaStr": "Aguardando Captura"},
+    ]
+    latest = latest_historico_by_certidao(hist)
+    assert latest[15]["Situacao"] == "Fila de Processamento"
+
+    cert = certidao_from_api_row(
+        {"TipoCertidaoDescricao": "PGFN - PJ", "SituacaoCertidao": 5, "Id": 15},
+        latest[15],
+    )
+    assert cert.diagnostico == "Fila de Processamento"
+    assert cert.status_captura == "Aguardando Captura"

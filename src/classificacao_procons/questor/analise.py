@@ -89,16 +89,34 @@ def format_cnpj(cnpj: str | None) -> str | None:
 
 
 def is_awaiting_conference(certidao: Certidao) -> bool:
-    """True quando a certidão está pendente de conferência no Questor.
+    """True quando a própria certidão está pendente de conferência no Questor.
 
-    O Questor pode exibir uma certidão como Irregular enquanto a captura aguarda
-    conferência (protocolo "Aguardando conferência"); nesse caso a situação ainda
-    não é definitiva e não deve gerar alarme de irregularidade real.
+    Baseado no protocolo da certidão ("Aguardando conferência") — situação ainda
+    não definitiva. NÃO usa o status do histórico ("Fila de Processamento"), que
+    reflete a recaptura que nós mesmos disparamos diariamente e, se usado aqui,
+    esconderia irregularidades reais.
     """
     if certidao.conferida:
         return False
     protocolo = normalize_label(certidao.protocolo or "")
-    return "aguardando" in protocolo or "conferenc" in protocolo
+    return "aguardando conferenc" in protocolo or "conferencia" in protocolo
+
+
+def compose_diagnostico(certidao: Certidao) -> str | None:
+    """Monta um diagnóstico legível a partir do histórico do Questor."""
+    parts: list[str] = []
+    status = (certidao.status_captura or "").strip()
+    if status and any(ch.isalpha() for ch in status) and status.casefold() not in {
+        "regular",
+        "habilitado",
+        "ativo",
+    }:
+        parts.append(status)
+    motivo = (certidao.diagnostico or "").strip()
+    if motivo and motivo.casefold() not in {"regular", "habilitado", "ativo"}:
+        parts.append(motivo)
+    unique = list(dict.fromkeys(parts))
+    return " — ".join(unique) or None
 
 
 def analyze_certidao(
@@ -119,6 +137,7 @@ def analyze_certidao(
         "uf": certidao.uf,
         "data_emissao": certidao.data_emissao,
         "protocolo": certidao.protocolo,
+        "diagnostico": compose_diagnostico(certidao),
         "source_url": certidao.url,
     }
 

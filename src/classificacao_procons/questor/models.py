@@ -57,6 +57,10 @@ class Certidao:
     data_validade: date | None = None
     protocolo: str | None = None
     conferida: bool | None = None
+    # Diagnóstico da última captura (histórico do Questor): motivo/situação legível
+    # (ex.: "Inscrição federal inválida", "Fila de Processamento") e status da captura.
+    diagnostico: str | None = None
+    status_captura: str | None = None
     observacao: str | None = None
     url: str | None = None
 
@@ -111,6 +115,7 @@ class FiscalIssue:
     data_referencia: date | None = None
     remetente: str | None = None
     protocolo: str | None = None
+    diagnostico: str | None = None
     orientacao: str | None = None
 
 

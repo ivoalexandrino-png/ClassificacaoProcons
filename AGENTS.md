@@ -131,7 +131,7 @@ questor check --portal-url https://b4a.zen.questor.com.br/ --empresa "B4A / MMKT
 - `0 11 * * 0,2-6` (08:00 BRT, demais dias) → `questor check` **incremental**: só pendências **novas** (dedup via `actions/cache`); dias sem novidade não geram e-mail.
 - `0 11 * * 1` (08:00 BRT, segunda) → `questor check --weekly`: **resumo semanal consolidado** com todas as pendências ainda em aberto (mesmo já avisadas), num único e-mail.
 
-Destinatários: `juridico@b4a.com.br` e `fiscal@b4a.com.br`. Cada pendência traz um **diagnóstico** (status do Questor, ex.: "Aguardando conferência"/"Restrição") para entender o que aconteceu. Secrets: `MONDAY_API_TOKEN`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`; vars opcionais `QUESTOR_PORTAL_URL`, `QUESTOR_MONDAY_ITEM`.
+Destinatários: `juridico@b4a.com.br` e `fiscal@b4a.com.br`. Na segunda, se não houver pendência, envia uma confirmação **"tudo regular"**. Cada pendência traz um **diagnóstico** vindo do histórico de capturas do Questor (`escritorio/cnd/historicocertidao/listar`, campo `Situacao`/`ProximaCapturaStr`) — ex.: "Requer Revisão — campo Data de Nascimento obrigatório", "Fila de Processamento", "Inscrição federal inválida" — para entender o que aconteceu. Obs.: o status do histórico é só informativo; a severidade não é rebaixada por "Fila de Processamento" (é a recaptura que nós mesmos disparamos). Secrets: `MONDAY_API_TOKEN`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`; vars opcionais `QUESTOR_PORTAL_URL`, `QUESTOR_MONDAY_ITEM`.
 
 Playwright: rodar `playwright install chromium` (o update script já faz). O login do Questor é sessão única — evite acessos concorrentes (o cron roda às 08:00 BRT).
 

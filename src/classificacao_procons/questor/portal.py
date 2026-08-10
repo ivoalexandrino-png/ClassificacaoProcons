@@ -41,6 +41,7 @@ DEFAULT_TAKE: Final = 2000
 
 CERTIDOES_ENDPOINT: Final = "escritorio/cnd/certidaoempresa/listarcertidaoempresa"
 CERTIDAO_RENEW_ENDPOINT: Final = "escritorio/cnd/certidaoempresa/RenovarCertidao"
+CERTIDAO_HISTORICO_ENDPOINT: Final = "escritorio/cnd/historicocertidao/listar"
 CAIXA_POSTAL_ENDPOINT: Final = "escritorio/dte/capturacaixapostal/listar"
 NOTIFICATION_URL_TEMPLATE: Final = "https://www.dec.fazenda.sp.gov.br/DEC/UCLogin/login.aspx"
 
@@ -130,11 +131,26 @@ def trigger_certidao_refresh(request: Any, base_url: str, cert_id: int) -> bool:
     return bool(payload.get("sucesso"))
 
 
-def certidao_from_api_row(row: dict[str, Any]) -> Certidao:
-    """Converte uma linha do endpoint de certidões em ``Certidao``."""
+def _clean(value: Any) -> str | None:
+    return (str(value).strip() or None) if value is not None else None
+
+
+def certidao_from_api_row(
+    row: dict[str, Any],
+    historico_row: dict[str, Any] | None = None,
+) -> Certidao:
+    """Converte uma linha do endpoint de certidões em ``Certidao``.
+
+    ``historico_row`` (última captura no histórico) enriquece com o motivo/situação
+    legível (ex.: "Inscrição federal inválida", "Fila de Processamento").
+    """
     tipo = (row.get("TipoCertidaoDescricao") or "").strip() or None
     categoria = (row.get("Categoria") or "").strip() or None
     orgao = tipo or categoria or "Certidão"
+    diagnostico = status_captura = None
+    if historico_row:
+        diagnostico = _clean(historico_row.get("Situacao"))
+        status_captura = _clean(historico_row.get("ProximaCapturaStr"))
     return Certidao(
         orgao=orgao,
         situacao=situacao_from_questor_code(row.get("SituacaoCertidao")),
@@ -146,7 +162,27 @@ def certidao_from_api_row(row: dict[str, Any]) -> Certidao:
         data_validade=parse_brazilian_date(row.get("CertidaoDataVencimento")),
         protocolo=(row.get("CertidaoProtocolo") or "").strip() or None,
         conferida=(row.get("Conferida") == 1) if row.get("Conferida") is not None else None,
+        diagnostico=diagnostico,
+        status_captura=status_captura,
     )
+
+
+def latest_historico_by_certidao(rows: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """Mapa CertidaoEmpresaId → última entrada do histórico (por Data)."""
+    latest: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        raw_id = row.get("CertidaoEmpresaId")
+        if raw_id is None:
+            continue
+        try:
+            key = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        data = str(row.get("Data") or "")
+        current = latest.get(key)
+        if current is None or data > str(current.get("Data") or ""):
+            latest[key] = row
+    return latest
 
 
 def mensagem_from_api_row(row: dict[str, Any]) -> MensagemCaixaPostal:
@@ -267,6 +303,29 @@ def refresh_stale_certidoes(options: QuestorPortalOptions) -> RefreshResult:
     return RefreshResult(stale_ids=tuple(stale_ids), triggered=triggered)
 
 
+def _row_id(row: dict[str, Any]) -> int | None:
+    try:
+        return int(row["Id"]) if row.get("Id") is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _fetch_historico_map(page: Any, base_url: str, *, take: int) -> dict[int, dict[str, Any]]:
+    """Histórico de capturas (GET) → última entrada por certidão. Falha não bloqueia."""
+    try:
+        response = page.request.get(
+            f"{base_url}{CERTIDAO_HISTORICO_ENDPOINT}"
+            f"?skip=0&take={take}&requireTotalCount=true",
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+        if response.status != 200:
+            return {}
+        rows = response.json().get("data", [])
+    except (ValueError, KeyError):
+        return {}
+    return latest_historico_by_certidao(rows)
+
+
 def fetch_questor_snapshot(options: QuestorPortalOptions) -> QuestorSnapshot:
     """Login no Questor e coleta certidões + caixa postal via API interna."""
     if not options.portal_url:
@@ -299,12 +358,16 @@ def fetch_questor_snapshot(options: QuestorPortalOptions) -> QuestorSnapshot:
             mensagens_rows = _fetch_dataset(
                 page, base_url, CAIXA_POSTAL_ENDPOINT, take=options.take,
             )
+            historico_map = _fetch_historico_map(page, base_url, take=options.take)
         except PlaywrightTimeoutError as exc:
             raise QuestorPortalError("Questor não respondeu a tempo durante o acesso.") from exc
         finally:
             browser.close()
 
-    certidoes = tuple(certidao_from_api_row(row) for row in certidoes_rows)
+    certidoes = tuple(
+        certidao_from_api_row(row, historico_map.get(_row_id(row)))
+        for row in certidoes_rows
+    )
     mensagens = tuple(mensagem_from_api_row(row) for row in mensagens_rows)
     return QuestorSnapshot(
         captured_at=datetime.now(UTC),

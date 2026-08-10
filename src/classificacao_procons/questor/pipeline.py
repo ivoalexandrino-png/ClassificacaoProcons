@@ -25,6 +25,7 @@ from classificacao_procons.questor.notifier import (
     GmailSender,
     GmailSenderError,
     build_alert_email,
+    build_all_clear_email,
 )
 from classificacao_procons.questor.policy import (
     DEFAULT_CAIXA_MODE,
@@ -230,6 +231,30 @@ def run_questor_check(
         new_issues = analysis.issues
 
     if not analysis.has_problems:
+        # No resumo semanal, envia uma confirmação "tudo regular" mesmo sem pendência.
+        if options.weekly_digest and not options.dry_run and options.recipients:
+            if not has_gmail_send_access(options.token_path):
+                raise QuestorPipelineError(
+                    "Token Gmail sem permissão de envio. Reautorize com: procon-email auth",
+                )
+            email = build_all_clear_email(
+                analysis,
+                to=list(options.recipients),
+                cc=list(options.cc),
+                extra_note=backlog_note,
+            )
+            try:
+                sender = GmailSender.from_credentials(token_path=options.token_path)
+                message_id = sender.send(email, sender=options.sender)
+            except (GmailSenderError, GoogleAuthError) as exc:
+                raise QuestorPipelineError(str(exc)) from exc
+            return QuestorPipelineResult(
+                status="weekly_ok_sent",
+                analysis=analysis,
+                alert_sent=True,
+                alert_recipients=tuple(options.recipients),
+                message_id=message_id,
+            )
         return QuestorPipelineResult(status="ok", analysis=analysis)
 
     if not new_issues:

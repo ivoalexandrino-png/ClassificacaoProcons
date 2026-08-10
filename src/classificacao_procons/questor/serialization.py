@@ -48,6 +48,8 @@ def _certidao_from_dict(data: dict[str, Any]) -> Certidao:
         data_validade=parse_brazilian_date(data.get("data_validade")),
         protocolo=data.get("protocolo"),
         conferida=data.get("conferida"),
+        diagnostico=data.get("diagnostico"),
+        status_captura=data.get("status_captura"),
         observacao=data.get("observacao"),
         url=data.get("url"),
     )

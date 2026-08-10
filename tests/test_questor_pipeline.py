@@ -151,6 +151,39 @@ class TestRunQuestorCheck:
         assert len(result.new_issues) == 1
         assert sender.send.call_count == 2
 
+    @patch("classificacao_procons.questor.pipeline.GmailSender")
+    @patch(
+        "classificacao_procons.questor.pipeline.has_gmail_send_access",
+        return_value=True,
+    )
+    def test_weekly_sends_all_clear_when_no_problems(
+        self,
+        _send_access,
+        sender_cls,
+        tmp_path,
+    ) -> None:
+        sender = MagicMock()
+        sender.send.return_value = "gmail-ok"
+        sender_cls.from_credentials.return_value = sender
+        options = QuestorPipelineOptions(
+            recipients=("fiscal@b4a.com",),
+            state_path=tmp_path / "state.json",
+            weekly_digest=True,
+        )
+        result = run_questor_check(options, snapshot=_clean_snapshot(), today=TODAY)
+        assert result.status == "weekly_ok_sent"
+        assert result.alert_sent is True
+        sender.send.assert_called_once()
+
+    def test_daily_stays_silent_when_no_problems(self, tmp_path) -> None:
+        options = QuestorPipelineOptions(
+            recipients=("fiscal@b4a.com",),
+            state_path=tmp_path / "state.json",
+        )
+        result = run_questor_check(options, snapshot=_clean_snapshot(), today=TODAY)
+        assert result.status == "ok"
+        assert result.alert_sent is False
+
     def test_should_raise_when_no_recipients(self, tmp_path) -> None:
         options = QuestorPipelineOptions(state_path=tmp_path / "state.json")
         with pytest.raises(QuestorPipelineError, match="destinatário"):

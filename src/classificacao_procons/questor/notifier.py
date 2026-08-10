@@ -93,7 +93,7 @@ def _issue_meta_lines(issue: FiscalIssue) -> list[str]:
         lines.append(f"Empresa/Titular: {empresa}")
     orgao = issue.orgao + (f" / {issue.uf}" if issue.uf else "")
     lines.append(f"Órgão: {orgao}")
-    status = _meaningful_protocolo(issue.protocolo)
+    status = issue.diagnostico or _meaningful_protocolo(issue.protocolo)
     if status:
         lines.append(f"Situação no Questor: {status}")
     if issue.remetente:
@@ -198,6 +198,43 @@ def build_alert_bodies(
         "<p>Favor providenciar a regularização junto ao time fiscal e de contabilidade.</p>"
     )
     return text_body, html_body
+
+
+def build_all_clear_email(
+    analysis: QuestorAnalysis,
+    *,
+    to: list[str],
+    cc: list[str] | None = None,
+    extra_note: str | None = None,
+) -> BuiltEmail:
+    """E-mail de confirmação semanal quando não há pendências em aberto."""
+    empresa = _empresa_label(analysis)
+    captured = analysis.snapshot.captured_at.strftime("%d/%m/%Y %H:%M")
+    n_cert = len(analysis.snapshot.certidoes)
+    corpo = (
+        f"Nenhuma pendência em aberto no Questor — {empresa}.\n"
+        f"Coletado em: {captured}.\n"
+        f"Certidões monitoradas: {n_cert} (todas regulares/vigentes). "
+        "Caixa postal sem itens relevantes não lidos.\n"
+    )
+    text_body = corpo + (f"\n{extra_note}\n" if extra_note else "") + f"\n{FRESHNESS_NOTE}\n"
+    note_html = f"<p><em>{escape(extra_note)}</em></p>" if extra_note else ""
+    html_body = (
+        f"<p>Resumo semanal do Questor — <strong>{escape(empresa)}</strong><br>"
+        f"Coletado em: {escape(captured)}</p>"
+        f"<p><strong>Nenhuma pendência em aberto.</strong> "
+        f"Certidões monitoradas: {n_cert} (todas regulares/vigentes); "
+        "caixa postal sem itens relevantes não lidos.</p>"
+        f"{note_html}"
+        f"<p style=\"color:#555;font-size:12px\">{escape(FRESHNESS_NOTE)}</p>"
+    )
+    return BuiltEmail(
+        subject=f"[Questor] Resumo semanal — tudo regular — {empresa}",
+        text_body=text_body,
+        html_body=html_body,
+        to=tuple(to),
+        cc=tuple(cc or ()),
+    )
 
 
 def build_alert_email(
