@@ -39,6 +39,12 @@ def _deposit_value(case: ConsumerCaseInsight) -> Decimal | None:
     return case.total_judicial_deposits_brl
 
 
+def _financial_exposure(case: ConsumerCaseInsight) -> Decimal | None:
+    if case.best_condemnation_brl is not None and case.best_condemnation_brl > 0:
+        return case.best_condemnation_brl
+    return _deposit_value(case)
+
+
 def benchmark_similar_cases(
     *,
     complaint_text: str,
@@ -57,16 +63,17 @@ def benchmark_similar_cases(
         if case.primary_theme in themes
         or (include_secondary and any(theme in themes for theme in case.secondary_themes))
     ]
-    deposit_values = [value for case in matched if (value := _deposit_value(case)) is not None]
+    deposit_values = [value for case in matched if (value := _financial_exposure(case)) is not None]
     condemnation_values = [
-        case.condemnation_amount_brl
+        case.best_condemnation_brl or case.condemnation_amount_brl or case.kpi_condemnation_brl
         for case in matched
-        if case.condemnation_amount_brl is not None and case.condemnation_amount_brl > 0
+        if (case.best_condemnation_brl or case.condemnation_amount_brl or case.kpi_condemnation_brl)
     ]
+    condemnation_values = [value for value in condemnation_values if value and value > 0]
 
     ranked_samples = sorted(
         matched,
-        key=lambda case: _deposit_value(case) or Decimal("0"),
+        key=lambda case: _financial_exposure(case) or Decimal("0"),
         reverse=True,
     )
     samples = tuple(case.consumer_folder for case in ranked_samples[:max_samples])
