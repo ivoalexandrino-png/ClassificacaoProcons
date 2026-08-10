@@ -515,6 +515,66 @@ paginação aparente e headers de rate limit. Resultado detalhado em F0.13.
 7. **Shape de comments/attachments**: assim que existir item com comentário/anexo num
    board acessível (ou no sandbox), capturar o shape real de leitura.
 
+### F0.11a Autorização de tokens de API (investigação do 403, 2026-08-10)
+
+> Investigado **somente por leitura** (bundle público do SPA + sondagens GET sem auth).
+> O backend não é inspecionável (repositório não acessível a este ambiente), então a regra
+> exata do guard de token é inferível apenas até o limite documentado abaixo.
+
+**Modelo de acesso do Sunday (catálogo literal da tela Admin → Acessos):**
+
+| `access_level` | Workspaces | Boards | Gestão |
+|---|---|---|---|
+| `owner` | todos, mesmo sem ser membro | todos, mesmo sem ser membro | tudo (inclusive Owners; teto de 3) |
+| `super_admin` | todos | todos | tudo, exceto Owners |
+| `admin` | vê/abre todos (pode gerenciar sem se adicionar) | **só boards dos quais é dono/membro ou de workspaces dos quais faz parte** — a menos que o escopo `boards` libere gestão | conforme `admin_scopes` |
+| `contributor` | só onde é membro | só boards próprios, com membership, **ou ligados a um workspace do qual faz parte** | cria/edita o próprio trabalho |
+| `reader` | só onde é membro (leitura) | somente leitura | nada |
+
+- `admin_scopes` são **escopos administrativos de gestão**, só têm efeito quando
+  `access_level = admin`. Valores conhecidos no frontend: `people`, `boards`,
+  `module:growth`, `team:b2c` (famílias `module:*` e `team:*`). Não são scopes de API.
+- Quem altera nível/escopos: tela Admin (People) via `PATCH /users/{id}/access` com
+  `{access_level, admin_scopes}` — acessível a `owner`/`super_admin`/`admin` com escopo
+  `people` (há também um atalho por `hierarchy_level >= 13` num helper de UI). Um
+  `contributor` **não** consegue atribuir escopos a si mesmo.
+- `membership = member` é o papel **dentro do workspace** (`POST /workspaces/{id}/members`
+  aceita `{user_id, role}` com default `"member"`; há `PATCH .../members/{id}/role`).
+
+**Tokens de API (Settings → API Access):**
+
+- Endpoints: `GET /auth/me/api-tokens` (lista), `POST /auth/me/api-tokens` (cria),
+  `DELETE /auth/me/api-tokens/{id}` (revoga).
+- Payload de criação: **somente `{name}`** (opcional). A resposta traz `{secret, token}`
+  e o secret aparece uma única vez. **Não existem** campos de scopes, permissions, role,
+  board_ids ou workspace_ids — nem na UI nem no service do SPA.
+- Texto oficial da página: "Conecte o Claude, o Cursor ou qualquer IDE diretamente à sua
+  conta do Sunday. Gere um token pessoal e entregue ao assistente — ele passa a criar
+  tarefas, comentar e **agir como você**, via API."
+- Conclusão: por design, o token **herda as permissões do usuário** (impersonação plena);
+  não há como "gerar token com mais permissões" — a permissão é do usuário, não do token.
+
+**Sobre o 403 em board/grupos/colunas/itens/automações com token de `contributor`:**
+
+- A regra documentada de board para `contributor` (dono, membro do board, ou board ligado
+  a workspace do qual é membro) é a mesma que faz o app funcionar — o SPA chama exatamente
+  os mesmos endpoints (`GET /boards/{id}`, `/groups`, `/columns`, `/items`,
+  `/automations`) com JWT de sessão. Logo, se o mesmo usuário recebe 200 via app e 403 via
+  token, a divergência está no **guard de autenticação por token no backend** (por
+  exemplo, principal montado sem as memberships de workspace) — não é falta de acesso do
+  usuário nem scope de token, que não existe.
+- Alternativa a descartar antes de concluir bug: 403 usado como resposta genérica para
+  **board id inexistente/não visível** (anti-enumeração). Se o teste anterior consultou um
+  id incorreto (ex.: id do Monday, ou board de outro workspace), o 403 seria esperado.
+- Bateria de discriminação (somente GET, com o token, em VM nova):
+  1. `GET /auth/me` → confirmar `id`/`access_level` da conta esperada;
+  2. `GET /workspaces/mine` → workspace 22 presente?
+  3. `GET /workspaces/22/boards` → capturar os ids reais dos boards;
+  4. `GET /boards/{id}` com um id **retornado no passo 3** → se 403 aqui, é o guard do
+     token (reportar ao time do Sunday); se 200, o 403 anterior era id errado;
+  5. repetir para `/groups`, `/columns`, `/items`, `/automations` e registrar o status de
+     cada um (o guard pode diferir por rota).
+
 ### F0.12 Segurança
 
 - Nenhum secret foi impresso, copiado ou registrado em log. No Sunday, o board
