@@ -1,0 +1,48 @@
+name: Inspect contratos-webhook (Cloud Run read-only)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Describe Cloud Run service
+        env:
+          PROJECT_ID: b4a-prj-integration-prd
+          REGION: southamerica-east1
+          SERVICE: contratos-webhook
+        run: |
+          gcloud config set project "${PROJECT_ID}"
+          gcloud run services describe "${SERVICE}" \
+            --region="${REGION}" \
+            --format=json > cloud-run-service.json
+          echo "## Cloud Run ${SERVICE}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          jq '{
+            latestReadyRevision: .status.latestReadyRevisionName,
+            traffic: .status.traffic,
+            image: .spec.template.spec.containers[0].image,
+            env: (.spec.template.spec.containers[0].env // []),
+            commitAnnotation: (.metadata.annotations["run.googleapis.com/build-source-location"] // null)
+          }' cloud-run-service.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload inspect JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-run-inspect
+          path: cloud-run-service.json
