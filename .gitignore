@@ -19,6 +19,7 @@ credentials/
 *.json
 !pyproject.toml
 !.cursor/environment.json
+!docs/sunday-fase0-write-report.json
 
 # Downloads locais
 downloads/

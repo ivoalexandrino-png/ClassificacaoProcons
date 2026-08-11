@@ -717,20 +717,60 @@ O `id` do vínculo retornado por `GET /workspaces/22` é, respectivamente, `57`,
 > manual deve ser minimizada seguindo a ordem nativo → transformação → fallback em código
 > → tabela local → outro tipo de coluna → comentário/anexo → manual.
 
-**Status de execução:** os Testes 1–8 (escrita real) estão implementados em
-`scripts/sunday_fase0_write_tests.py`, mas **ainda não executados** — o secret
-`SUNDAY_API_TOKEN` não existe na VM desta sessão (segredos só são injetados em VMs
-novas; verificado em ambiente e processos). O script é autossuficiente e com
-guard-rails: confere o nome do board 80 antes de qualquer escrita, só grava nos dois
-sandboxes e em recursos criados por ele mesmo, usa apenas dados fictícios
-(`TESTE-FICTICIO…`), nunca imprime o token e gera relatório JSON por passo (endpoint,
-método, payload, status, resposta). Cobre: CRUD completo (T1), os 21 tipos de coluna
-(T2), board_relation com o segundo sandbox (T3), mirror (T5), anexos com PDF fictício
-gerado localmente (T6), comentários com menção/edição/exclusão (T7), automação
-`item_created`→`webhook` com endpoint de eco público e fase de erro 500 para observar
-retries (T8), subitens via `hierarchy_depth` e `GET /users/directory` (mapeamento de
-pessoas). Execução: `python scripts/sunday_fase0_write_tests.py` numa VM nova com os
-secrets (usar `--skip-webhook` para pular o T8).
+**Status de execução (2026-08-11, VM Cloud Agent):** Testes 1–8 executados com
+`scripts/sunday_fase0_write_tests.py` usando `SUNDAY_API_TOKEN` e `SUNDAY_API_URL`.
+Preflight: board `80` confirmado pelo nome exato `SANDBOX - API SUNDAY - NÃO USAR`.
+Board de relação criado/reutilizado: **`81`** (`SANDBOX - API SUNDAY - RELATION`).
+Relatório passo a passo (sem segredos; e-mails redigidos):
+`docs/sunday-fase0-write-report.json`.
+
+**Resumo executivo:** o token de API **consegue** criar/alterar itens, status de sistema,
+comentários (criar/excluir), anexos por **link**, automações e disparar **webhook** em
+`item_created`. O mesmo token **não consegue** alterar esquema do board
+(`POST /boards/{id}/columns`, `PATCH /boards/{id}`, `PATCH /boards/groups/{id}`) nem
+upload binário (`POST …/attachments/file`) nem editar comentários — todas com **403**
+`"Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige
+login."` (rotas de sessão, já previstas em F0.11a/F0.13). Por isso **T2, T3 e T5
+falharam** antes de exercitar `values`; **board_relation não foi testado empiricamente**
+via `PATCH …/values/{columnId}`. Campos de sistema (`status`, `target_date`, `area`)
+gravam via `PATCH /boards/items/{id}` (confirmado fora do script).
+
+#### Resultados Testes 1–8 (escrita real)
+
+| # | Funcionalidade | Endpoint | Método | Payload confirmado | HTTP | Resultado | Limitação | Fallback |
+|---|----------------|----------|--------|-------------------|------|-----------|-----------|----------|
+| T1 | CRUD grupo (criar) | `/boards/80/groups` | POST | `{name, color}` | 201 | OK | — | — |
+| T1 | CRUD grupo (renomear) | `/boards/groups/{id}` | PATCH | `{name}` | 403 | Falhou | rota só sessão | criar grupo com nome final; ou UI |
+| T1 | CRUD item | `/boards/80/items` | POST/PATCH | `{name, group_id, description}` | 201/200 | OK | — | — |
+| T1 | Status de sistema | `/boards/items/{id}/status` | PATCH | `{status, cascade}` | 200 | OK | — | — |
+| T1 | Coluna custom + value | `/boards/80/columns` + `…/values/{col}` | POST/PATCH | `{label, type:text}` + `{value}` | 403/404 | Falhou | criar coluna bloqueado | esquema manual na UI; depois API grava values |
+| T1 | Comentário | `/boards/items/{id}/comments` | POST/GET | `{body, kind}` | 201/200 | OK | — | — |
+| T2 | Tipos de coluna (21 tipos) | `/boards/80/columns` | POST | por tipo (F0.4) | 403 | **Não validado** | POST columns bloqueado | colunas criadas na migração (UI/script sessão); retestar values |
+| T3 | **board_relation** | `/boards/80/columns` + `PATCH …/values/{col}` | POST/PATCH | `{type:board_relation, source_board_id:81}` + `{links:[{item_id}]}` | 403 | **Não testado** (coluna não criada) | idem T2 | tabela local de relações + values após coluna existir; **`/links` dispensável** se values funcionar (hipótese não confirmada) |
+| T3 | Item no board alvo | `/boards/81/items` | POST | `{name}` | 201 | OK | — | — |
+| T5 | mirror (coluna) | `/boards/80/columns` | POST | `{type:mirror, source_board_id, source_column_id}` | 403 | Falhou | POST columns bloqueado | lookup/cópia no sync (B) |
+| T5 | mirror-values | `/boards/80/mirror-values` | GET | `?column_id=` | 403 | Esperado p/ token | rota só sessão | ler via `GET …/values` ou cache |
+| TX | Subitens | `POST …/items` + `PATCH /boards/80` | POST/PATCH | `{parent_item_id}` / `{hierarchy_depth:2}` | 201 / 403 | **Parcial** | depth não alterável via token | subitem criou com `parent_item_id` mesmo com `hierarchy_depth=1` no board |
+| T6 | Anexo PDF | `/boards/items/{id}/attachments/file` | POST | multipart `file` | 403 | Falhou | upload binário bloqueado | anexo por link (`POST …/attachments/link` **201**); ou upload com sessão |
+| T6 | Anexo link | `/boards/items/{id}/attachments/link` | POST | `{url, filename}` | 201 | OK | — | — |
+| T7 | Comentários | comments CRUD | POST/PATCH/DELETE | menção `{mention_user_ids}` | 201/403/200 | **Parcial** | editar comentário 403 | recriar comentário ou UI |
+| T8 | Automação webhook | `/boards/80/automations` + item | POST | `item_created` → `webhook {url}` | 201 | OK | — | polling continua base |
+| T8 | Entrega HTTP | (eco webhook.site) | POST | corpo JSON | 200 | OK | timeout/retry exato: **NÃO DETERMINADO** | ver runs + amostra abaixo |
+
+**T8 — webhook observado (dados fictícios, eco público):**
+
+- Método: **POST**; `Content-Type: application/json`; `User-Agent: node`.
+- Corpo (exemplo real capturado):
+  `{"board_id":"80","item_id":"7644","item_name":"TESTE-FICTICIO dispara webhook OK"}`.
+- Sem headers de autenticação enviados ao destino (apenas headers HTTP padrão do cliente).
+- `GET /automations/{id}/runs`: runs com `status: success`, `detail: webhook` para itens de
+  teste; na fase com endpoint configurado para **500**, ainda houve run `success` — política
+  de retry/backoff e timeout: **NÃO DETERMINADO** (amostra insuficiente; janela ~3 min).
+
+**Contagem (roteiro 1–8):** **1 teste concluído com sucesso** (T8); **3 parciais** (T1, T6,
+T7); **4 falharam ou não puderam ser exercitados** (T2, T3, T5, time_tracking dentro de T2).
+No relatório JSON: **31** passos HTTP 2xx, **30** passos ≠2xx (muitos 403 esperados de
+restrição de token).
 
 Os Testes 9–13 são analíticos e foram **concluídos** com os dados reais já coletados
 (F0.7 e F0.13):
@@ -760,21 +800,21 @@ ausente no token) fica **dispensável**; a busca textual nunca foi usada pelo c�
 
 | Recurso Monday | Uso real | Equivalente Sunday | Estratégia | Auto/Manual | Risco |
 |---|---|---|---|---|---|
-| Boards (8 integrados + ~15 de dados) | estrutura dos domínios | `POST /boards` + grupos/colunas | script idempotente Fase 1 | Auto | baixo |
+| Boards (8 integrados + ~15 de dados) | estrutura dos domínios | `POST /boards` + grupos/colunas | `POST /boards` OK; **colunas via API 403** | Semi (UI/sessão p/ esquema) | médio |
 | Grupos (meses/filas/estágios) | filas Jan/Luciano, grupos por ano | `POST /boards/{id}/groups` | criação + de-para `group_id` | Auto | baixo |
 | Items | casos, contratos, prazos | `POST /boards/{id}/items` | migração com mapa de IDs | Auto | baixo |
 | Status (44 colunas) | Status/Quem Assina/Tipo/causas | coluna `status`/`dropdown` + Status de sistema | opções geradas do `settings_str`; cores aproximadas | Auto | baixo |
 | Datas (20) | prazos, audiências | `date` (`include_time` p/ hora) | direto (`YYYY-MM-DD`); formato com hora pendente de teste | Auto | baixo |
 | Pessoas (6) | responsáveis | `people` | de-para e-mail→`user_id` via `/users/directory` | Auto c/ transform. | médio (usuários ausentes no Sunday) |
 | Textos/números/e-mails/links | CNPJ, CIP/FA, valores, provisões | `text`/`long_text`/`number`/`email`/`link` | direto | Auto | baixo |
-| Arquivos (8 colunas file) | notificações Procon, contratos | anexos do item (`attachments/file`) + `file_link` | download do asset Monday → upload | Auto c/ transform. | médio (volume/limites) |
+| Arquivos (8 colunas file) | notificações Procon, contratos | anexos do item (`attachments/file`) + `file_link` | upload binário **403**; link **201** | B (link) / C (PDF real) | médio |
 | Updates/timeline | histórico dos casos | `comments` | corpo prefixado `[Monday · autor · data]` (autoria real vira do robô) | Auto c/ transform. | baixo |
-| Conexão de quadros (5) | Prazos/Audiências→Processos; Controle→Contratos | `board_relation` | valor `{links:[{item_id}]}` remapeado pelo mapa de IDs | Auto (pendente T3) | médio |
+| Conexão de quadros (5) | Prazos/Audiências→Processos; Controle→Contratos | `board_relation` | valor `{links:[{item_id}]}` remapeado pelo mapa de IDs | **B/C** (T3 não confirmou values; esquema manual) | médio |
 | Mirror | espelhos nos quadros de legal | leitura bloqueada p/ token | cópia do valor no sync (lookup no nosso código) | Auto (fallback) | baixo |
 | Automações (2 regras) | Assinado→Contratos; mestre→audiências | sem `create_item` cross-board | regra no nosso código (+ automação `webhook` opcional pós-T8) | Auto (código) | médio |
 | Busca por valor de coluna | dedup protocolo/CPF/CNJ | inexistente | índice local (T10) | Auto (fallback) | baixo |
 | IDs externos | Autentique ID, estado local | — | coluna `text` "Monday ID"/"Autentique ID" + tabela de mapeamento | Auto | baixo |
-| Subitems | aditivos em Contratos (`register_contrato_subitem`), subelementos | `parent_item_id` + `hierarchy_depth≥2` | migrar como filhos nativos | Auto (pendente teste) | baixo |
+| Subitems | aditivos em Contratos (`register_contrato_subitem`), subelementos | `parent_item_id` + `hierarchy_depth≥2` | `parent_item_id` **201** sem alterar depth | B | baixo |
 | Histórico (12 meses + abertos) | ~1.279 itens recentes de ~4.391 | — | recorte na exportação | Auto | baixo |
 | `location` (3) | local de audiência/origem | inexistente | degradar para `text` | Auto c/ transform. | nenhum |
 | `formula` (2) | saving/saved | `formula` com expressão própria | recriar expressão à mão (2 colunas) | **Manual** | nenhum |
@@ -816,27 +856,47 @@ D bloqueante):**
 
 | Requisito | Classe | Observação |
 |---|---|---|
-| CRUD boards/grupos/itens/values/comentários | A* | *pendente confirmação de escrita (script pronto) |
-| Status, datas, textos, números, links, e-mails | A* | idem; data-com-hora pendente |
-| Pessoas | B | de-para de usuários |
-| Subitens (aditivos Contratos) | A* | `hierarchy_depth` no teste |
-| Arquivos (PDF Procon/Contratos) | B | anexos do item |
-| Updates/histórico | B | comments com autoria em texto |
-| Conexões entre quadros | A*/B | T3 decide; fallback: tabela local de relações |
-| Mirror | B | cópia/lookup no sync |
+| CRUD itens + status de sistema + comentários (criar/excluir) | **A** | confirmado T1/T7/T8 |
+| CRUD grupos (criar) | **A** | POST 201 |
+| CRUD grupos (editar) / esquema do board | **C** | PATCH grupo/board/columns → 403 |
+| Values em colunas custom | **B/C** | não testado (sem coluna custom); sistema via PATCH item |
+| Status, datas, textos, números, links, e-mails (custom) | **B/C** | payloads F0.4 não exercitados |
+| Pessoas | B | de-para + `/users/directory` 200 |
+| Subitens | **B** | `parent_item_id` OK; `hierarchy_depth` via API 403 |
+| Arquivos (PDF Procon/Contratos) | **B/C** | binário 403; link 201 |
+| Updates/histórico | **B** | comments; edição 403 |
+| Conexões entre quadros | **B/C** | **T3 inconclusivo**; `/links` não necessário se values OK |
+| Mirror | B | coluna 403; mirror-values 403; lookup no código |
 | Automações cross-board | B | nosso código |
-| Evento de item criado (Controle) | B | polling (T9); `webhook` de automação como upgrade pós-T8 |
+| Evento item criado (Controle) | **A/B** | webhook T8 OK; polling T9 |
 | Busca por valor | B | índice local |
 | Rastreabilidade de IDs | B | mapa + coluna Monday ID |
 | `location` | B | → text |
 | `formula` | C | 2 colunas |
-| `time_tracking` | C | preservação automática + config manual |
-| — | **D: nenhum** | nada bloqueante identificado |
+| `time_tracking` | C | coluna não criável via token neste teste |
+| — | **D: nenhum** | plataforma viável com esquema manual + token atual |
 
-**Decisão: GO condicional** para `sunday/client.py` — nenhuma classe D; a condição é
-executar `scripts/sunday_fase0_write_tests.py` (VM com os secrets) e confirmar os
-payloads de escrita, em especial T3 (reconstrução de `board_relation` pelos values) e
-T8 (semântica do webhook). Escopo V1 do adapter: auth, CRUD de itens/values,
-comentários, anexos, cache+polling com ETag, índice local de dedup, mapa de IDs.
-V2: automação `webhook`, espelhos por lookup, views, aprovações. Manual na migração:
-fórmulas, revisão de views/membros.
+**Decisão: NO-GO** para iniciar `sunday/client.py` **com o token de API atual como
+contrato de produção**, até:
+
+1. **Reteste T3** — criar manualmente (UI) coluna `board_relation` no sandbox `80`
+   apontando para o board `81` e repetir apenas `PATCH /boards/items/{id}/values/{col}`
+   com `{links:[{item_id}]}` + leitura; **sem** `/boards/{id}/links`.
+2. **Reteste T2 mínimo** — ao menos `text`, `status`, `date`, `board_relation` values
+   após colunas existirem.
+3. **Política de anexos** — aceitar fallback `attachments/link` + upload manual de PDFs
+   críticos, **ou** obter rota de upload liberada para token de serviço.
+
+**Se o reteste (1)–(2) passar**, a decisão volta a **GO** para o adapter com escopo:
+
+- **V1 imediato:** auth `X-Sunday-Token`, CRUD de itens, status/área/data via PATCH item,
+  comentários (criar/listar/excluir), anexos por link, automações (leitura/desativação),
+  polling+ETag+índice local, mapa de IDs, subitens `parent_item_id`.
+- **V2:** webhook receptor, espelhos por lookup, views, aprovações, upload binário (se
+  liberado).
+- **MANUAL na migração:** criação/edição de colunas, grupos (rename), fórmulas, views,
+  membros, PDFs se upload seguir 403, reteste board_relation até coluna existir.
+
+**Riscos remanescentes:** token pessoal `contributor` (F0.13); rotas de configuração só
+sessão; `board_relation` sem confirmação empírica; upload PDF; edição de comentários;
+formato exato de values complexos; rate limit não publicado.

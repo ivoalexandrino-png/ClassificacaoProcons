@@ -1,0 +1,3459 @@
+[
+  {
+    "note": "identidade do token",
+    "method": "GET",
+    "path": "/auth/me",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "37",
+      "email": "[REDACTED_EMAIL]",
+      "name": "Ivo Alexandrino da Conceição",
+      "preferred_name": null,
+      "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLnTQJhiHpamaRCnYUiuNANjcHc8gKf8rQ1kHTHf_DP6IQj_nkd=s96-c",
+      "job_title": "Gerente Jurídico",
+      "status": "ativo",
+      "user_type": "employee",
+      "seniority_key": "manager",
+      "hierarchy_level": 10,
+      "hierarchy_label": "Manager / Gerente",
+      "business_unit": "shared",
+      "team_id": "20",
+      "manager_user_id": "57",
+      "access_level": "contributor",
+      "admin_scopes": [],
+      "sunday_enabled": true,
+      "archived": false,
+      "activated_at": "2026-06-01T14:05:25.978Z",
+      "last_login_at": "2026-08-09T20:14:00.281Z",
+      "hire_date": "2017-07-01T00:00:00.000Z",
+      "home_prefs": null
+    }
+  },
+  {
+    "note": "preflight sandbox",
+    "method": "GET",
+    "path": "/boards/80",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "80",
+      "name": "SANDBOX - API SUNDAY - NÃO USAR",
+      "description": null,
+      "status": "active",
+      "template_key": "board",
+      "status_set": [
+        {
+          "key": "to_do",
+          "color": "amber",
+          "label": "A fazer",
+          "terminal": false
+        },
+        {
+          "key": "follow_up",
+          "color": "sky",
+          "label": "Follow-up",
+          "terminal": false
+        },
+        {
+          "key": "done",
+          "color": "emerald",
+          "label": "Feito",
+          "terminal": true
+        }
+      ],
+      "hierarchy_depth": 1,
+      "capabilities": {
+        "process": false,
+        "subitems": false,
+        "approvals": false,
+        "time_tracking": false,
+        "calendar_anchor": true
+      },
+      "approval_workflow_config": null,
+      "process_config": null,
+      "open_submissions": null,
+      "open_submissions_set_at": null,
+      "owner_user_id": "37",
+      "calendar_event_id": null,
+      "calendar_event_organizer_email": null,
+      "recurrence_rule": null,
+      "area_options": [],
+      "team_ids": [],
+      "approver_user_ids": [],
+      "created_at": "2026-08-11T00:12:18.275Z",
+      "updated_at": "2026-08-11T00:12:18.275Z",
+      "members": [
+        {
+          "id": "137",
+          "board_id": "80",
+          "user_id": "37",
+          "role": "owner",
+          "created_at": "2026-08-11T00:12:18.275Z"
+        }
+      ]
+    }
+  },
+  {
+    "note": "usuário para menções/people",
+    "method": "GET",
+    "path": "/auth/me",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "37",
+      "email": "[REDACTED_EMAIL]",
+      "name": "Ivo Alexandrino da Conceição",
+      "preferred_name": null,
+      "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLnTQJhiHpamaRCnYUiuNANjcHc8gKf8rQ1kHTHf_DP6IQj_nkd=s96-c",
+      "job_title": "Gerente Jurídico",
+      "status": "ativo",
+      "user_type": "employee",
+      "seniority_key": "manager",
+      "hierarchy_level": 10,
+      "hierarchy_label": "Manager / Gerente",
+      "business_unit": "shared",
+      "team_id": "20",
+      "manager_user_id": "57",
+      "access_level": "contributor",
+      "admin_scopes": [],
+      "sunday_enabled": true,
+      "archived": false,
+      "activated_at": "2026-06-01T14:05:25.978Z",
+      "last_login_at": "2026-08-09T20:14:00.281Z",
+      "hire_date": "2017-07-01T00:00:00.000Z",
+      "home_prefs": null
+    }
+  },
+  {
+    "note": "T1 grupos antes",
+    "method": "GET",
+    "path": "/boards/80/groups",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "240",
+        "board_id": "80",
+        "name": "Itens",
+        "color": "neutral",
+        "position": 1,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:12:18.323Z",
+        "updated_at": "2026-08-11T00:12:18.323Z"
+      },
+      {
+        "id": "241",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 2,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:10.605Z",
+        "updated_at": "2026-08-11T00:35:10.605Z"
+      },
+      {
+        "id": "243",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 3,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:17.490Z",
+        "updated_at": "2026-08-11T00:35:17.490Z"
+      },
+      {
+        "id": "244",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 4,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:38.234Z",
+        "updated_at": "2026-08-11T00:35:38.234Z"
+      },
+      {
+        "id": "245",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 5,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:39.312Z",
+        "updated_at": "2026-08-11T00:35:39.312Z"
+      },
+      {
+        "id": "246",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 6,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:48.488Z",
+        "updated_at": "2026-08-11T00:35:48.488Z"
+      },
+      {
+        "id": "247",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 7,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:38:02.474Z",
+        "updated_at": "2026-08-11T00:38:02.474Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 cria grupo",
+    "method": "POST",
+    "path": "/boards/80/groups",
+    "request_body": {
+      "name": "TESTE-FICTICIO Grupo A",
+      "color": "blue"
+    },
+    "status": 201,
+    "response": {
+      "id": "248",
+      "board_id": "80",
+      "name": "TESTE-FICTICIO Grupo A",
+      "color": "blue",
+      "position": 8,
+      "is_collapsed_default": false,
+      "created_at": "2026-08-11T00:38:38.723Z",
+      "updated_at": "2026-08-11T00:38:38.723Z"
+    }
+  },
+  {
+    "note": "T1 altera grupo",
+    "method": "PATCH",
+    "path": "/boards/groups/248",
+    "request_body": {
+      "name": "TESTE-FICTICIO Grupo A (editado)"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T1 cria item",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 1",
+      "group_id": "248"
+    },
+    "status": 201,
+    "response": {
+      "id": "7640",
+      "board_id": "80",
+      "group_id": "248",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:38.926Z",
+      "updated_at": "2026-08-11T00:38:38.926Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T1 lê itens",
+    "method": "GET",
+    "path": "/boards/80/items",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "7604",
+        "board_id": "80",
+        "group_id": "241",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:10.831Z",
+        "updated_at": "2026-08-11T00:35:11.212Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7605",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:12.529Z",
+        "updated_at": "2026-08-11T00:35:12.529Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7608",
+        "board_id": "80",
+        "group_id": "243",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:17.693Z",
+        "updated_at": "2026-08-11T00:35:18.131Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7609",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:17.813Z",
+        "updated_at": "2026-08-11T00:35:17.813Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7610",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:19.272Z",
+        "updated_at": "2026-08-11T00:35:19.272Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7613",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:24.413Z",
+        "updated_at": "2026-08-11T00:35:24.413Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7614",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:28.778Z",
+        "updated_at": "2026-08-11T00:35:28.778Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7615",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:35.357Z",
+        "updated_at": "2026-08-11T00:35:35.357Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7616",
+        "board_id": "80",
+        "group_id": "244",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:38.418Z",
+        "updated_at": "2026-08-11T00:35:38.822Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7617",
+        "board_id": "80",
+        "group_id": "245",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:39.534Z",
+        "updated_at": "2026-08-11T00:35:39.903Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7618",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:39.942Z",
+        "updated_at": "2026-08-11T00:35:39.942Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7619",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:41.123Z",
+        "updated_at": "2026-08-11T00:35:41.123Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7624",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:45.121Z",
+        "updated_at": "2026-08-11T00:35:45.121Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7625",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:45.913Z",
+        "updated_at": "2026-08-11T00:35:45.913Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7626",
+        "board_id": "80",
+        "group_id": "246",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:48.691Z",
+        "updated_at": "2026-08-11T00:35:49.025Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7627",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:50.187Z",
+        "updated_at": "2026-08-11T00:35:50.187Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7630",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:55.310Z",
+        "updated_at": "2026-08-11T00:35:55.310Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7631",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:56.099Z",
+        "updated_at": "2026-08-11T00:35:56.099Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7632",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:56.881Z",
+        "updated_at": "2026-08-11T00:35:56.881Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7633",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:36:06.250Z",
+        "updated_at": "2026-08-11T00:36:06.250Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7634",
+        "board_id": "80",
+        "group_id": "247",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:38:02.699Z",
+        "updated_at": "2026-08-11T00:38:03.039Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7635",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:38:04.238Z",
+        "updated_at": "2026-08-11T00:38:04.238Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7638",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:38:08.940Z",
+        "updated_at": "2026-08-11T00:38:08.940Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7639",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:38:20.045Z",
+        "updated_at": "2026-08-11T00:38:20.045Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7640",
+        "board_id": "80",
+        "group_id": "248",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:38:38.926Z",
+        "updated_at": "2026-08-11T00:38:38.926Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7607",
+        "board_id": "80",
+        "group_id": null,
+        "linked_user_id": null,
+        "parent_item_id": "7604",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:15.528Z",
+        "updated_at": "2026-08-11T00:35:15.528Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7612",
+        "board_id": "80",
+        "group_id": null,
+        "linked_user_id": null,
+        "parent_item_id": "7608",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:22.100Z",
+        "updated_at": "2026-08-11T00:35:22.100Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7621",
+        "board_id": "80",
+        "group_id": null,
+        "linked_user_id": null,
+        "parent_item_id": "7616",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:42.618Z",
+        "updated_at": "2026-08-11T00:35:42.618Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7623",
+        "board_id": "80",
+        "group_id": null,
+        "linked_user_id": null,
+        "parent_item_id": "7617",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:43.723Z",
+        "updated_at": "2026-08-11T00:35:43.723Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7629",
+        "board_id": "80",
+        "group_id": null,
+        "linked_user_id": null,
+        "parent_item_id": "7626",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:53.067Z",
+        "updated_at": "2026-08-11T00:35:53.067Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7637",
+        "board_id": "80",
+        "group_id": null,
+        "linked_user_id": null,
+        "parent_item_id": "7634",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:38:06.858Z",
+        "updated_at": "2026-08-11T00:38:06.858Z",
+        "assignee_user_ids": []
+      }
+    ]
+  },
+  {
+    "note": "T1 altera item",
+    "method": "PATCH",
+    "path": "/boards/items/7640",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia."
+    },
+    "status": 200,
+    "response": {
+      "id": "7640",
+      "board_id": "80",
+      "group_id": "248",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia.",
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:38.926Z",
+      "updated_at": "2026-08-11T00:38:39.154Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T1 altera status de sistema",
+    "method": "PATCH",
+    "path": "/boards/items/7640/status",
+    "request_body": {
+      "status": "follow_up",
+      "cascade": false
+    },
+    "status": 200,
+    "response": {
+      "id": "7640",
+      "board_id": "80",
+      "group_id": "248",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia.",
+      "status": "follow_up",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:38.926Z",
+      "updated_at": "2026-08-11T00:38:39.271Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T1 cria coluna text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Texto",
+      "type": "text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T1 lê colunas",
+    "method": "GET",
+    "path": "/boards/80/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "443",
+        "board_id": "80",
+        "key": "name",
+        "type": "text",
+        "label": "Nome",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "444",
+        "board_id": "80",
+        "key": "status",
+        "type": "status",
+        "label": "Status",
+        "position": 1,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "445",
+        "board_id": "80",
+        "key": "owner",
+        "type": "people",
+        "label": "Responsável",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "446",
+        "board_id": "80",
+        "key": "target_date",
+        "type": "date",
+        "label": "Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "447",
+        "board_id": "80",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 grava value",
+    "method": "PATCH",
+    "path": "/boards/items/7640/values/",
+    "request_body": {
+      "value": "valor fictício v1"
+    },
+    "status": 404,
+    "response": {
+      "message": "Cannot PATCH /boards/items/7640/values/",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T1 lê values",
+    "method": "GET",
+    "path": "/boards/items/7640/values",
+    "request_body": null,
+    "status": 200,
+    "response": []
+  },
+  {
+    "note": "T1 altera value",
+    "method": "PATCH",
+    "path": "/boards/items/7640/values/",
+    "request_body": {
+      "value": "valor fictício v2"
+    },
+    "status": 404,
+    "response": {
+      "message": "Cannot PATCH /boards/items/7640/values/",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T1 cria comentário",
+    "method": "POST",
+    "path": "/boards/items/7640/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO comentário 1",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2075",
+      "body": "TESTE-FICTICIO comentário 1",
+      "kind": "reply",
+      "mentions": [],
+      "author_user_id": "37",
+      "author_name": "Ivo Alexandrino da Conceição",
+      "is_external": false,
+      "created_at": "2026-08-11T00:38:39.851Z"
+    }
+  },
+  {
+    "note": "T1 lê comentários",
+    "method": "GET",
+    "path": "/boards/items/7640/comments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "2075",
+        "body": "TESTE-FICTICIO comentário 1",
+        "kind": "reply",
+        "mentions": [],
+        "author_user_id": "37",
+        "author_name": "Ivo Alexandrino da Conceição",
+        "is_external": false,
+        "created_at": "2026-08-11T00:38:39.851Z"
+      }
+    ]
+  },
+  {
+    "note": "item auxiliar p/ dependency",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 2 (dependência)"
+    },
+    "status": 201,
+    "response": {
+      "id": "7641",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 2 (dependência)",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:40.467Z",
+      "updated_at": "2026-08-11T00:38:40.467Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T2 cria coluna text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO text",
+      "type": "text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna long_text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO long_text",
+      "type": "long_text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna number",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO number",
+      "type": "number"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna status",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO status",
+      "type": "status",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "Aberto",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "Fechado",
+          "color": "green"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna status_multi",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO status_multi",
+      "type": "status_multi",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "A",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "B",
+          "color": "pink"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna dropdown",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO dropdown",
+      "type": "dropdown",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "Um",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "Dois",
+          "color": "sky"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna date",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO date",
+      "type": "date"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna checkbox",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO checkbox",
+      "type": "checkbox"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna people",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO people",
+      "type": "people"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna timeline",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO timeline",
+      "type": "timeline"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna rating",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO rating",
+      "type": "rating"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna tags",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO tags",
+      "type": "tags"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna link",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO link",
+      "type": "link"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna file_link",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO file_link",
+      "type": "file_link"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna email",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO email",
+      "type": "email"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna phone",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO phone",
+      "type": "phone"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna dependency",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO dependency",
+      "type": "dependency"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna formula",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO formula",
+      "type": "formula",
+      "expression": "1 + 1"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna time_tracking",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO time_tracking",
+      "type": "time_tracking"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna creation_log",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO creation_log",
+      "type": "creation_log"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T3 boards visíveis (dedup do RELATION)",
+    "method": "GET",
+    "path": "/boards",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "81",
+        "name": "SANDBOX - API SUNDAY - RELATION",
+        "description": "Sandbox de teste de board_relation. Pode apagar.",
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": null,
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-11T00:35:14.609Z",
+        "updated_at": "2026-08-11T00:35:14.609Z"
+      },
+      {
+        "id": "80",
+        "name": "SANDBOX - API SUNDAY - NÃO USAR",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": null,
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-11T00:12:18.275Z",
+        "updated_at": "2026-08-11T00:12:18.275Z"
+      },
+      {
+        "id": "79",
+        "name": "Legal - Seguros",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": null,
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-10T19:11:34.734Z",
+        "updated_at": "2026-08-10T19:11:34.734Z"
+      },
+      {
+        "id": "78",
+        "name": "Legal - Acessos",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": null,
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-10T19:11:24.249Z",
+        "updated_at": "2026-08-10T19:11:24.249Z"
+      },
+      {
+        "id": "77",
+        "name": "Legal - Controle de Assinaturas - Jan & Luciano",
+        "description": "",
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": null,
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-10T19:05:29.118Z",
+        "updated_at": "2026-08-10T19:05:47.590Z"
+      },
+      {
+        "id": "74",
+        "name": "Cronograma + Processos Finance",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "94",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": null,
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-07T14:34:24.300Z",
+        "updated_at": "2026-08-07T14:34:24.300Z"
+      },
+      {
+        "id": "72",
+        "name": "Legal - Audiências",
+        "description": "",
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": "61fg2lp7k6rfbuo753iedjsbvc",
+        "calendar_event_organizer_email": "[REDACTED_EMAIL]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-07-27T22:00:11.353Z",
+        "updated_at": "2026-07-28T13:47:43.004Z"
+      },
+      {
+        "id": "70",
+        "name": "Weekly Support",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "57",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": null,
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-07-27T17:33:11.358Z",
+        "updated_at": "2026-07-27T17:33:11.358Z"
+      }
+    ]
+  },
+  {
+    "note": "T3 cria item no RELATION",
+    "method": "POST",
+    "path": "/boards/81/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Alvo da relação"
+    },
+    "status": 201,
+    "response": {
+      "id": "7642",
+      "board_id": "81",
+      "group_id": "242",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Alvo da relação",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:42.542Z",
+      "updated_at": "2026-08-11T00:38:42.542Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T3 cria coluna board_relation",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Conexão",
+      "type": "board_relation",
+      "source_board_id": "81"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T5 colunas do RELATION",
+    "method": "GET",
+    "path": "/boards/81/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "448",
+        "board_id": "81",
+        "key": "name",
+        "type": "text",
+        "label": "Nome",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "449",
+        "board_id": "81",
+        "key": "status",
+        "type": "status",
+        "label": "Status",
+        "position": 1,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "450",
+        "board_id": "81",
+        "key": "owner",
+        "type": "people",
+        "label": "Responsável",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "451",
+        "board_id": "81",
+        "key": "target_date",
+        "type": "date",
+        "label": "Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "452",
+        "board_id": "81",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      }
+    ]
+  },
+  {
+    "note": "T5 cria coluna mirror",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Espelho",
+      "type": "mirror",
+      "source_board_id": "81",
+      "source_column_id": "448"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T5 values com mirror",
+    "method": "GET",
+    "path": "/boards/items/7640/values",
+    "request_body": null,
+    "status": 200,
+    "response": []
+  },
+  {
+    "note": "T5 mirror-values (esperado 403 p/ token)",
+    "method": "GET",
+    "path": "/boards/80/mirror-values?column_id=",
+    "request_body": null,
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "TX habilita subitens (hierarchy_depth=2)",
+    "method": "PATCH",
+    "path": "/boards/80",
+    "request_body": {
+      "hierarchy_depth": 2
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "TX cria subitem",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Subitem 1",
+      "parent_item_id": "7640"
+    },
+    "status": 201,
+    "response": {
+      "id": "7643",
+      "board_id": "80",
+      "group_id": null,
+      "linked_user_id": null,
+      "parent_item_id": "7640",
+      "position": 0,
+      "name": "TESTE-FICTICIO Subitem 1",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:43.219Z",
+      "updated_at": "2026-08-11T00:38:43.219Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "TX diretório de usuários (mapeamento people)",
+    "method": "GET",
+    "path": "/users/directory",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "141",
+        "name": "Adriano Aguiar",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKbiY_LGq0pkxW08-S55lt720mx9dBa1cjNsl61zFoScUpqtM4=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "2",
+        "name": "Alcione Pereira dos Santos Sena",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJKoYJ8NTX6SFMP4w--yxfcwOUDsIADNxCRsfqdVzbi30g_QDyy=s96-c",
+        "job_title": "Supervisora Logística II",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11962099674"
+      },
+      {
+        "id": "110",
+        "name": "Alessandra Oliveira da Silva Frade",
+        "preferred_name": "Alessandra",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIyOl21Lmti3FpibrRd55C9P7WhrkCkiPLGuTsLuxd2fUzbqw=s96-c",
+        "job_title": "Analista de E-commerce",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5511963735809"
+      },
+      {
+        "id": "142",
+        "name": "Alexandre Aguiar Alves",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ6F5jh9mOrpA75M5eysrKOQOWfA-05lNoCtSCQC3Db5k1AXw=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "3",
+        "name": "Alexandre Amaral de Araújo Filho",
+        "preferred_name": "Alexandre Amaral de Araújo Filho",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocILRq0xTTTh82y811V_1a0kTdHZJ26jB6eezQ_SiV-Cz74jOmk=s96-c",
+        "job_title": "Coordenador de Audiovisual",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5521979796779"
+      },
+      {
+        "id": "140",
+        "name": "Alexandre Landim",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIo-v_FKdLyUv_oaQGqd5v420iXDKT5e1QMTbWx_eHVCMsIr_A=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "4",
+        "name": "Aline Umaki de Toledo",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIef6Z_0nfyfX5Ff9HQRtpRy1FHE6VsQLc4xdinrpf9c82KUS0=s96-c",
+        "job_title": "Analista de Atendimento Jr",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11988218484"
+      },
+      {
+        "id": "8",
+        "name": "Augusto Xavier",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJQ4pVCw7RNlw4aabD-PXY2iD5tEBj-kYNfnQy3Chp-K7E8sKVg=s96-c",
+        "job_title": "Product Designer Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11954463127"
+      },
+      {
+        "id": "11",
+        "name": "Beatriz Lopes de Souza",
+        "preferred_name": "Beatriz Lopes",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLD5CRfnKJzEgHujnyyEu3zOSwOaLBCEiFdM1RVojUj0-UcG34=s96-c",
+        "job_title": "Analista Comercial Jr.",
+        "business_unit": "bfluence",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11954700649"
+      },
+      {
+        "id": "139",
+        "name": "Beatriz Tayná de Oliveira Pereira",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLJ1_xmSEHE74HPbaI7ZXbgg37ClYuUxB-ZY93X9efkDCle0Q=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "123",
+        "name": "Bruna Coelho Brandão",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ_oZ4qSnA4rrD4NsUm4TcDZB8-8bpuXAotAg1Qt5X-6E07PQ=s96-c",
+        "job_title": "Gerente Comercial",
+        "business_unit": "bfluence",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11997677171"
+      },
+      {
+        "id": "122",
+        "name": "Bruna Fernandes da Silva Barros",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLk-6vfaUangU2mXIiH4woutbAEMAj6HIn275F53Evr9_t2qFo=s96-c",
+        "job_title": "Executiva de Contas",
+        "business_unit": "bfluence",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11971423696"
+      },
+      {
+        "id": "13",
+        "name": "Bruna Martins Federici Lopes",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ7UwfrUc4W78ppFzLKZHmSAbYIg332e3Kg7T_ZUG-eierIPE1s=s96-c",
+        "job_title": "Head de Product & Dev.",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "17981474070"
+      },
+      {
+        "id": "14",
+        "name": "Bruno Santos de Castro",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK4merN_8tZrg1gw0lGjZQXXfwuc_Ow2BnRR9Zc2hbeGg15_5zX=s96-c",
+        "job_title": "Head de B2B2C",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11949567765"
+      },
+      {
+        "id": "102",
+        "name": "Carla Souza Arruda Pereira",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIbse-BZKSelO3x65k2XTj6Qoz_cVkrpjfdOzRk0E49UP9zGA=s96-c",
+        "job_title": "Especialista Fiscal",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11953353423"
+      },
+      {
+        "id": "16",
+        "name": "Caroline Caramello Ceolato",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK3xpYkYVhBs8D4Jm_5vIIQVT0-YyROQFiq_Uepsnb2mD_KU34=s96-c",
+        "job_title": "VP de B2C",
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": "15981001505"
+      },
+      {
+        "id": "79",
+        "name": "Caroline Moreira Silva",
+        "preferred_name": "Caroline Moreira",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKfw3CoXT5DYEn8K6LCWghIXJ7Gk2JTaRkfKbnHOKdAijQUzQvD=s96-c",
+        "job_title": "Coordenadora de Assistência Executiva",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11986842835"
+      },
+      {
+        "id": "18",
+        "name": "Celina Vasconcelos Ferreira",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK8JGY9oDGcs4HLvP-0qAqW0gsA2B_ZnQa49iaPZIaNLXUndE4=s96-c",
+        "job_title": "Assistente Administrativo",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11962373717"
+      },
+      {
+        "id": "21",
+        "name": "Danielle Marques da Silva",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKO29LPS6aufmbZqE6AqCqwpkVuLKcVXCJR0bTuSQKgLfQmzYR6=s96-c",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11977510929"
+      },
+      {
+        "id": "22",
+        "name": "Débora Duarte Ribeiro",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJqSFn3-0m7odiYFDNZ1W85s-kP_VgbfLO2bN1Mz0RHtKEj_JUV=s96-c",
+        "job_title": "Head de Comunicação",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11981694505"
+      },
+      {
+        "id": "23",
+        "name": "Deborah Bohlsen Camerini",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKczDmHpT69tXbvjlce6bk31HxXTG5NENGVFcwEGCsAeVAmhC0y=s96-c",
+        "job_title": "Head de bfluence",
+        "business_unit": "bfluence",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11984848577"
+      },
+      {
+        "id": "25",
+        "name": "Drausio Lucas de Carvalho Soares",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLC5AKjg8gp8_8pGZipZGarcpSawiB1L1ZXDZFTbqh9Fy2OkgNl=s96-c",
+        "job_title": "Gerente de IT Operations",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11997930727"
+      },
+      {
+        "id": "27",
+        "name": "Elaine Cristina Delphino",
+        "preferred_name": "Elaine Cristina Delphino",
+        "avatar_url": null,
+        "job_title": "Supervisora Logística I",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11964997594"
+      },
+      {
+        "id": "114",
+        "name": "Emily Bentes da silva",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKrtP5MQHeL6BGz8VTni_F8f0COkioPTbNmLKFI6A6GN9Dmoio=s96-c",
+        "job_title": "Analista de CRM Pl",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5521994414102"
+      },
+      {
+        "id": "28",
+        "name": "Enilson Gomes Barbosa Filho",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocILH6SGRk0frsP9J1g_ozJI36jGyFY9FNHZaYVfv1vDxiYAZA=s96-c",
+        "job_title": "Desenvolvedor Pl",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "17981988306"
+      },
+      {
+        "id": "30",
+        "name": "Gabriel Augusto Rios Gonçalves",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocI4aADXRhqPW0CG9vCe57ePnMBAaJN_7ONYc5IbFLBIpIpQ70M=s96-c",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11912970914"
+      },
+      {
+        "id": "31",
+        "name": "Geovanna Coelho Rodrigues",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocI-5CCaxXx2YO3YTyJ1kOTv8vkVG3kYxVFcRIMVfSe-yN3Hyt8=s96-c",
+        "job_title": "Auxiliar Financeiro",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11959693805"
+      },
+      {
+        "id": "32",
+        "name": "Giovanna Saori Miyasato",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLBXpFPQwSpZZkhzRSrpZf_m05n9CikOzMLC4Bw28fekgwakQ=s96-c",
+        "job_title": "Analista Portfólio Pleno",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11963961860"
+      },
+      {
+        "id": "104",
+        "name": "Helena Rodrigues de Seixas",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJIBrG81QE5KW_DfXUg0l4rGaEBq47ElwQWtyaop3WvbS-3RUQ=s96-c",
+        "job_title": "Estagiária de Marketing",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5511982201050"
+      },
+      {
+        "id": "35",
+        "name": "Isabela Calmon Ribeiro",
+        "preferred_name": "Bela",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLbKBcZCFDrYqvGX98KoAH_LRL-vUFxHDyE7lGRpt9m-DWddik=s96-c",
+        "job_title": "Especialista em Desenvolvimento de Produto",
+        "business_unit": "own_brands",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11963823488"
+      },
+      {
+        "id": "113",
+        "name": "Isabella Amaro de Lima",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLwG7h3mrpPNUQjVR9n3eyjcvg6IrlK9LZlRZlr2OxKMg7RqNk=s96-c",
+        "job_title": "Estagiária em Business Intelligence",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5511945455215"
+      },
+      {
+        "id": "34",
+        "name": "Isabel Santos Mattos",
+        "preferred_name": "Isabel",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJo2eQKDhg9soYhX6_qmmv86kAQcxhDosAqaPod7xvOSI0jm0bE=s96-c",
+        "job_title": "Analista de Influencers Jr.",
+        "business_unit": "bfluence",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11951950204"
+      },
+      {
+        "id": "36",
+        "name": "Isadora Feitosa Maso",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJRI8J59a5NnoRXA0pEOu763zi5sqryqA6pAl0WiogyWYnA8TM=s96-c",
+        "job_title": "Analista de RH Jr.",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11948704487"
+      },
+      {
+        "id": "37",
+        "name": "Ivo Alexandrino da Conceição",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLnTQJhiHpamaRCnYUiuNANjcHc8gKf8rQ1kHTHf_DP6IQj_nkd=s96-c",
+        "job_title": "Gerente Jurídico",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11992462378"
+      },
+      {
+        "id": "137",
+        "name": "Jamil Wahid",
+        "preferred_name": "Jamil",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKxbf6s-PU98RBijI02x49lUlcGnll8ZLWJK46VXmT2oXvESfz3=s96-c",
+        "job_title": "Coordenador B2B2C",
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "38",
+        "name": "Jan Riehle",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ-gIUKmHYNa7DgODy1ZGaJWYoRbaXn5bTVWAgykBYm4OuPecA=s96-c",
+        "job_title": "CEO",
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11997132201"
+      },
+      {
+        "id": "41",
+        "name": "João Vitor Matta",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLGyyBw-sA3ifcdOBHMA7qsbf6LvB3EMEGT8KeBLdqh5T3cVJc=s96-c",
+        "job_title": "Analista de Testes Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "17997471604"
+      },
+      {
+        "id": "44",
+        "name": "Juliana Correia de Paula",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKxhAtr_-2TrLuFp1rgslr3uHNZYz0o9BTp0s_YQikJunVDJgmH=s96-c",
+        "job_title": "Coordenadora de Delivery",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11983223970"
+      },
+      {
+        "id": "144",
+        "name": "Juliana Fiori",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIXEU8F-tPwnglvY9HSnNa91VJZ6xXMjRIg3aZF1mY2WSQQhg=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "47",
+        "name": "Kevin Santos Padilha",
+        "preferred_name": "Kevin Santos Padilha",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLEEfF1FHXF7KPdmWUL0TNF3QxBBHep1LieZ9-KzRlE8HUj63M=s96-c",
+        "job_title": "Analista de BI Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11977304729"
+      },
+      {
+        "id": "48",
+        "name": "Larissa Araújo Nascimento",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocL_yMcy_G4yXXhwY-vSQJ6uZkADuL5V61rizdXD5RBrBy6c8Q=s96-c",
+        "job_title": "Analista Mídias Sociais Sr",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11964924549"
+      },
+      {
+        "id": "109",
+        "name": "Larissa Maruyama",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIprUTZi-n_1u3P7ZEocDJ9LBRDBLYapblKsZBE7KrOqdP4Dw=s96-c",
+        "job_title": "Analista de Influencers Pl.",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5514997833941"
+      },
+      {
+        "id": "49",
+        "name": "Leonardo Avanzi de Moura Cordeiro",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKrpM1-8yNhrXjq9ktGEuzAi0LD1aP43oawPZIj3tDYnGUVb146=s96-c",
+        "job_title": "Desenvolvedor Jr",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "17997927022"
+      },
+      {
+        "id": "51",
+        "name": "Lilian Silva de Carvalho Vieira",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJCjm5v3TzXL_jfl8OoeTmqmqenq-n_DTmUbm8PPmLvMsuBfOuK=s96-c",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11988047645"
+      },
+      {
+        "id": "52",
+        "name": "Lorrany Luiza Dumont de Oliveira",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIBPGXOV3aijNfBBtrbJC5kAfQkIAU5wIfTGWPdiobVff1lCaI=s96-c",
+        "job_title": "Coordenadora Financeira",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5531975578491"
+      },
+      {
+        "id": "126",
+        "name": "Luan Labrujó Viana Marinho",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIiCElWqJXTbblNuzsB_Hdn7KNcH7nT3iKp1PtZVjFQuIo9MQ=s96-c",
+        "job_title": "Engenheiro de IA Agentic Jr.",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5521972402221"
+      },
+      {
+        "id": "53",
+        "name": "Luan Santos Antunes",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKqJmqpa-NCTmlJkvhjhvvv7da15VHKUCE71416Lbw7jhbTlFM5=s96-c",
+        "job_title": "Coordenador de CD",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11968501678"
+      },
+      {
+        "id": "54",
+        "name": "Lucas Henrique Mariano Custódio",
+        "preferred_name": "Lucas Mariano",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKKnWxpxHYpqSbZG-nv30njNzkuvvMdoUWHg491_SuCRkRiaQ=s96-c",
+        "job_title": "Coordenador de Growth",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11999001132"
+      },
+      {
+        "id": "118",
+        "name": "Lucas Luiz de Andrade Silva Janeiro",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocL7Ik0QuDzBg4GMF9c8sTbb0YcRlmNQS7qa7RYT5rpdPaf3GQ=s96-c",
+        "job_title": "Engenheiro de IA Agentic Pl.",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "21995313560"
+      },
+      {
+        "id": "55",
+        "name": "Lucas Manoel de Oliveira Santos",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJNGeU5WU_RZvBW8VCgcAHz8XniZrVL6yQQlJvfcQTDbmJh7SzM=s96-c",
+        "job_title": "Analista de IT Operations JR.",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11942697489"
+      },
+      {
+        "id": "56",
+        "name": "Lucas Santana de Souza",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKDgVwyBCzAIzWJCpcxnTfxWE-4xYOu65koPs2g13lQHdzRBM4k=s96-c",
+        "job_title": "Diretor de Product & Dev.",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11987496518"
+      },
+      {
+        "id": "57",
+        "name": "Luciano Goldschmidt Hansted",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK_oGlas9ITsUDzVQQl2TL80BAQpNZEXTXyIOYkfxxdFddRYW5s=s96-c",
+        "job_title": "VP de Support (CFO)",
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11971164887"
+      },
+      {
+        "id": "58",
+        "name": "Maise Ferreira",
+        "preferred_name": null,
+        "avatar_url": null,
+        "job_title": "Assistente de Delivery",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11970485354"
+      },
+      {
+        "id": "59",
+        "name": "Manuele Peglow do Nascimento",
+        "preferred_name": "Manu",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLVXXYqUO4CcJiXW8DzSYo3pN75fZCQ6StLu_TIUrqqk3KTqC7U=s96-c",
+        "job_title": "VP de Operations (COO)",
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11991771817"
+      },
+      {
+        "id": "61",
+        "name": "Maria de Fátima Araújo da Silva",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJdj5VvPLAwxPJGMkNkMoQwqLmFLl-doOA2KG8Pcq4jc4aeFF4=s96-c",
+        "job_title": "Assistente Administrativo",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11959657692"
+      },
+      {
+        "id": "62",
+        "name": "Maria Eduarda Nazario Bezerra",
+        "preferred_name": "Maria Eduarda",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK7IWg-HTca8siTgYxdbqMBoXbCVatDmX63DaRu1dj42flhKg=s96-c",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11983097586"
+      },
+      {
+        "id": "135",
+        "name": "Maria Vitoria Lira Soares",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLAYwn7P5iYcu29R4elv-zRmPzOwRe2u8gKiDtUwI_rUijbO2k=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "67",
+        "name": "Matheus de Lima Ramos",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJZe6JRNECSEYX3cAYj9j9tMyEHuzmey3RfwOZ-tdXi4JW_9Jk=s96-c",
+        "job_title": "Videomaker Pleno",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11974388563"
+      },
+      {
+        "id": "68",
+        "name": "Max Santos Belo",
+        "preferred_name": "Max",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJSpT4rPv2YwELZSUtMHB0YgWhKTfcgFRoNcU7N6poJw8hTb6c=s96-c",
+        "job_title": "Designer Sr.",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11977494940"
+      },
+      {
+        "id": "69",
+        "name": "Mayara Nagata Lopes",
+        "preferred_name": "Mayara Nagata Lopes",
+        "avatar_url": null,
+        "job_title": "Produtora de Audiovisual Pleno",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11933290376"
+      },
+      {
+        "id": "72",
+        "name": "Nayara Carmo de Moraes",
+        "preferred_name": "Nayara Moraes",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKPLAZ9GMwYTgjplQOF-QeOgcAWK1Ec65twlpCv9rqY9R5xfa-K=s96-c",
+        "job_title": "Coordenadora de Campanhas",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11958073913"
+      },
+      {
+        "id": "111",
+        "name": "Nayara Roberta Pereira",
+        "preferred_name": "Nayara Roberta Pereira",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocINr64N3K1SRQJRvtxUReIDKy5Nj8iiHFjiZoT3ygNg-MUqB-8=s96-c",
+        "job_title": "Analista bfluence Pl.",
+        "business_unit": "bfluence",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5511952949354"
+      },
+      {
+        "id": "73",
+        "name": "Neder Ismail Abdalla Jibril",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIKg58VtCdZm6iG5tCXGUJ0794h6-u3RZPKEPcA0b1STc3tTK0=s96-c",
+        "job_title": "Diretor de Logística",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5521997129085"
+      },
+      {
+        "id": "74",
+        "name": "Nikole Souza Kfouri",
+        "preferred_name": "Nikole Kfouri",
+        "avatar_url": null,
+        "job_title": "Estagiária de Marketing",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11993767111"
+      },
+      {
+        "id": "75",
+        "name": "Nycolle Santos de Paula",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJwbZqJe8EvGyImClTJaur5KM1bMuNhFMHbBnQSetWxBxmrlZBG=s96-c",
+        "job_title": "Analista de Marca Pessoal & Mídias Sociais",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "5511911487274"
+      },
+      {
+        "id": "76",
+        "name": "Patricia Ribeiro Teles Del Cistia",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIVjbxyOi1BBZTGZtZQXKkkhqzNvTSJAIFrGlsv6gMLMqMaowDd_Q=s96-c",
+        "job_title": "Gerente de Marcas Próprias",
+        "business_unit": "own_brands",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11941576679"
+      },
+      {
+        "id": "78",
+        "name": "Raquel Arruda Ferreira Santos",
+        "preferred_name": "Raquel",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKFjEU1_1oiQ2eOJzK3fUMOX2BegTpPeaMUCPWPPAiC9TMRRQ=s96-c",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11964584355"
+      },
+      {
+        "id": "80",
+        "name": "Renan Augusto Alves da Costa",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLI3Znbc6OJUtvpijzpakZLuPlTi9O6oug2KOjxhuLMgul7XYmF=s96-c",
+        "job_title": "Tech Lead",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11948868757"
+      },
+      {
+        "id": "143",
+        "name": "Robert Michael de Avila Barreira",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKfofmqbUnXnMruJGm4DpKCwdCbUDnoSdPXLBrWPpQ_Z0jMrSs=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "83",
+        "name": "Saulo Fernando Guedes da Silva Junior",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIHi35gD3IypLpKg1T6iMqT14rHfK31FO8atKYAXpP_MSfooPU=s96-c",
+        "job_title": "Desenvolvedor Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "98987898368"
+      },
+      {
+        "id": "87",
+        "name": "Tais Donata Maximiano da Silva",
+        "preferred_name": null,
+        "avatar_url": null,
+        "job_title": "Auxiliar de produção III",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11987656749"
+      },
+      {
+        "id": "89",
+        "name": "Tania Aparecida Mendonça",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKdR4Dys2kYg3dsnn_dy-gp8UrrEaoDAEPrmLdBJng4tq_xOL7o=s96-c",
+        "job_title": "Analista Administrativo Jr",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11962512373"
+      },
+      {
+        "id": "138",
+        "name": "Thainara Alberico Santos",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ0LrxelOTmcYWmxX-NUjWcK5O0fRJY6TenZFKUwLKLGW6Dpw=s96-c",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED_EMAIL]",
+        "phone": null
+      },
+      {
+        "id": "91",
+        "name": "Tiago Ribeiro Carneiro",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKBqdjqRZ_VV4J88_fcz9JlCmBsQXA7VUbiuyamp1Psgf1ZLpUP=s96-c",
+        "job_title": "Coordenador de Integrações",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "17988151828"
+      },
+      {
+        "id": "92",
+        "name": "Tobias Lima Fonseca",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKumhbdOAeux6HbvtKg06V6PBGyRmyTKKRzEBuxRoJTccGDxg=s96-c",
+        "job_title": "Trainee Financeiro",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11953199872"
+      },
+      {
+        "id": "94",
+        "name": "Vanessa Costa dos Santos",
+        "preferred_name": "Vanessa",
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJdoglH_yuvTInQMTIF61_oloAsv8-hbigZ7GHQV3BeOKVOUc8=s96-c",
+        "job_title": "Head of Finance",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11951437019"
+      },
+      {
+        "id": "95",
+        "name": "Vanessa Santos de Farias Maia",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLOOnXlMEm-wFagVAiUm4Yg8ScL2jcZdkVSmTKWZuRkAj8avkg=s96-c",
+        "job_title": "Executiva de Contas",
+        "business_unit": "bfluence",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "83996893796"
+      },
+      {
+        "id": "97",
+        "name": "Vinicius Cavano",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIigMOvl8vlvLlD5qZSSKVHU5J3RqNBicRuQ82gx_C2KovsyQ=s96-c",
+        "job_title": "Analista de Influencers Pl.",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11995995353"
+      },
+      {
+        "id": "99",
+        "name": "Walquiria Marquart",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIW8wvT7zMznvjSrDzSDsEnFdU0q03gLs8FTom7RUyoqV8i_uI=s96-c",
+        "job_title": "Coordenadora de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11964395639"
+      },
+      {
+        "id": "100",
+        "name": "Washington dos Santos Silva",
+        "preferred_name": null,
+        "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocI0I9qKptOt7vJ7InaHNS-uH2abex5c5s_gj1rLTAOd0xxVnA=s96-c",
+        "job_title": "Analista de Compras Jr",
+        "business_unit": "b2c",
+        "email": "[REDACTED_EMAIL]",
+        "phone": "11988763819"
+      }
+    ]
+  },
+  {
+    "note": "T6 upload PDF fictício (193 bytes)",
+    "method": "POST",
+    "path": "/boards/items/7640/attachments/file",
+    "request_body": "<binário 408B>",
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T6 anexo por link",
+    "method": "POST",
+    "path": "/boards/items/7640/attachments/link",
+    "request_body": {
+      "url": "https://example.com/anexo-ficticio",
+      "filename": "link fictício"
+    },
+    "status": 201,
+    "response": {
+      "id": "93",
+      "item_id": "7640",
+      "kind": "link",
+      "url": "https://example.com/anexo-ficticio",
+      "filename": "link fictício",
+      "mime": null,
+      "size_bytes": null,
+      "uploader_user_id": "37",
+      "created_at": "2026-08-11T00:38:43.534Z"
+    }
+  },
+  {
+    "note": "T6 lista anexos",
+    "method": "GET",
+    "path": "/boards/items/7640/attachments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "93",
+        "item_id": "7640",
+        "kind": "link",
+        "url": "https://example.com/anexo-ficticio",
+        "filename": "link fictício",
+        "mime": null,
+        "size_bytes": null,
+        "uploader_user_id": "37",
+        "created_at": "2026-08-11T00:38:43.534Z"
+      }
+    ]
+  },
+  {
+    "note": "T7 comentário com menção",
+    "method": "POST",
+    "path": "/boards/items/7640/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO com menção",
+      "kind": "reply",
+      "mention_user_ids": [
+        "37"
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": "2076",
+      "body": "TESTE-FICTICIO com menção",
+      "kind": "reply",
+      "mentions": [
+        {
+          "user_id": "37",
+          "display_name": "Ivo Alexandrino da Conceição"
+        }
+      ],
+      "author_user_id": "37",
+      "author_name": "Ivo Alexandrino da Conceição",
+      "is_external": false,
+      "created_at": "2026-08-11T00:38:43.760Z"
+    }
+  },
+  {
+    "note": "T7 edita comentário",
+    "method": "PATCH",
+    "path": "/boards/comments/2076",
+    "request_body": {
+      "body": "TESTE-FICTICIO com menção (editado)"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T7 comentário descartável",
+    "method": "POST",
+    "path": "/boards/items/7640/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO para excluir",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2077",
+      "body": "TESTE-FICTICIO para excluir",
+      "kind": "reply",
+      "mentions": [],
+      "author_user_id": "37",
+      "author_name": "Ivo Alexandrino da Conceição",
+      "is_external": false,
+      "created_at": "2026-08-11T00:38:44.302Z"
+    }
+  },
+  {
+    "note": "T7 exclui comentário",
+    "method": "DELETE",
+    "path": "/boards/comments/2077",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "ok": true
+    }
+  },
+  {
+    "note": "T7 relê comentários",
+    "method": "GET",
+    "path": "/boards/items/7640/comments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "2075",
+        "body": "TESTE-FICTICIO comentário 1",
+        "kind": "reply",
+        "mentions": [],
+        "author_user_id": "37",
+        "author_name": "Ivo Alexandrino da Conceição",
+        "is_external": false,
+        "created_at": "2026-08-11T00:38:39.851Z"
+      },
+      {
+        "id": "2076",
+        "body": "TESTE-FICTICIO com menção",
+        "kind": "reply",
+        "mentions": [
+          {
+            "user_id": "37",
+            "display_name": "Ivo Alexandrino da Conceição"
+          }
+        ],
+        "author_user_id": "37",
+        "author_name": "Ivo Alexandrino da Conceição",
+        "is_external": false,
+        "created_at": "2026-08-11T00:38:43.760Z"
+      }
+    ]
+  },
+  {
+    "note": "T8 cria automação item_created→webhook",
+    "method": "POST",
+    "path": "/boards/80/automations",
+    "request_body": {
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": true,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/c198de3e-4178-4fd3-bdd3-a2fd935c8fec"
+          }
+        }
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": "28",
+      "board_id": "80",
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": true,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/c198de3e-4178-4fd3-bdd3-a2fd935c8fec"
+          }
+        }
+      ],
+      "created_by": "37",
+      "created_at": "2026-08-11T00:38:50.610Z",
+      "updated_at": "2026-08-11T00:38:50.610Z"
+    }
+  },
+  {
+    "note": "T8 item para disparo (endpoint 200)",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO dispara webhook OK"
+    },
+    "status": 201,
+    "response": {
+      "id": "7644",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO dispara webhook OK",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:50.711Z",
+      "updated_at": "2026-08-11T00:38:50.711Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T8 entregas com endpoint 200",
+    "count": 1,
+    "deliveries": [
+      {
+        "method": "POST",
+        "headers": {
+          "content-length": [
+            "82"
+          ],
+          "accept-encoding": [
+            "br, gzip, deflate"
+          ],
+          "user-agent": [
+            "node"
+          ],
+          "sec-fetch-mode": [
+            "cors"
+          ],
+          "accept-language": [
+            "*"
+          ],
+          "accept": [
+            "*/*"
+          ],
+          "content-type": [
+            "application/json"
+          ],
+          "host": [
+            "webhook.site"
+          ]
+        },
+        "content": "{\"board_id\":\"80\",\"item_id\":\"7644\",\"item_name\":\"TESTE-FICTICIO dispara webhook OK\"}",
+        "created_at": "2026-08-11 00:38:55"
+      }
+    ]
+  },
+  {
+    "note": "T8 item para disparo (endpoint 500)",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO dispara webhook ERRO"
+    },
+    "status": 201,
+    "response": {
+      "id": "7645",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO dispara webhook ERRO",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:39:01.686Z",
+      "updated_at": "2026-08-11T00:39:01.686Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T8 entregas na fase 500 (retries em ~3min)",
+    "total_requests_no_endpoint": 2,
+    "timestamps": [
+      "2026-08-11 00:39:06",
+      "2026-08-11 00:38:55"
+    ]
+  },
+  {
+    "note": "T8 runs da automação",
+    "method": "GET",
+    "path": "/automations/28/runs",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "1859",
+        "automation_id": "28",
+        "item_id": "7645",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:39:07.084Z"
+      },
+      {
+        "id": "1856",
+        "automation_id": "28",
+        "item_id": "7644",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:55.870Z"
+      }
+    ]
+  },
+  {
+    "note": "T8 desativa automação (limpeza)",
+    "method": "PATCH",
+    "path": "/automations/28",
+    "request_body": {
+      "enabled": false
+    },
+    "status": 200,
+    "response": {
+      "id": "28",
+      "board_id": "80",
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": false,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/c198de3e-4178-4fd3-bdd3-a2fd935c8fec"
+          }
+        }
+      ],
+      "created_by": "37",
+      "created_at": "2026-08-11T00:38:50.610Z",
+      "updated_at": "2026-08-11T00:42:02.562Z"
+    }
+  }
+]
