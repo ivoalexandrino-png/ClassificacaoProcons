@@ -49,8 +49,16 @@ PRIVATE_FIELDS = {
 }
 
 
+DEFAULT_API_BASE = "https://sunday-api-757613635701.us-central1.run.app"
+
+
 def _token() -> str:
     token = os.environ.get("SUNDAY_API_TOKEN", "").strip()
+    # Secrets occasionally arrive swapped: URL field holds sun_pat_* token.
+    if not token or token.startswith("curl "):
+        url_field = os.environ.get("SUNDAY_API_URL", "").strip()
+        if url_field.startswith("sun_pat_"):
+            token = url_field
     if not token:
         print("ERRO: SUNDAY_API_TOKEN ausente.", file=sys.stderr)
         sys.exit(2)
@@ -59,6 +67,8 @@ def _token() -> str:
 
 def _base() -> str:
     base = os.environ.get("SUNDAY_API_URL", "").strip().rstrip("/")
+    if not base.startswith("http"):
+        base = os.environ.get("SUNDAY_API_BASE_URL", DEFAULT_API_BASE).strip().rstrip("/")
     if not base:
         print("ERRO: SUNDAY_API_URL ausente.", file=sys.stderr)
         sys.exit(2)

@@ -264,24 +264,77 @@ Monday.
 
 ### F0.14 — Microtestes complementares A/B/C (relação, status, Área)
 
-> **Status desta sessão:** script pronto (`scripts/sunday_fase0_microtest_abc.py`), execução
-> **bloqueada** — `SUNDAY_API_TOKEN` e `SUNDAY_API_URL` não estão injetados nesta VM Cloud
-> Agent (solicitados via setup do ambiente). URL conhecida da API:
-> `https://sunday-api-757613635701.us-central1.run.app`. **GO para `sunday/client.py` não
-> é afetado** — estes testes definem apenas relações e status de negócio.
+> **Executado em 2026-08-11** nos boards sandbox `80`/`81`. Relatório completo:
+> `docs/sunday-fase0-microtest-abc-report.json`. Script: `scripts/sunday_fase0_microtest_abc.py`.
+> **GO para `sunday/client.py` confirmado** — estes testes definem payloads de relação e status.
 
 **Correções de contexto (vs. testes anteriores):**
 
 1. A coluna `TESTE - RELAÇÃO` (id `456`, `source_board_id=79`) apontava para **Legal -
    Seguros** (board de produção). O teste que gravou item do board 81 nela provou
    **persistência JSON**, mas **não** validação semântica de `board_relation` nativa.
+   **Descartado para decisão.**
 2. A coluna estrutural **Área** (`key=area`, tipo `dropdown`, `is_system=true`) é esperada
    e **não** deve ser removida/modificada pelo adapter.
-3. Coluna correta para relação com sandbox: **`TESTE - RELAÇÃO BOARD 81`** (ou qualquer
-   `board_relation` com `source_board_id=81`). No snapshot de 2026-08-11 existia também
-   `81 — SANDBOX - API SUNDAY - RELATION` (id `458`, key `81_sandbox_api_sunday_relation`).
+3. Coluna usada no teste A: `81 — SANDBOX - API SUNDAY - RELATION` (id `458`, key
+   `81_sandbox_api_sunday_relation`, `source_board_id=81`). A label preferida
+   `TESTE - RELAÇÃO BOARD 81` não estava presente no board; o script usou fallback por
+   `source_board_id=81`.
 
-**Execução (quando secrets disponíveis):**
+#### Decisão F0.14 (definitiva)
+
+| # | Pergunta | Resultado |
+|---|----------|-----------|
+| 1 | `board_relation` com `source_board_id=81` funciona? | **A — FUNCIONA NATIVAMENTE** |
+| 2 | Payload definitivo recomendado | `PATCH /boards/items/{id}/values/{column_id}` com `{"value": {"links": [{"item_id": "<target_id>"}]}}` |
+| 3 | Relação reconhecida pelo Sunday ou só armazenada? | **Nativa** — releitura estruturada em `links[]`, target confirmado no board 81, update/remove/recreate OK |
+| 4 | Status de negócio customizado atualizável? | **SIM** — coluna `teste_status_negocio` (id `457`, tipo `status` custom, `is_system=false`) |
+| 5 | Estratégia recomendada para status | **Coluna status customizada** controlada pela integração (não depender do system status do board) |
+| 6 | Comportamento da coluna Área | `key=area`, `dropdown`, `is_system=true`, `options=[]`; campo presente no item, **sem valor default** |
+| 7 | Área pode ser ignorada pelo adapter? | **SIM** — criação/edição funcionam sem informar Área |
+| 8 | Matriz A/B/C/D corrigida | Ver tabela abaixo |
+
+**Teste A — relação (coluna `458`, board 81):**
+
+- Gravar → reler → confirmar `item_id` no board 81: **OK**
+- Atualizar para outro item (`7673` → `7674`): **OK**
+- Remover (`value: null`): **OK**
+- Recriar relação: **OK**
+- Endpoint `/links`: **403/404** — fluxo **não** deve depender dele
+- Classificação: **A — FUNCIONA NATIVAMENTE** (não B)
+
+**Teste B — status de negócio (`teste_status_negocio`):**
+
+- Tipo: `status` custom (`is_system=false`)
+- Rota: `PATCH /boards/items/{id}/values/457` com `{"value": "opt_1"}`
+- Gravar e reler: **OK**
+- Limitação: board tinha apenas 1 opção (`opt_1`); troca entre opções distintas não testada
+
+**Teste C — Área (somente leitura):**
+
+- `key=area`, tipo `dropdown`, `is_system=true`
+- Item criado sem valor em Área; campo presente, valor `null`
+- Adapter **não escreve nem remove** esta coluna
+
+**Matriz A/B/C/D (corrigida):**
+
+| Recurso | Classe | Observação |
+|---------|--------|------------|
+| `sunday/client.py` base | **A — GO** | Não bloqueado |
+| `board_relation` → board correto (`source_board_id` alinhado) | **A** | Payload `links[]`; não usar `/links` |
+| `board_relation` com `source_board_id` errado | **inválido** | Persiste JSON mas sem integridade semântica |
+| Status de negócio custom (`status`, `is_system=false`) | **A** | Via rota `values/{column_id}` |
+| System status do board | **A** | Via `PATCH …/status` (já confirmado em retestes anteriores) |
+| Coluna Área (estrutural) | **C** | Ignorável pelo adapter |
+| Schema colunas custom | **C** | Configuração manual 1× por board |
+| Endpoint `/links` | **D** para token API | Usar value da coluna `board_relation` |
+
+**Reteste anterior inválido (descartado):**
+
+- Coluna `TESTE - RELAÇÃO` (`456`) com `source_board_id=79` aceitou gravação de item do
+  board 81 — isso **não** comprova relação nativa; apenas armazenamento JSON.
+
+**Execução reproduzível:**
 
 ```bash
 source .venv/bin/activate
@@ -290,38 +343,3 @@ export SUNDAY_API_TOKEN="<token>"
 python scripts/sunday_fase0_microtest_abc.py \
   --out docs/sunday-fase0-microtest-abc-report.json
 ```
-
-Escrita autorizada **somente** nos boards `80` e `81`. Não altera colunas/grupos/boards de
-produção.
-
-#### Decisão F0.14 (pendente execução ao vivo — preenchida pelo relatório JSON)
-
-| # | Pergunta | Estado | Nota preliminar |
-|---|----------|--------|-----------------|
-| 1 | `board_relation` com `source_board_id=81` funciona? | **PENDENTE** | Teste inválido anterior (col. 456→79) descartado |
-| 2 | Payload definitivo recomendado | **PENDENTE** | Candidatos: `{"links":[{"item_id":"…"}]}` ou `"item_id"` string via `PATCH …/values/{col}` |
-| 3 | Relação reconhecida pelo Sunday ou só armazenada? | **PENDENTE** | Exige ciclo gravar→reler→atualizar→remover→recriar com item existente no board 81 |
-| 4 | Status de negócio customizado atualizável? | **PENDENTE** | Coluna `TESTE - STATUS NEGÓCIO` (key `teste_status_negocio`, tipo `status` custom) já existe no board 80 |
-| 5 | Estratégia recomendada para status | **PENDENTE** | Se OK: coluna status custom controlada pela integração (não system status) |
-| 6 | Comportamento da coluna Área | **OK (leitura)** | `key=area`, tipo `dropdown`, `is_system=true`, `options=[]`; criação de item funciona sem valor |
-| 7 | Área pode ser ignorada pelo adapter? | **SIM** | Não bloqueante; adapter não deve excluir nem escrever nela |
-| 8 | Matriz A/B/C/D corrigida | **PARCIAL** | Área = **C**; relação e status = pendente execução |
-
-**Matriz A/B/C/D (corrigida, parcial):**
-
-| Recurso | Classe | Observação |
-|---------|--------|------------|
-| `sunday/client.py` base | **A — GO** | Não bloqueado por este microteste |
-| Schema colunas custom | **C** | Configuração manual 1× por board |
-| Coluna Área (estrutural) | **C** | Ignorável pelo adapter |
-| `board_relation` → board 81 | **PENDENTE** | Aguarda microteste A |
-| Status de negócio custom | **PENDENTE** | Aguarda microteste B |
-
-**Reteste anterior inválido (descartado para decisão de relação):**
-
-- Coluna `TESTE - RELAÇÃO` (`456`) com `source_board_id=79` aceitou gravação de item do
-  board 81 — isso **não** comprova relação nativa com target correto.
-
-**Próximo passo:** injetar `SUNDAY_API_URL` + `SUNDAY_API_TOKEN` no ambiente Cloud Agent,
-reexecutar o script e substituir a tabela acima pelos resultados de
-`docs/sunday-fase0-microtest-abc-report.json`.
