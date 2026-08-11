@@ -261,3 +261,67 @@ Monday.
 3. Fazer upload de um anexo pequeno para confirmar limite, resposta e associação ao item.
 4. Criar uma relação entre boards para verificar a restrição entre workspaces.
 5. Criar uma coluna `time_tracking` para confirmar se esse tipo é aceito pela API.
+
+### F0.14 — Microtestes complementares A/B/C (relação, status, Área)
+
+> **Status desta sessão:** script pronto (`scripts/sunday_fase0_microtest_abc.py`), execução
+> **bloqueada** — `SUNDAY_API_TOKEN` e `SUNDAY_API_URL` não estão injetados nesta VM Cloud
+> Agent (solicitados via setup do ambiente). URL conhecida da API:
+> `https://sunday-api-757613635701.us-central1.run.app`. **GO para `sunday/client.py` não
+> é afetado** — estes testes definem apenas relações e status de negócio.
+
+**Correções de contexto (vs. testes anteriores):**
+
+1. A coluna `TESTE - RELAÇÃO` (id `456`, `source_board_id=79`) apontava para **Legal -
+   Seguros** (board de produção). O teste que gravou item do board 81 nela provou
+   **persistência JSON**, mas **não** validação semântica de `board_relation` nativa.
+2. A coluna estrutural **Área** (`key=area`, tipo `dropdown`, `is_system=true`) é esperada
+   e **não** deve ser removida/modificada pelo adapter.
+3. Coluna correta para relação com sandbox: **`TESTE - RELAÇÃO BOARD 81`** (ou qualquer
+   `board_relation` com `source_board_id=81`). No snapshot de 2026-08-11 existia também
+   `81 — SANDBOX - API SUNDAY - RELATION` (id `458`, key `81_sandbox_api_sunday_relation`).
+
+**Execução (quando secrets disponíveis):**
+
+```bash
+source .venv/bin/activate
+export SUNDAY_API_URL="https://sunday-api-757613635701.us-central1.run.app"
+export SUNDAY_API_TOKEN="<token>"
+python scripts/sunday_fase0_microtest_abc.py \
+  --out docs/sunday-fase0-microtest-abc-report.json
+```
+
+Escrita autorizada **somente** nos boards `80` e `81`. Não altera colunas/grupos/boards de
+produção.
+
+#### Decisão F0.14 (pendente execução ao vivo — preenchida pelo relatório JSON)
+
+| # | Pergunta | Estado | Nota preliminar |
+|---|----------|--------|-----------------|
+| 1 | `board_relation` com `source_board_id=81` funciona? | **PENDENTE** | Teste inválido anterior (col. 456→79) descartado |
+| 2 | Payload definitivo recomendado | **PENDENTE** | Candidatos: `{"links":[{"item_id":"…"}]}` ou `"item_id"` string via `PATCH …/values/{col}` |
+| 3 | Relação reconhecida pelo Sunday ou só armazenada? | **PENDENTE** | Exige ciclo gravar→reler→atualizar→remover→recriar com item existente no board 81 |
+| 4 | Status de negócio customizado atualizável? | **PENDENTE** | Coluna `TESTE - STATUS NEGÓCIO` (key `teste_status_negocio`, tipo `status` custom) já existe no board 80 |
+| 5 | Estratégia recomendada para status | **PENDENTE** | Se OK: coluna status custom controlada pela integração (não system status) |
+| 6 | Comportamento da coluna Área | **OK (leitura)** | `key=area`, tipo `dropdown`, `is_system=true`, `options=[]`; criação de item funciona sem valor |
+| 7 | Área pode ser ignorada pelo adapter? | **SIM** | Não bloqueante; adapter não deve excluir nem escrever nela |
+| 8 | Matriz A/B/C/D corrigida | **PARCIAL** | Área = **C**; relação e status = pendente execução |
+
+**Matriz A/B/C/D (corrigida, parcial):**
+
+| Recurso | Classe | Observação |
+|---------|--------|------------|
+| `sunday/client.py` base | **A — GO** | Não bloqueado por este microteste |
+| Schema colunas custom | **C** | Configuração manual 1× por board |
+| Coluna Área (estrutural) | **C** | Ignorável pelo adapter |
+| `board_relation` → board 81 | **PENDENTE** | Aguarda microteste A |
+| Status de negócio custom | **PENDENTE** | Aguarda microteste B |
+
+**Reteste anterior inválido (descartado para decisão de relação):**
+
+- Coluna `TESTE - RELAÇÃO` (`456`) com `source_board_id=79` aceitou gravação de item do
+  board 81 — isso **não** comprova relação nativa com target correto.
+
+**Próximo passo:** injetar `SUNDAY_API_URL` + `SUNDAY_API_TOKEN` no ambiente Cloud Agent,
+reexecutar o script e substituir a tabela acima pelos resultados de
+`docs/sunday-fase0-microtest-abc-report.json`.
