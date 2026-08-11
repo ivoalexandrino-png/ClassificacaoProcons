@@ -1,0 +1,33 @@
+{
+  "comment": "Snapshot REAL do schema dos boards candidatos a destino no workspace 22 do Sunday, coletado com leitura autenticada em 2026-08-11 (F0.13). Apenas schema — nenhum dado de item. Regerar ao vivo com scripts/sunday_migration_dry_run.py --refresh-sunday quando houver SUNDAY_API_TOKEN.",
+  "collected_at": "2026-08-11",
+  "source": "F0.13 (leitura autenticada real)",
+  "boards": [
+    {
+      "board_id": "72",
+      "name": "Legal - Audi\u00eancias",
+      "status_keys": ["to_do", "follow_up", "done"],
+      "groups": {"218": "Itens", "219": "Audiencias Pendentes"},
+      "columns": [
+        {"id": "396", "key": "name", "label": "Nome", "type": "text", "is_system": true, "settings": {}},
+        {"id": "397", "key": "status", "label": "Status", "type": "status", "is_system": true, "settings": {"use_board_status_set": true}},
+        {"id": "398", "key": "owner", "label": "Respons\u00e1vel", "type": "people", "is_system": true, "settings": {"multi": false}},
+        {"id": "399", "key": "target_date", "label": "Data", "type": "date", "is_system": true, "settings": {"include_time": false}},
+        {"id": "400", "key": "area", "label": "\u00c1rea", "type": "dropdown", "is_system": true, "settings": {"options": []}}
+      ]
+    },
+    {
+      "board_id": "77",
+      "name": "Legal - Controle de Assinaturas - Jan & Luciano",
+      "status_keys": ["to_do", "follow_up", "done"],
+      "groups": {"227": "Itens"},
+      "columns": [
+        {"id": "428", "key": "name", "label": "Nome", "type": "text", "is_system": true, "settings": {}},
+        {"id": "429", "key": "status", "label": "Status", "type": "status", "is_system": true, "settings": {"use_board_status_set": true}},
+        {"id": "430", "key": "owner", "label": "Respons\u00e1vel", "type": "people", "is_system": true, "settings": {"multi": false}},
+        {"id": "431", "key": "target_date", "label": "Data", "type": "date", "is_system": true, "settings": {"include_time": false}},
+        {"id": "432", "key": "area", "label": "\u00c1rea", "type": "dropdown", "is_system": true, "settings": {"options": []}}
+      ]
+    }
+  ]
+}
