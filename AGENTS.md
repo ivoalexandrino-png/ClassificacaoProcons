@@ -43,6 +43,11 @@ Nunca commitar `credentials/`. Usar Secret Manager em produção.
 
 Setup completo: `docs/cloud-agent-autonomia.md`. Reconciliação Controle: `docs/controle-autentique-reconciliacao.md`.
 
+**Congelamento remediation Monday (2026-08-11):** não investir mais no saneamento do legado
+Monday Controle (1.607 itens). Código e artefatos etapa 2 permanecem; ver
+`docs/controle-monday-remediation-freeze.md`. Próximo foco: **Controle greenfield no Sunday**
+(`docs/controle-sunday-greenfield.md`) com Autentique como source of truth.
+
 **Signatários internos no Autentique (mapeamento para filas Jan/Luciano no Controle):**
 
 | Atribuir a **Jan** | Atribuir a **Luciano** |

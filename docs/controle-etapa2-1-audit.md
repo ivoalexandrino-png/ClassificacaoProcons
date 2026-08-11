@@ -1,5 +1,9 @@
 # Etapa 2.1 — Auditoria de consistência (read-only)
 
+> **CONGELADO (2026-08-11):** remediation Monday interrompida. Este documento e os
+> artefatos em `artifacts/controle-etapa2-1/` permanecem como referência histórica.
+> Próximo trabalho: **Controle greenfield no Sunday** — `docs/controle-sunday-greenfield.md`.
+
 > **Escopo:** Autentique → Monday / Controle Assinaturas apenas.  
 > **Política:** `CONTROLE_WRITE_ENABLED=false`, `CONTROLE_PAUSE_CREATE=true`.  
 > **Nenhuma mutation** no Monday. Nenhuma execução de remediation.

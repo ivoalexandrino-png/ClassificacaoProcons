@@ -1,4 +1,8 @@
-"""Etapa 2.1: auditoria de consistência e remediation_plan_v2 (sem mutations)."""
+"""Etapa 2.1: auditoria de consistência e remediation_plan_v2 (sem mutations).
+
+CONGELADO (2026-08-11): remediation Monday interrompida. Script mantido como referência;
+não evoluir. Ver docs/controle-monday-remediation-freeze.md.
+"""
 
 from __future__ import annotations
 
