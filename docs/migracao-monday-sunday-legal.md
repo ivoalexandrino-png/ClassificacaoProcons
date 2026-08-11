@@ -935,3 +935,151 @@ em classe D.
 - Revisão de views/membros por board.
 - Cronômetro de `time_tracking` (config única da coluna, se quiserem recomeçar a
   cronometrar no Sunday).
+
+### F0.15 Reteste de values e board_relation em colunas pré-configuradas (2026-08-11)
+
+> Fecha o único ponto sem demonstração empírica do F0.14: escrita/leitura de `values`
+> em colunas **customizadas** previamente criadas (schema manual — decisão de
+> arquitetura: a API não precisa criar/alterar colunas; o adapter só manipula dados).
+> Sandbox autorizado: boards `80` (principal) e `81` (RELATION), workspace 22. Nenhuma
+> escrita fora deles; nada foi alterado no Monday. Scripts:
+> `scripts/sunday_fase0_values_retest.py` (T1–T10) e
+> `scripts/sunday_fase0_values_retest_probe.py` (sonda complementar de status, people e
+> relação múltipla). Relatório sanitizado:
+> `docs/sunday-fase0-values-retest-2026-08-11.json`.
+
+**Validação inicial.** `SUNDAY_API_TOKEN` e `SUNDAY_API_URL` presentes no ambiente;
+`GET /boards/80` e `GET /boards/81` confirmaram os nomes exatos dos dois sandboxes antes
+de qualquer escrita. As 8 colunas pedidas existem no board 80 (títulos com variação de
+caixa, casados por normalização), **com duas ressalvas estruturais**:
+
+1. Quatro das oito "colunas TESTE" são na verdade as colunas de **sistema** do template
+   renomeadas (Texto = `name`, Status = `status`, Data = `target_date`, Responsável =
+   `owner`). Isso fez o reteste exercitar **as duas rotas de escrita** (values para
+   customizadas, `PATCH` do item para as de sistema) — resultado igualmente conclusivo.
+2. A coluna **TESTE - Relação está configurada para o board errado**:
+   `settings.source_board_id = "79"` — e o board 79 é **"Legal - Seguros" (produção)**,
+   não o 81. Nenhuma escrita ou referência a itens do board 79 foi feita; a relação foi
+   testada apontando para itens criados no board 81 e a API **aceitou mesmo assim** (ver
+   T10). Corrigir a configuração da coluna para o board 81 manualmente.
+
+**T1 — Column IDs do board 80 (nome → column_id → type → settings):**
+
+| Coluna (label real) | column_id | key | type | sistema? | settings |
+|---|---|---|---|---|---|
+| TESTE - texto | `443` | `name` | `text` | sim | `{}` |
+| TESTE - Número | `453` | `teste_numero` | `number` | não | `{}` |
+| Teste - Status | `444` | `status` | `status` | sim | `{"use_board_status_set": true}` |
+| teste - Data | `446` | `target_date` | `date` | sim | `{"include_time": false}` |
+| teste - Responsável | `445` | `owner` | `people` | sim | `{"multi": false}` |
+| Teste - LINK | `454` | `teste_link` | `link` | não | `{}` |
+| TESTE - CHECKBOX | `455` | `teste_checkbox` | `checkbox` | não | `{}` |
+| TESTE - RELAÇÃO | `456` | `teste_relacao` | `board_relation` | não | `{"source_board_id": "79"}` ⚠ deveria ser `"81"` |
+
+**T2 — Item fictício.** `POST /boards/80/items {"name": "TESTE VALUES API - PODE
+EXCLUIR"}` → `201`, item `7659`. Itens deixados no sandbox para conferência (todos
+"PODE EXCLUIR"): `7659` e `7663` no board 80; `7660` e `7664` no board 81 (além do
+`7654`, remanescente homônimo da rodada anterior, reutilizado pela sonda).
+
+**T3–T10 — Resultados por tipo (payload enviado, HTTP e formato devolvido pelo GET):**
+
+| Teste | Coluna | Rota que funcionou | Payload aceito | HTTP | GET devolve | Round-trip |
+|---|---|---|---|---|---|---|
+| T3 Texto | `443` (sistema `name`) | `PATCH /boards/items/{id}` | `{"name": "Teste Sunday API"}` | 200 | `name: "Teste Sunday API"` (idêntico) | ✅ |
+| T4 Número | `453` (custom) | `PATCH .../values/453` | `{"value": 12345}` (número JSON) | 200 | `value: 12345` (número JSON, sem coerção p/ string) | ✅ |
+| T5 Status | `444` (sistema) | `PATCH /boards/items/{id}/status` | `{"status": "follow_up", "cascade": false}` (key real do `status_set` do board: `to_do`/`follow_up`/`done`) | 200 | `status: "follow_up"` | ✅ |
+| T6 Data | `446` (sistema `target_date`) | `PATCH /boards/items/{id}` | `{"target_date": "2026-01-15"}` | 200 | `"2026-01-15T12:00:00.000Z"` (normaliza para meio-dia UTC) | ✅ |
+| T7 Checkbox | `455` (custom) | `PATCH .../values/455` | `{"value": true}` e depois `{"value": false}` | 200/200 | `true` e depois `false` (booleano JSON) | ✅ |
+| T8 Link | `454` (custom) | `PATCH .../values/454` | `{"value": "https://example.com/teste-sunday-api"}` (string simples) | 200 | a mesma string | ✅ |
+| T9 People | `445` (sistema `owner`) | `PATCH /boards/items/{id}` | `{"owner_user_id": "<id do /auth/me>"}` | 200 | `owner_user_id` preenchido | ⚠ parcial (ver abaixo) |
+| T10 Relação | `456` (custom `board_relation`) | `PATCH .../values/456` | `{"value": "7660"}` (string), `{"value": ["7654","7664"]}` (lista) e `{"value": null}` (limpar) | 200 nos três | o(s) `item_id`(s) exatamente como gravados; `null` após limpar | ✅ |
+
+Erros documentados (sanitizados):
+
+- `PATCH /boards/items/{id}/values/{col}` nas 4 colunas de **sistema** → `400
+  {"message": "System columns são atualizadas via PATCH /boards/items/:id.", "error":
+  "Bad Request"}` — mensagem de negócio, não de permissão (comportamento já visto no
+  follow-up do F0.14, agora confirmado como **a única exceção**: nas colunas
+  customizadas a mesma rota funciona).
+- `PATCH /boards/items/{id}` com `{"status": ...}` → `200` porém **ignorado em
+  silêncio** (status só muda pela rota dedicada `/status`). Mesmo padrão já conhecido de
+  `group_id` e `assignee_user_ids`.
+- T9 people: `values/445` com `"<id>"` e `["<id>"]` → `400` (coluna de sistema). Pela
+  rota do item, `{"owner_user_id": <id do /auth/me>}` → `200` com `updated_at`
+  avançando; porém o owner **já nasce igual ao criador** (dono do token), então com um
+  único usuário disponível não dá para observar a troca de valor; `{"owner_user_id":
+  null}` e `{"assignee_user_ids": [...]}` são ignorados em silêncio (200 sem efeito).
+  Nenhum `user_id` foi inventado. Não bloqueante: o de-para e-mail→`user_id` virá de
+  `GET /users/directory` (200, F0.14) e a atribuição definitiva se confirma na Fase 1
+  com um segundo usuário real.
+
+**T10 — Respostas objetivas sobre board_relation:**
+
+1. **O Sunday aceitou gravar a relação?** Sim — `200` na primeira tentativa, payload
+   mínimo `{"value": "<item_id>"}`; aceita também **lista** de ids (one-to-many, caso
+   Controle → Contratos) e `null` para desfazer.
+2. **O GET devolve o target item_id?** Sim — `GET /boards/items/{id}/values` devolve
+   `{"column_id": "456", "value": "7660"}` (ou a lista), exatamente como gravado.
+3. **O target board pode ser identificado?** Indiretamente: o value guarda **só** o
+   item_id; o board-alvo vem de `settings.source_board_id` da coluna (config manual).
+   Atenção: a API **não valida** o value contra essa config — aceitou ids do board 81
+   com a coluna apontando para o 79. A integridade referencial é responsabilidade do
+   adapter (validar o id contra o board esperado antes de gravar).
+4. **Reconstruir source → target sem `/boards/{id}/links`?** Sim — basta
+   `GET /boards/items/{id}/values`; `/links` (403 para o token) é dispensável.
+5. **Manter a relação no futuro só com endpoints normais?** Sim — criar, trocar
+   (regravar o value), adicionar múltiplos (lista) e desfazer (`null`) funcionam pela
+   rota normal de values.
+
+**Conclusão sobre fallback:** a tabela local de relações (monday/sunday × source/target)
+**não é necessária** como mecanismo primário — a relação nativa funciona por values.
+Segue recomendada apenas como registro de auditoria durante a migração (de-para
+Monday→Sunday, T13), não como fonte de verdade em produção.
+
+**O que funciona / o que não funciona (values):**
+
+- Funcionam nativamente: número, checkbox, link, **board_relation** (single, lista,
+  limpar) via `/values/{column_id}`; texto (`name`), data (`target_date`) e dropdown
+  (`area`, F0.14) via `PATCH /boards/items/{id}`; status via `PATCH
+  /boards/items/{id}/status`.
+- Funcionam com ressalva: people (`owner_user_id` aceito pela rota do item; troca de
+  valor não observável com um único usuário; `assignee_user_ids` ignorado — confirmar
+  na Fase 1 com segundo usuário).
+- Não testados por não existirem colunas customizadas desses tipos no sandbox: `text`
+  custom (inferido pelas demais customizadas), `long_text`, `email`, `phone`,
+  `dropdown`/`status` customizadas com options próprias, `mirror` (leitura já sabida
+  403 para token — fallback lookup no código). Nenhum deles muda a decisão: a rota de
+  values para colunas customizadas está comprovada em 4 tipos, incluindo o mais crítico
+  (`board_relation`).
+
+**Matriz Go/No-Go atualizada (A nativo · B fallback/transformação · C manual aceitável ·
+D bloqueante):**
+
+| Requisito | Classe | Mudança vs F0.14 |
+|---|---|---|
+| Criar/listar/alterar/excluir itens; status de sistema | A | mantém |
+| Values de colunas customizadas (número, checkbox, link) | **A** | era B (indício) → **confirmado empiricamente** |
+| Values de colunas de sistema (texto/nome, data, dropdown, status) | A | mantém (rotas dedicadas confirmadas de novo) |
+| `board_relation` (Prazos→Processos; Audiências→Processos; Controle→Contratos) | **A** | era B (fallback) → **nativo confirmado** (single + lista + null); ressalvas: config manual da coluna e validação de board a cargo do adapter |
+| People | B | owner pela rota do item aceito; confirmação final de troca exige 2º usuário (Fase 1); não bloqueante |
+| Criação/alteração de schema (colunas) via API | **C** | decisão de arquitetura: schema manual no Sunday; dados via `sunday/client.py` — **não bloqueante** |
+| Arquivos | B | mantém (Drive/GCS → anexo por link) |
+| Mirror | B/C | mantém (lookup/cópia no código) |
+| Busca | B | mantém (cache/índice local) |
+| Webhook | opcional | mantém (polling é a arquitetura principal) |
+| Comentários / identificação de registros | A | mantém |
+| — | **D: nenhum** | — |
+
+**Decisão final: GO** para implementar `sunday/client.py`. Todos os essenciais do
+critério de decisão estão confirmados empiricamente: criação/leitura/alteração/exclusão
+de item; escrita/leitura de values em colunas existentes (customizadas via
+`/values/{column_id}`; de sistema via `PATCH` do item e `/status`); comentários;
+identificação de registros; e **relações nativas por values** (sem depender de
+`/links` nem de tabela local). A impossibilidade de criar schema pela API fica
+classificada como **C — configuração manual aceitável**, conforme a decisão de
+arquitetura. Pendências não bloqueantes para a Fase 1: corrigir manualmente o
+`source_board_id` da coluna de relação do sandbox (hoje aponta para o board 79 —
+produção); confirmar people com um segundo usuário; criar 1 coluna customizada de cada
+tipo restante (`text`, `long_text`, `email`, `status`/`dropdown` com options) para
+fixar os payloads no adapter. Nada de `sunday/client.py`, workflows ou migração de
+dados reais foi implementado nesta rodada.
