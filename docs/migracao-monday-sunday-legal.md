@@ -393,7 +393,7 @@ disparar a ação, incluindo `item_created` e `column_changed` com filtro de val
   (`column: "status"`, `to: <key Assinado>`) existe, mas **nenhuma ação cria item em outro
   board** (`create_item` é local). **Não reproduzível nativamente.** Alternativas:
   (1) gatilho + ação `webhook` → nosso serviço cria o item via API; (2) polling (cron
-  existente). 
+  existente).
 - **B) "Novo item no quadro-mestre → criar audiência"**: gatilho `item_created` existe;
   mesma limitação de ação cross-board. Mesmas alternativas.
 - Conclusão: **as duas regras passam para o nosso código**, com `webhook` como possível
