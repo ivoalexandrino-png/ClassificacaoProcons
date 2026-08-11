@@ -754,9 +754,11 @@ application/json`, `User-Agent: node`, com body
 `{"board_id":"80","item_id":"7638","item_name":"TESTE-FICTICIO dispara webhook OK"}`.
 Também foram observados `Accept: */*`, `Accept-Encoding: br, gzip, deflate` e
 `Content-Length: 82`; nenhum header sensível foi preservado. Com o receptor em HTTP
-500, ocorreram **6 tentativas no total (1 inicial + 5 retries)** em aproximadamente
-42 segundos. O Sunday registrou os runs como `success` apesar do 500. Método, headers e
-body específicos da fase 500, política após a janela observada e timeout:
+500, foram observadas **6 requisições adicionais** em aproximadamente 42 segundos,
+mas o relatório dessa fase preservou apenas timestamps e houve criação concorrente de
+itens no mesmo sandbox. Portanto, não é possível separar retries de novos eventos. O
+Sunday registrou os runs como `success` apesar do 500. Método, headers e body
+específicos da fase 500, retries, política após a janela observada e timeout:
 **NÃO DETERMINADOS**.
 
 **Teste extra de subitem.** `PATCH /boards/80` com `{"hierarchy_depth":2}` retornou
