@@ -1,0 +1,1157 @@
+[
+  {
+    "note": "preflight board 80",
+    "method": "GET",
+    "path": "/boards/80",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "80",
+      "name": "SANDBOX - API SUNDAY - NÃO USAR",
+      "description": null,
+      "status": "active",
+      "template_key": "board",
+      "status_set": [
+        {
+          "key": "to_do",
+          "color": "amber",
+          "label": "A fazer",
+          "terminal": false
+        },
+        {
+          "key": "follow_up",
+          "color": "sky",
+          "label": "Follow-up",
+          "terminal": false
+        },
+        {
+          "key": "done",
+          "color": "emerald",
+          "label": "Feito",
+          "terminal": true
+        }
+      ],
+      "hierarchy_depth": 1,
+      "capabilities": {
+        "process": false,
+        "subitems": false,
+        "approvals": false,
+        "time_tracking": false,
+        "calendar_anchor": true
+      },
+      "approval_workflow_config": null,
+      "process_config": null,
+      "open_submissions": null,
+      "open_submissions_set_at": null,
+      "owner_user_id": "<omitido: dados de identidade>",
+      "calendar_event_id": null,
+      "calendar_event_organizer_email": "<omitido: dados de identidade>",
+      "recurrence_rule": null,
+      "area_options": [],
+      "team_ids": "<omitido: dados de identidade>",
+      "approver_user_ids": "<omitido: dados de identidade>",
+      "created_at": "2026-08-11T00:12:18.275Z",
+      "updated_at": "2026-08-11T00:12:18.275Z",
+      "members": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "preflight board 81",
+    "method": "GET",
+    "path": "/boards/81",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "81",
+      "name": "SANDBOX - API SUNDAY - RELATION",
+      "description": "Sandbox de teste de board_relation. Pode apagar.",
+      "status": "active",
+      "template_key": "board",
+      "status_set": [
+        {
+          "key": "to_do",
+          "color": "amber",
+          "label": "A fazer",
+          "terminal": false
+        },
+        {
+          "key": "follow_up",
+          "color": "sky",
+          "label": "Follow-up",
+          "terminal": false
+        },
+        {
+          "key": "done",
+          "color": "emerald",
+          "label": "Feito",
+          "terminal": true
+        }
+      ],
+      "hierarchy_depth": 1,
+      "capabilities": {
+        "process": false,
+        "subitems": false,
+        "approvals": false,
+        "time_tracking": false,
+        "calendar_anchor": true
+      },
+      "approval_workflow_config": null,
+      "process_config": null,
+      "open_submissions": null,
+      "open_submissions_set_at": null,
+      "owner_user_id": "<omitido: dados de identidade>",
+      "calendar_event_id": null,
+      "calendar_event_organizer_email": "<omitido: dados de identidade>",
+      "recurrence_rule": null,
+      "area_options": [],
+      "team_ids": "<omitido: dados de identidade>",
+      "approver_user_ids": "<omitido: dados de identidade>",
+      "created_at": "2026-08-11T00:35:14.609Z",
+      "updated_at": "2026-08-11T00:35:14.609Z",
+      "members": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T1 colunas board 80",
+    "method": "GET",
+    "path": "/boards/80/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "443",
+        "board_id": "80",
+        "key": "name",
+        "type": "text",
+        "label": "TESTE - texto",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "453",
+        "board_id": "80",
+        "key": "teste_numero",
+        "type": "number",
+        "label": "TESTE - Número",
+        "position": 1,
+        "is_system": false,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T01:40:58.437Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "444",
+        "board_id": "80",
+        "key": "status",
+        "type": "status",
+        "label": "Teste - Status",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "446",
+        "board_id": "80",
+        "key": "target_date",
+        "type": "date",
+        "label": "teste - Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "445",
+        "board_id": "80",
+        "key": "owner",
+        "type": "people",
+        "label": "teste - Responsável",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "454",
+        "board_id": "80",
+        "key": "teste_link",
+        "type": "link",
+        "label": "Teste - LINK",
+        "position": 5,
+        "is_system": false,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T01:42:55.407Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "455",
+        "board_id": "80",
+        "key": "teste_checkbox",
+        "type": "checkbox",
+        "label": "TESTE - CHECKBOX",
+        "position": 6,
+        "is_system": false,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T01:43:55.470Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "447",
+        "board_id": "80",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 7,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T01:43:56.836Z"
+      },
+      {
+        "id": "456",
+        "board_id": "80",
+        "key": "teste_relacao",
+        "type": "board_relation",
+        "label": "TESTE - RELAÇÃO",
+        "position": 8,
+        "is_system": false,
+        "settings": {
+          "source_board_id": "79"
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T01:44:51.365Z",
+        "updated_at": "2026-08-11T01:44:51.365Z"
+      },
+      {
+        "id": "457",
+        "board_id": "80",
+        "key": "teste_status_negocio",
+        "type": "status",
+        "label": "TESTE - STATUS NEGÓCIO",
+        "position": 9,
+        "is_system": false,
+        "settings": {
+          "options": [
+            {
+              "key": "opt_1",
+              "color": "violet",
+              "label": "1"
+            }
+          ]
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T01:56:59.797Z",
+        "updated_at": "2026-08-11T01:56:59.797Z"
+      },
+      {
+        "id": "458",
+        "board_id": "80",
+        "key": "81_sandbox_api_sunday_relation",
+        "type": "board_relation",
+        "label": "81 — SANDBOX - API SUNDAY - RELATION",
+        "position": 10,
+        "is_system": false,
+        "settings": {
+          "source_board_id": "81"
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T01:59:01.293Z",
+        "updated_at": "2026-08-11T01:59:01.293Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 board 80 (status_set)",
+    "method": "GET",
+    "path": "/boards/80",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "80",
+      "name": "SANDBOX - API SUNDAY - NÃO USAR",
+      "description": null,
+      "status": "active",
+      "template_key": "board",
+      "status_set": [
+        {
+          "key": "to_do",
+          "color": "amber",
+          "label": "A fazer",
+          "terminal": false
+        },
+        {
+          "key": "follow_up",
+          "color": "sky",
+          "label": "Follow-up",
+          "terminal": false
+        },
+        {
+          "key": "done",
+          "color": "emerald",
+          "label": "Feito",
+          "terminal": true
+        }
+      ],
+      "hierarchy_depth": 1,
+      "capabilities": {
+        "process": false,
+        "subitems": false,
+        "approvals": false,
+        "time_tracking": false,
+        "calendar_anchor": true
+      },
+      "approval_workflow_config": null,
+      "process_config": null,
+      "open_submissions": null,
+      "open_submissions_set_at": null,
+      "owner_user_id": "<omitido: dados de identidade>",
+      "calendar_event_id": null,
+      "calendar_event_organizer_email": "<omitido: dados de identidade>",
+      "recurrence_rule": null,
+      "area_options": [],
+      "team_ids": "<omitido: dados de identidade>",
+      "approver_user_ids": "<omitido: dados de identidade>",
+      "created_at": "2026-08-11T00:12:18.275Z",
+      "updated_at": "2026-08-11T00:12:18.275Z",
+      "members": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T1 colunas board 81 (contexto)",
+    "method": "GET",
+    "path": "/boards/81/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "448",
+        "board_id": "81",
+        "key": "name",
+        "type": "text",
+        "label": "Nome",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "449",
+        "board_id": "81",
+        "key": "status",
+        "type": "status",
+        "label": "Status",
+        "position": 1,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "450",
+        "board_id": "81",
+        "key": "owner",
+        "type": "people",
+        "label": "Responsável",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "451",
+        "board_id": "81",
+        "key": "target_date",
+        "type": "date",
+        "label": "Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "452",
+        "board_id": "81",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 mapa titulo->column_id/type/is_system/settings",
+    "map": {
+      "texto": {
+        "label": "TESTE - texto",
+        "column_id": "443",
+        "key": "name",
+        "type": "text",
+        "is_system": true,
+        "settings": {}
+      },
+      "numero": {
+        "label": "TESTE - Número",
+        "column_id": "453",
+        "key": "teste_numero",
+        "type": "number",
+        "is_system": false,
+        "settings": {}
+      },
+      "status": {
+        "label": "Teste - Status",
+        "column_id": "444",
+        "key": "status",
+        "type": "status",
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        }
+      },
+      "data": {
+        "label": "teste - Data",
+        "column_id": "446",
+        "key": "target_date",
+        "type": "date",
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        }
+      },
+      "responsavel": {
+        "label": "teste - Responsável",
+        "column_id": "445",
+        "key": "owner",
+        "type": "people",
+        "is_system": true,
+        "settings": {
+          "multi": false
+        }
+      },
+      "link": {
+        "label": "Teste - LINK",
+        "column_id": "454",
+        "key": "teste_link",
+        "type": "link",
+        "is_system": false,
+        "settings": {}
+      },
+      "checkbox": {
+        "label": "TESTE - CHECKBOX",
+        "column_id": "455",
+        "key": "teste_checkbox",
+        "type": "checkbox",
+        "is_system": false,
+        "settings": {}
+      },
+      "relacao": {
+        "label": "TESTE - RELAÇÃO",
+        "column_id": "456",
+        "key": "teste_relacao",
+        "type": "board_relation",
+        "is_system": false,
+        "settings": {
+          "source_board_id": "79"
+        }
+      }
+    }
+  },
+  {
+    "note": "T2 cria item ficticio board 80",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE VALUES API - PODE EXCLUIR"
+    },
+    "status": 201,
+    "response": {
+      "id": "7671",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": "<omitido: dados de identidade>",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE VALUES API - PODE EXCLUIR",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "<omitido: dados de identidade>",
+      "creator_user_id": "<omitido: dados de identidade>",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T01:59:38.068Z",
+      "updated_at": "2026-08-11T01:59:38.068Z",
+      "assignee_user_ids": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T3 texto é a coluna de sistema 'name' (nome do item), não uma coluna de texto dedicada"
+  },
+  {
+    "note": "T3 texto grava via PATCH /boards/items/:id (system 'name')",
+    "method": "PATCH",
+    "path": "/boards/items/7671",
+    "request_body": {
+      "name": "Teste Sunday API"
+    },
+    "status": 200,
+    "response": {
+      "id": "7671",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": "<omitido: dados de identidade>",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "Teste Sunday API",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "<omitido: dados de identidade>",
+      "creator_user_id": "<omitido: dados de identidade>",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T01:59:38.068Z",
+      "updated_at": "2026-08-11T01:59:38.207Z",
+      "assignee_user_ids": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T4 numero grava value (custom column)",
+    "method": "PATCH",
+    "path": "/boards/items/7671/values/453",
+    "request_body": {
+      "value": 12345
+    },
+    "status": 200,
+    "response": {
+      "id": "10665",
+      "item_id": "7671",
+      "column_id": "453",
+      "value": 12345,
+      "updated_at": "2026-08-11T01:59:38.340Z",
+      "updated_by_user": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T4 numero lê todos os values do item",
+    "method": "GET",
+    "path": "/boards/items/7671/values",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "10665",
+        "item_id": "7671",
+        "column_id": "453",
+        "value": 12345,
+        "updated_at": "2026-08-11T01:59:38.340Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      }
+    ]
+  },
+  {
+    "note": "T4 numero lê value especifico (rota alternativa)",
+    "method": "GET",
+    "path": "/boards/items/7671/values/453",
+    "request_body": null,
+    "status": 404,
+    "response": {
+      "message": "Cannot GET /boards/items/7671/values/453",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T5 status é a coluna de sistema 'status', opções vêm de board.status_set",
+    "status_set": [
+      {
+        "key": "to_do",
+        "color": "amber",
+        "label": "A fazer",
+        "terminal": false
+      },
+      {
+        "key": "follow_up",
+        "color": "sky",
+        "label": "Follow-up",
+        "terminal": false
+      },
+      {
+        "key": "done",
+        "color": "emerald",
+        "label": "Feito",
+        "terminal": true
+      }
+    ]
+  },
+  {
+    "note": "T5 status grava via PATCH /boards/items/:id/status (key=to_do)",
+    "method": "PATCH",
+    "path": "/boards/items/7671/status",
+    "request_body": {
+      "status": "to_do",
+      "cascade": false
+    },
+    "status": 200,
+    "response": {
+      "id": "7671",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": "<omitido: dados de identidade>",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "Teste Sunday API",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "<omitido: dados de identidade>",
+      "creator_user_id": "<omitido: dados de identidade>",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T01:59:38.068Z",
+      "updated_at": "2026-08-11T01:59:38.643Z",
+      "assignee_user_ids": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T6 data é a coluna de sistema 'target_date'"
+  },
+  {
+    "note": "T6 data grava via PATCH /boards/items/:id (system 'target_date')",
+    "method": "PATCH",
+    "path": "/boards/items/7671",
+    "request_body": {
+      "target_date": "2026-01-15"
+    },
+    "status": 200,
+    "response": {
+      "id": "7671",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": "<omitido: dados de identidade>",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "Teste Sunday API",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "<omitido: dados de identidade>",
+      "creator_user_id": "<omitido: dados de identidade>",
+      "target_date": "2026-01-15T12:00:00.000Z",
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T01:59:38.068Z",
+      "updated_at": "2026-08-11T01:59:38.759Z",
+      "assignee_user_ids": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T7 checkbox true grava value (custom column)",
+    "method": "PATCH",
+    "path": "/boards/items/7671/values/455",
+    "request_body": {
+      "value": true
+    },
+    "status": 200,
+    "response": {
+      "id": "10666",
+      "item_id": "7671",
+      "column_id": "455",
+      "value": true,
+      "updated_at": "2026-08-11T01:59:38.885Z",
+      "updated_by_user": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T7 checkbox true lê todos os values do item",
+    "method": "GET",
+    "path": "/boards/items/7671/values",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "10665",
+        "item_id": "7671",
+        "column_id": "453",
+        "value": 12345,
+        "updated_at": "2026-08-11T01:59:38.340Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10666",
+        "item_id": "7671",
+        "column_id": "455",
+        "value": true,
+        "updated_at": "2026-08-11T01:59:38.885Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      }
+    ]
+  },
+  {
+    "note": "T7 checkbox true lê value especifico (rota alternativa)",
+    "method": "GET",
+    "path": "/boards/items/7671/values/455",
+    "request_body": null,
+    "status": 404,
+    "response": {
+      "message": "Cannot GET /boards/items/7671/values/455",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T7 checkbox false grava value (custom column)",
+    "method": "PATCH",
+    "path": "/boards/items/7671/values/455",
+    "request_body": {
+      "value": false
+    },
+    "status": 200,
+    "response": {
+      "id": "10666",
+      "item_id": "7671",
+      "column_id": "455",
+      "value": false,
+      "updated_at": "2026-08-11T01:59:39.174Z",
+      "updated_by_user": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T7 checkbox false lê todos os values do item",
+    "method": "GET",
+    "path": "/boards/items/7671/values",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "10665",
+        "item_id": "7671",
+        "column_id": "453",
+        "value": 12345,
+        "updated_at": "2026-08-11T01:59:38.340Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10666",
+        "item_id": "7671",
+        "column_id": "455",
+        "value": false,
+        "updated_at": "2026-08-11T01:59:39.174Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      }
+    ]
+  },
+  {
+    "note": "T7 checkbox false lê value especifico (rota alternativa)",
+    "method": "GET",
+    "path": "/boards/items/7671/values/455",
+    "request_body": null,
+    "status": 404,
+    "response": {
+      "message": "Cannot GET /boards/items/7671/values/455",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T8 link grava value (custom column)",
+    "method": "PATCH",
+    "path": "/boards/items/7671/values/454",
+    "request_body": {
+      "value": "https://example.com/teste-sunday-api"
+    },
+    "status": 200,
+    "response": {
+      "id": "10668",
+      "item_id": "7671",
+      "column_id": "454",
+      "value": "https://example.com/teste-sunday-api",
+      "updated_at": "2026-08-11T01:59:39.458Z",
+      "updated_by_user": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T8 link lê todos os values do item",
+    "method": "GET",
+    "path": "/boards/items/7671/values",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "10665",
+        "item_id": "7671",
+        "column_id": "453",
+        "value": 12345,
+        "updated_at": "2026-08-11T01:59:38.340Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10668",
+        "item_id": "7671",
+        "column_id": "454",
+        "value": "https://example.com/teste-sunday-api",
+        "updated_at": "2026-08-11T01:59:39.458Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10666",
+        "item_id": "7671",
+        "column_id": "455",
+        "value": false,
+        "updated_at": "2026-08-11T01:59:39.174Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      }
+    ]
+  },
+  {
+    "note": "T8 link lê value especifico (rota alternativa)",
+    "method": "GET",
+    "path": "/boards/items/7671/values/454",
+    "request_body": null,
+    "status": 404,
+    "response": {
+      "message": "Cannot GET /boards/items/7671/values/454",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T8b link (formato objeto) grava value (custom column)",
+    "method": "PATCH",
+    "path": "/boards/items/7671/values/454",
+    "request_body": {
+      "value": {
+        "url": "https://example.com/teste-sunday-api-obj",
+        "text": "teste"
+      }
+    },
+    "status": 200,
+    "response": {
+      "id": "10668",
+      "item_id": "7671",
+      "column_id": "454",
+      "value": {
+        "url": "https://example.com/teste-sunday-api-obj",
+        "text": "teste"
+      },
+      "updated_at": "2026-08-11T01:59:39.748Z",
+      "updated_by_user": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T8b link (formato objeto) lê todos os values do item",
+    "method": "GET",
+    "path": "/boards/items/7671/values",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "10665",
+        "item_id": "7671",
+        "column_id": "453",
+        "value": 12345,
+        "updated_at": "2026-08-11T01:59:38.340Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10668",
+        "item_id": "7671",
+        "column_id": "454",
+        "value": {
+          "url": "https://example.com/teste-sunday-api-obj",
+          "text": "teste"
+        },
+        "updated_at": "2026-08-11T01:59:39.748Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10666",
+        "item_id": "7671",
+        "column_id": "455",
+        "value": false,
+        "updated_at": "2026-08-11T01:59:39.174Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      }
+    ]
+  },
+  {
+    "note": "T8b link (formato objeto) lê value especifico (rota alternativa)",
+    "method": "GET",
+    "path": "/boards/items/7671/values/454",
+    "request_body": null,
+    "status": 404,
+    "response": {
+      "message": "Cannot GET /boards/items/7671/values/454",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T9 auth/me para people",
+    "method": "GET",
+    "path": "/auth/me",
+    "request_body": null,
+    "status": 200,
+    "response": "<omitido: dados de identidade>"
+  },
+  {
+    "note": "T9 responsavel é a coluna de sistema 'owner'"
+  },
+  {
+    "note": "T9 people grava via PATCH /boards/items/:id (system 'owner_user_id')",
+    "method": "PATCH",
+    "path": "/boards/items/7671",
+    "request_body": {
+      "owner_user_id": "<omitido: dados de identidade>"
+    },
+    "status": 200,
+    "response": {
+      "id": "7671",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": "<omitido: dados de identidade>",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "Teste Sunday API",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "<omitido: dados de identidade>",
+      "creator_user_id": "<omitido: dados de identidade>",
+      "target_date": "2026-01-15T12:00:00.000Z",
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T01:59:38.068Z",
+      "updated_at": "2026-08-11T01:59:40.127Z",
+      "assignee_user_ids": "<omitido: dados de identidade>"
+    }
+  },
+  {
+    "note": "T10 verificacao de seguranca antes de escrever",
+    "coluna_relacao_settings": {
+      "source_board_id": "79"
+    },
+    "esperado_source_board_id": "81",
+    "encontrado_source_board_id": "79"
+  },
+  {
+    "note": "T10 ABORTADO por seguranca — nenhuma escrita feita na coluna board_relation"
+  },
+  {
+    "note": "T11 cria comentario ficticio",
+    "method": "POST",
+    "path": "/boards/items/7671/comments",
+    "request_body": {
+      "body": "TESTE VALUES API - comentario ficticio",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2082",
+      "body": "TESTE VALUES API - comentario ficticio",
+      "kind": "reply",
+      "mentions": [],
+      "author_user_id": "<omitido: dados de identidade>",
+      "author_name": "<omitido: dados de identidade>",
+      "is_external": false,
+      "created_at": "2026-08-11T01:59:40.292Z"
+    }
+  },
+  {
+    "note": "T11 lê comentarios",
+    "method": "GET",
+    "path": "/boards/items/7671/comments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "2082",
+        "body": "TESTE VALUES API - comentario ficticio",
+        "kind": "reply",
+        "mentions": [],
+        "author_user_id": "<omitido: dados de identidade>",
+        "author_name": "<omitido: dados de identidade>",
+        "is_external": false,
+        "created_at": "2026-08-11T01:59:40.292Z"
+      }
+    ]
+  },
+  {
+    "note": "FINAL values do item de teste board 80",
+    "method": "GET",
+    "path": "/boards/items/7671/values",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "10665",
+        "item_id": "7671",
+        "column_id": "453",
+        "value": 12345,
+        "updated_at": "2026-08-11T01:59:38.340Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10668",
+        "item_id": "7671",
+        "column_id": "454",
+        "value": {
+          "url": "https://example.com/teste-sunday-api-obj",
+          "text": "teste"
+        },
+        "updated_at": "2026-08-11T01:59:39.748Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      },
+      {
+        "id": "10666",
+        "item_id": "7671",
+        "column_id": "455",
+        "value": false,
+        "updated_at": "2026-08-11T01:59:39.174Z",
+        "updated_by_user": "<omitido: dados de identidade>"
+      }
+    ]
+  },
+  {
+    "note": "FINAL item de teste (shape completo, via listagem, filtrado só o item desta rodada)",
+    "item": {
+      "id": "7671",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": "<omitido: dados de identidade>",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "Teste Sunday API",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "<omitido: dados de identidade>",
+      "creator_user_id": "<omitido: dados de identidade>",
+      "target_date": "2026-01-15T12:00:00.000Z",
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T01:59:38.068Z",
+      "updated_at": "2026-08-11T01:59:40.127Z",
+      "assignee_user_ids": "<omitido: dados de identidade>"
+    }
+  }
+]

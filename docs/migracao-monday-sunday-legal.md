@@ -261,3 +261,294 @@ Monday.
 3. Fazer upload de um anexo pequeno para confirmar limite, resposta e associação ao item.
 4. Criar uma relação entre boards para verificar a restrição entre workspaces.
 5. Criar uma coluna `time_tracking` para confirmar se esse tipo é aceito pela API.
+
+### Reteste Fase 0 — values de colunas pré-criadas manualmente + board_relation (sandbox 80/81, 2026-08-11)
+
+**Contexto e decisão de arquitetura confirmada nesta rodada.** Um teste de escrita
+anterior mostrou que o token de API do Sunday não consegue criar colunas
+(`POST /boards/{id}/columns` → `403 Forbidden`, "requer login"). Isso foi formalmente
+decidido como **não bloqueante**: o esquema/schema dos boards do Sunday é configurado
+**manualmente** (login humano, uma vez por board); o adapter (`sunday/client.py`) só
+precisa manipular **dados** (items/values/comentários) via API, nunca esquema. Este
+reteste teve como único objetivo confirmar se o token grava e lê **values** de colunas
+já configuradas manualmente, e se `board_relation` funciona nativamente ou exige
+fallback. Script: `scripts/sunday_fase0_values_retest.py`. Relatório completo (sanitizado,
+sem token nem PII): `docs/sunday-fase0-values-retest-report-2026-08-11.json`.
+
+**Guard-rails respeitados:** escrita restrita aos boards `80` (`SANDBOX - API SUNDAY -
+NÃO USAR`) e `81` (`SANDBOX - API SUNDAY - RELATION`); nome de cada board confirmado por
+`GET /boards/{id}` antes de qualquer escrita; nenhuma coluna/grupo/board criado, alterado
+ou excluído; dados 100% fictícios; token nunca impresso.
+
+#### 1. Column IDs encontrados (board 80)
+
+| Título solicitado | Título real (case como está no Sunday) | `column_id` | `key` | `type` | Natureza |
+|---|---|---|---|---|---|
+| TESTE - Texto | `TESTE - texto` | `443` | `name` | `text` | **coluna de sistema renomeada** (é o próprio nome/título do item, não uma coluna de texto dedicada) |
+| TESTE - Número | `TESTE - Número` | `453` | `teste_numero` | `number` | coluna **customizada** nova |
+| TESTE - Status | `Teste - Status` | `444` | `status` | `status` | **coluna de sistema renomeada**; opções vêm de `board.status_set` (`to_do`/`follow_up`/`done`), não de opções próprias da coluna |
+| TESTE - Data | `teste - Data` | `446` | `target_date` | `date` | **coluna de sistema renomeada** |
+| TESTE - Responsável | `teste - Responsável` | `445` | `owner` | `people` | **coluna de sistema renomeada** |
+| TESTE - Link | `Teste - LINK` | `454` | `teste_link` | `link` | coluna **customizada** nova |
+| TESTE - Checkbox | `TESTE - CHECKBOX` | `455` | `teste_checkbox` | `checkbox` | coluna **customizada** nova |
+| TESTE - Relação | `TESTE - RELAÇÃO` | `456` | `teste_relacao` | `board_relation` | coluna **customizada** nova, **mal configurada** (ver §9) |
+
+Achado relevante para o de-para (§7): a configuração manual **não recriou 4 colunas
+novas** para Texto/Status/Data/Responsável — em vez disso **renomeou as colunas de
+sistema já existentes** (`name`, `status`, `target_date`, `owner`). Isso funciona para o
+adapter (o value É gravado e lido, ver §2–§6), mas muda a rota correta de escrita: nessas
+4 colunas o value **não** passa por `/values/{column_id}` (essa rota responde `400
+"System columns são atualizadas via PATCH /boards/items/:id."` para colunas de sistema,
+reconfirmado nesta rodada) — é preciso usar `PATCH /boards/items/{id}` (ou
+`/boards/items/{id}/status` para status). Só as 4 colunas realmente novas (Número, Link,
+Checkbox, Relação) usam a rota `/values/{column_id}`.
+
+#### 2. Resultado — Texto
+
+**Funciona.** Como é a coluna de sistema `name`, a escrita é
+`PATCH /boards/items/{id} {"name": "Teste Sunday API"}` → `200`; a releitura (via
+`GET /boards/{id}/items` ou o próprio corpo do `PATCH`) confirma `"name": "Teste Sunday
+API"`, idêntico ao valor enviado.
+
+#### 3. Resultado — Número
+
+**Funciona nativamente, confirmado de forma direta (não mais por inferência).**
+`PATCH /boards/items/{id}/values/453 {"value": 12345}` → `200`, corpo
+`{"id":"10626","item_id":"...","column_id":"453","value":12345,"updated_at":...,
+"updated_by_user":"37"}`. A releitura via `GET /boards/items/{id}/values` devolve o
+mesmo `value: 12345` (inteiro, sem coerção para string). Não existe
+`GET /boards/items/{id}/values/{column_id}` (rota singular) — retorna `404`; a leitura
+correta é sempre a rota plural, filtrando por `column_id` no array.
+
+#### 4. Resultado — Status
+
+**Funciona**, mas é a coluna de sistema `status`, não uma coluna de status customizada
+com opções próprias. As opções reais vêm de `board.status_set` (descoberto via
+`GET /boards/80`): `to_do` ("A fazer"), `follow_up` ("Follow-up"), `done` ("Feito").
+Escrita testada com uma opção existente: `PATCH /boards/items/{id}/status {"status":
+"to_do", "cascade": false}` → `200`; releitura confirma `"status": "to_do"`. Nenhuma key
+foi inventada.
+
+#### 5. Resultado — Data
+
+**Funciona.** `PATCH /boards/items/{id} {"target_date": "2026-01-15"}` → `200`,
+devolvendo `"target_date": "2026-01-15T12:00:00.000Z"`. Formato de retorno: ISO-8601
+completo com hora fixada em `12:00:00.000Z` (meio-dia UTC) mesmo quando só a data foi
+enviada — provavelmente para evitar que o fuso horário "empurre" a data para o dia
+anterior/seguinte na renderização. A data em si (dia/mês/ano) é preservada exatamente.
+
+#### 6. Resultado — Checkbox
+
+**Funciona**, ida e volta nos dois sentidos. `PATCH /boards/items/{id}/values/455
+{"value": true}` → `200`, releitura confirma `true`; depois `{"value": false}` → `200`,
+releitura confirma `false`.
+
+#### 7. Resultado — Link
+
+**Funciona**, com uma observação de robustez: a API aceitou **dois formatos** sem
+validar formato de URL nem impor um schema fixo — `{"value":
+"https://example.com/teste-sunday-api"}` (string simples) e `{"value": {"url":
+"https://example.com/teste-sunday-api-obj", "text": "teste"}}` (objeto com `url`/`text`,
+formato tipo Monday) — os dois deram `200` e a releitura devolveu exatamente o que foi
+enviado, sem coerção. **Implicação para o adapter**: como o Sunday não impõe um formato
+único, `sunday/client.py` precisa fixar e documentar sua própria convenção (recomendado:
+sempre gravar como objeto `{"url", "text"}`, que é mais informativo e compatível com o
+padrão usado no Monday) para não gerar inconsistência entre o que o adapter escreve e o
+que humanos gravam pela UI do Sunday.
+
+#### 8. Resultado — People
+
+**Funciona.** Fluxo seguido exatamente como pedido: o `user_id` do próprio usuário
+autenticado foi obtido via `GET /auth/me` (nenhum ID foi inventado). Como
+"Responsável"/`owner` também é coluna de sistema, a escrita foi
+`PATCH /boards/items/{id} {"owner_user_id": "<id do usuário do token>"}` → `200`. A
+resposta "enxuta" do `PATCH` não devolve `owner_user_id` no corpo, mas a releitura via
+`GET /boards/80/items` (que devolve o item no formato "completo") confirma
+`"owner_user_id"` gravado com o mesmo ID enviado. Nenhum erro ocorrido — não há HTTP/body
+de erro a documentar aqui.
+
+#### 9. Resultado — board_relation (Teste 10 — o mais importante)
+
+**Bloqueado nesta sessão por um problema de configuração manual, não por limitação da
+API — e por isso NÃO escrevemos nada nessa coluna.**
+
+Ao ler `GET /boards/80/columns`, a coluna `TESTE - RELAÇÃO` (`id 456`, `type
+board_relation`) tem `settings: {"source_board_id": "79"}`. O board `79` é
+**`Legal - Seguros`** — um board de produção real, fora do sandbox autorizado — e não o
+board `81` (`SANDBOX - API SUNDAY - RELATION`) exigido pela tarefa. Confirmado por
+`GET /boards/79` (somente leitura, sem qualquer escrita) e por `GET /boards/81/columns`,
+que mostra que o board 81 só tem colunas de sistema, sem nenhuma relação configurada de
+volta para o 80.
+
+Como a regra explícita desta tarefa é "Nenhum outro board pode sofrer escrita" e não há
+garantia de que gravar um `item_id` nessa coluna não crie algum vínculo/registro do lado
+do board 79 (produção), o script abortou esse subteste **antes de qualquer PATCH**,
+registrou o achado no relatório e seguiu executando todos os outros testes normalmente.
+Nenhuma escrita foi feita no board 79 nem em qualquer coluna `board_relation`.
+
+Respostas objetivas às 5 perguntas do Teste 10, dado esse bloqueio:
+
+1. **O Sunday aceitou gravar a relação?** Não testado — abortado por segurança antes do
+   `PATCH`.
+2. **O GET dos values devolve o `target_item_id`?** Não testado pelo mesmo motivo.
+3. **O target board pode ser identificado?** **Sim** — e este é um achado novo e
+   positivo: `GET /boards/{id}/columns` devolve `settings.source_board_id` para colunas
+   `board_relation`, então o adapter consegue descobrir programaticamente para qual
+   board uma coluna de relação aponta, sem precisar de `/links`.
+4. **Conseguimos reconstruir `source item → target item` sem usar `/boards/{id}/links`?**
+   Inconclusivo nesta sessão (não escrevemos o value). `/boards/{id}/links` continua
+   retornando `403` para leitura e escrita (reconfirmado indiretamente: nenhuma mudança
+   de permissão desde o teste anterior). Se `board_relation` funcionar via
+   `/values/{column_id}` — o que é plausível dado que todas as outras colunas
+   customizadas testadas nesta rodada (Número, Link, Checkbox) funcionaram sem exigir
+   login — a resposta seria sim, sem depender de `/links`.
+5. **Conseguimos manter a relação no futuro só com endpoints normais de items/values?**
+   Mesma resposta do item 4: plausível, mas não confirmado diretamente nesta sessão.
+
+**Ação recomendada (não bloqueante para a decisão de GO):** corrigir manualmente a
+coluna `TESTE - RELAÇÃO` no Sunday para `source_board_id = 81` e reexecutar **somente**
+o Teste 10 (`python scripts/sunday_fase0_values_retest.py`, que já contém a lógica —
+volta a escrever automaticamente assim que o `source_board_id` bater com `81`).
+
+**Avaliação do fallback (independente do resultado acima), conforme pedido:**
+
+Tabela persistente proposta:
+
+```
+monday_source_item_id
+monday_target_item_id
+sunday_source_board_id
+sunday_source_item_id
+sunday_target_board_id
+sunday_target_item_id
+relation_type
+```
+
+Essa tabela é **suficiente** para os três relacionamentos do domínio legal:
+
+- **Prazos → Processos**: relação N:1 simples (vários prazos apontam para um processo);
+  uma linha por prazo com `relation_type="prazo_processo"` resolve consultas nos dois
+  sentidos (join por `sunday_target_item_id` para "todos os prazos do processo X"; leitura
+  direta por `sunday_source_item_id` para "processo do prazo Y").
+- **Audiências → Processos**: mesmo padrão N:1; `relation_type="audiencia_processo"`.
+- **Controle Assinaturas → Contratos**: mesmo padrão (a automação real "Assinado →
+  cria item em Contratos" já é hoje uma automação do Monday que o **nosso próprio
+  código** replicaria no cutover; a tabela local só precisa registrar o vínculo depois de
+  criado, não decidir quando criar).
+
+Nenhum dos três casos precisa de relação N:N nem de navegação reversa em tempo real via
+API do Sunday — o polling do próprio adapter já lê os items nos dois boards
+periodicamente, então a tabela local pode ser reconstruída/validada a cada ciclo.
+**Classificação: B — FUNCIONA COM FALLBACK.** Isso vale **independentemente** de o
+board_relation nativo funcionar ou não (a tabela não depende disso), e não é tratado como
+bloqueante.
+
+#### 10. Payload real aceito por tipo (resumo)
+
+| Coluna | Rota de escrita | Payload aceito | Status |
+|---|---|---|---|
+| Texto (sistema `name`) | `PATCH /boards/items/{id}` | `{"name": "..."}` | `200` |
+| Número (customizada) | `PATCH /boards/items/{id}/values/{colId}` | `{"value": 12345}` (inteiro) | `200` |
+| Status (sistema) | `PATCH /boards/items/{id}/status` | `{"status": "<key do status_set>", "cascade": false}` | `200` |
+| Data (sistema) | `PATCH /boards/items/{id}` | `{"target_date": "YYYY-MM-DD"}` | `200` |
+| Checkbox (customizada) | `PATCH /boards/items/{id}/values/{colId}` | `{"value": true|false}` | `200` |
+| Link (customizada) | `PATCH /boards/items/{id}/values/{colId}` | `{"value": "https://..."}` **ou** `{"value": {"url":"...","text":"..."}}` | `200` (os dois formatos) |
+| People (sistema `owner`) | `PATCH /boards/items/{id}` | `{"owner_user_id": "<id>"}` | `200` |
+| board_relation (customizada) | `PATCH /boards/items/{id}/values/{colId}` | não testado (bloqueado — ver §9) | — |
+
+#### 11. Formato retornado pelo GET
+
+- Colunas de sistema: só aparecem no corpo do próprio item
+  (`GET /boards/{boardId}/items`, formato "completo": inclui `owner_user_id`,
+  `creator_user_id`, `linked_user_id`, `assignee_user_ids`; o corpo de resposta do
+  `PATCH` é uma versão "enxuta" sem esses campos de pessoas). Datas voltam em ISO-8601
+  completo (`YYYY-MM-DDT12:00:00.000Z`).
+- Colunas customizadas: `GET /boards/items/{id}/values` devolve um **array esparso**
+  (só entra a coluna que já recebeu algum value) de objetos
+  `{id, item_id, column_id, value, updated_at, updated_by_user}` — o `value` é devolvido
+  exatamente no tipo/formato enviado (inteiro fica inteiro, string fica string, objeto
+  fica objeto). Não existe rota singular `GET /boards/items/{id}/values/{columnId}`
+  (`404`).
+
+#### 12. Quais values funcionam
+
+Texto (via nome do item), Número, Status (via rota de sistema), Data, Checkbox, Link
+(dois formatos), People (via `owner_user_id`) — todos com escrita e releitura
+confirmadas nesta sessão, mais Comentários (criação e leitura, ver §13).
+
+#### 13. Quais não funcionam / não puderam ser confirmados
+
+- **board_relation**: não escrito nesta sessão (coluna mal configurada, ver §9) — não é
+  "não funciona", é "não testável em segurança com a configuração atual".
+- Rota singular `GET /boards/items/{id}/values/{columnId}`: não existe (`404`); usar
+  sempre a rota plural.
+- `POST /boards/{id}/links` (rota alternativa de relação): continua bloqueada por
+  permissão (`403`, "requer login") — já era assim em rodadas anteriores; o adapter não
+  deve depender dela.
+- Criação/alteração de colunas: continua bloqueada (`403`) — **decisão de arquitetura já
+  tomada**: não é requisito para o GO, esquema é manual.
+
+Extra confirmado fora do roteiro original mas essencial para a decisão (item 13 dos
+critérios de GO — "comentários"): `POST /boards/items/{id}/comments` e
+`GET /boards/items/{id}/comments` funcionam nativamente (`201`/`200`), com `mentions`
+resolvido automaticamente quando o corpo contém uma menção.
+
+#### 14. Relações — funcionam nativamente?
+
+Não confirmado de forma direta nesta sessão (bloqueio de configuração, §9). Indícios
+fortes de que sim: (a) o mesmo endpoint de values (`/values/{columnId}`) que funcionou
+sem exigir login para Número/Link/Checkbox é a mesma rota documentada para
+`board_relation`; (b) a coluna expõe `settings.source_board_id`, permitindo identificar o
+board relacionado programaticamente. Falta confirmação direta do payload assim que a
+coluna estiver com `source_board_id=81`.
+
+#### 15. Fallback local seria necessário?
+
+**Sim, como estratégia de arquitetura recomendada independentemente do resultado da
+API nativa** — não porque a API comprovadamente falhe, mas porque (a) `/links` está
+bloqueado para o token em qualquer cenário e (b) uma tabela local de-para é útil de
+qualquer forma para rastreabilidade Monday↔Sunday durante a migração (§ "Estado de
+deduplicação" mais acima neste documento). O fallback descrito no §9 é avaliado como
+**suficiente** para os três casos de uso do domínio legal.
+
+#### 16. Nova matriz A/B/C/D (A nativo · B fallback/transformação · C manual aceitável · D bloqueante)
+
+| Requisito | Classe | Observação |
+|---|---|---|
+| Criar/ler/alterar item (nome, descrição, status, data, pessoa) | A | confirmado nesta rodada via `PATCH /boards/items/{id}` e `/status` |
+| Escrever/ler values de colunas customizadas (número, checkbox, link) | A | confirmado **diretamente** nesta rodada — antes era só inferência |
+| Comentários | A | criação e leitura confirmadas |
+| Identificar registros (IDs de item/board estáveis) | A | `id` de item/board é string estável, devolvido em toda escrita/leitura |
+| Esquema de colunas customizadas (criar/alterar) | C | bloqueado por token (`403`, requer login) — **decisão de arquitetura: configuração manual, não bloqueante** |
+| `board_relation` nativo | B (fallback disponível; nativo pendente de reteste após correção de config) | coluna existe mas aponta para board errado (79 em vez de 81) nesta sandbox; fallback local (tabela de-para) avaliado como suficiente independente do resultado |
+| `/boards/{id}/links` | B | bloqueado (`403`); adapter não depende dele — usa `/values` |
+| Arquivos | B | upload binário bloqueado; anexo por link confirmado (`201`) → Drive/GCS + link |
+| Mirror | B | lookup/cópia no código (não testado nesta rodada, fora de escopo) |
+| Search | B | cache/índice local |
+| Webhook | B (opcional) | polling é a arquitetura principal |
+| — | **D: nenhum** | nada bloqueante identificado |
+
+#### 17. Decisão final
+
+**GO** para implementar `sunday/client.py`.
+
+Justificativa direta: todos os requisitos essenciais listados no critério de decisão
+desta tarefa foram confirmados nativamente nesta rodada — criação/leitura/alteração de
+item; escrita/leitura de values de colunas existentes (customizadas **e** de sistema,
+pela rota certa em cada caso); comentários; identificação de registros (IDs estáveis). O
+único item sem confirmação direta é `board_relation`, e a própria tarefa definiu que,
+nesse cenário, a resposta correta é avaliar o fallback e classificar como **B — funciona
+com fallback**, não como bloqueante — o que foi feito no §9, com uma tabela local
+avaliada como suficiente para os três relacionamentos reais do domínio (Prazos/Audiências
+→ Processos, Controle Assinaturas → Contratos). A impossibilidade de criar colunas pela
+API foi classificada, como instruído, como **C — configuração manual aceitável**, não
+como bloqueante.
+
+Ação de acompanhamento (não bloqueante, mas recomendada antes da Fase 1 avançar em
+`board_relation`): pedir a correção manual de `source_board_id` na coluna `TESTE -
+RELAÇÃO` (de `79` para `81`) e reexecutar o Teste 10 isoladamente para trocar a
+classificação de B (fallback) para A (nativo confirmado), caso o payload realmente
+funcione como esperado.
+
+Ainda não implementado: `sunday/client.py`. Ainda não alterado: nenhum workflow. Ainda
+não migrado: nenhum dado real.
