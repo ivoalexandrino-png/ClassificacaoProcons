@@ -1195,3 +1195,459 @@ owner com 2º usuário; payloads de colunas customizadas `long_text`/`email`/`ph
 `dropdown`-com-options (inferidos, não exercitados — fixar quando as colunas forem
 criadas nos boards); seletor de backend `monday|sunday|dual` e o cron de Contratos
 (usarão as primitivas de ETag/cache do client).
+
+---
+
+## Fase 2 — Inventário, Mapping e Dry-run (2026-08-11)
+
+> Executada 100% em LEITURA: inventário real do Monday (GraphQL, itens digeridos de
+> forma sanitizada — sem nomes, CPF, textos ou conteúdo de updates), schema real do
+> Sunday (snapshot autenticado da F0.13; regerável ao vivo com `--refresh-sunday`) e
+> dry-run classificando item a item. Nenhuma escrita em Monday ou Sunday. Board
+> **Acessos não foi lido** (fora do escopo). Artefatos: relatório agregado
+> `docs/sunday-migration-dry-run-2026-08-11.json`, identidades hasheadas
+> `docs/monday-user-identities-2026-08-11.json`; o inventário completo sanitizado
+> (2,5 MB) não é versionado — regerar com
+> `python scripts/sunday_migration_dry_run.py --dump-monday-inventory <path>`.
+> Ferramentas: `src/classificacao_procons/migration/` + `scripts/sunday_migration_dry_run.py`.
+
+### F2.1 Inventário Monday real (Onda 1)
+
+| Board | Total | Recorte | SKIP (concluídos antigos) | Itens c/ arquivo (recorte) | Arquivos (board) | MB | Itens c/ updates (recorte) | Updates (board) | Subitens (recorte) | Conexões (recorte) | Pessoas |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Procons | 457 | 193 | 264 | 29 | 1.724 | 840 | 193 | 1.696 | 0 | 0 | 0 |
+| Prazos | 878 | 175 | 703 | 1 | 21 | 117 | 165 | ≥2.999 | 0 | 35 | 3 |
+| Audiências | 120 | 41 | 79 | 19 | 38 | 230 | 34 | 98 | 0 | 20 | 9 |
+| Processos Judiciais | 155 | 124 | 31 | 74 | 528 | 974 | 75 | 510 | 0 | 0 | 6 |
+| Processos Trabalhista | 24 | 10 | 14 | 0 | 0 | 0 | 4 | 26 | 0 | 0 | 0 |
+| KPI - Processos Consumidores | 31 | 0 | 31 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Controle Assinaturas | 1.607 | 553 | 1.054 | 0 | 0 | 0 | 327 | 797 | 0 | 2 | 10 |
+| Contratos | 1.119 | 963 | 156 | 110 | 131 | 354 | 306 | 299 | 104 | 0 | 48 |
+| **Total** | **4.391** | **2.059** (+1 pull-in = **2.060**) | 2.331 | 233 | 2.442 | ~2.500 | 1.104 | ≥6.425 | 104 | 57 | 58 |
+
+Semântica real de "concluído" (derivada dos grupos/status reais, codificada em
+`migration/mappings.py`): grupos de arquivo (anos "2023…2026", "Assinados",
+"Recusado", "Encerrados", "Arquivado") e labels terminais na coluna principal
+("Feito", "Cancelada", "Baixado", "Respondido", "Assinado", "Encerrado"…); no board
+Contratos a coluna de conclusão é **Vigência** ("Não Vigente" = concluído — override
+explícito). Recorte: abertos sempre + criados nos últimos 12 meses + **pull-in** de
+alvos de relação (1 item de Processos Judiciais puxado por Audiências).
+
+Nota importante da coleta: o campo `value` genérico da API do Monday volta **vazio**
+para colunas de conexão na versão 2024-10 — as conexões reais só aparecem via
+fragmento tipado `BoardRelationValue.linked_item_ids` (corrigido no inventário; sem
+isso as relações pareceriam inexistentes).
+
+### F2.2 Matriz board → board
+
+| Monday (id) | Sunday (id) | Domínio | Confiança | Observação |
+|---|---|---|---|---|
+| Procons (4944254220) | **TARGET A CRIAR** | procon | ALTA | schema proposto nas tabelas F2.3 |
+| Prazos (3961072966) | **TARGET A CRIAR** | juridico | ALTA | — |
+| Audiências (4443295406) | Legal - Audiências (72) | juridico | MÉDIA | candidato natural; só tem as 5 colunas de sistema |
+| Processos Judiciais (5343921475) | **TARGET A CRIAR** | juridico | ALTA | quadro-mestre; alvo de relações |
+| Processos Trabalhista (4443297481) | **TARGET A CRIAR** | juridico | ALTA | — |
+| KPI - Processos Consumidores (5563754463) | **TARGET A CRIAR** | juridico | ALTA | recorte = 0 itens; ver decisão em F2.10 |
+| Controle Assinaturas (5301515799) | Legal - Controle de Assinaturas - Jan & Luciano (77) | contratos | MÉDIA | candidato natural; schema a completar |
+| Contratos (5385471914) | **TARGET A CRIAR** | contratos | ALTA | alvo de relações e subitens (aditivos) |
+
+Boards administrativos do workspace Legal (Certidões, Seguros, Marcas etc.) ficam
+fora da Onda 1, conforme decisão. "Legal - Seguros" (79) e "Legal - Acessos" (78) do
+Sunday **não** são alvos desta onda.
+
+### F2.3 Mapping de colunas por board
+
+Estratégias: DIRETO · TRANSFORMAÇÃO · CONFIGURAR MANUALMENTE · NÃO MIGRAR · DERIVADO
+PELO CÓDIGO. Colunas de status viram colunas custom com options 1:1 (keys slug);
+`Name` vira o campo de sistema `name`; toda tabela abaixo vem do schema real lido
+hoje. Cada board recebe adicionalmente a coluna técnica **“Monday ID” (text)** para
+rastreabilidade/idempotência.
+
+**Procons** (Monday `4944254220` → Sunday `A CRIAR`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Subelementos (`subelementos_mkm7khms`) | subtasks | DERIVADO PELO CÓDIGO | subitens nativos (parent_item_id) |
+| Procon/Órgão (`texto`) | text | DIRETO | text |
+| Origem (`status_1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| CPF (`long_text_mkxb3zgq`) | long_text | DIRETO | long_text |
+| Notificação Procon (`arquivos`) | file | TRANSFORMAÇÃO | attachments/link |
+| CIP/FA (`texto1`) | text | DIRETO | text |
+| Data da Reclamação (`data`) | date | DIRETO | date |
+| Prazo resposta SAC (`data30`) | date | DIRETO | date |
+| Prazo Resposta Jurídico (`data3`) | date | DIRETO | date |
+| Data da Resposta Legal/Baixa (`data2`) | date | DIRETO | date |
+| Houve Cancelamento de Assinatura? (`color_mknz9dwg`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Status (`status8`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Docs SAC (`arquivos8`) | file | TRANSFORMAÇÃO | attachments/link |
+| Observações/Histórico (`long_text`) | long_text | DIRETO | long_text |
+| Causa 1 (`status_11`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Causa 2 (se houver) (`dup__of_causa_1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Causa 3 (se houver) (`dup__of_causa_2`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Causa 4 (se houver) (`color`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Gerou Processo Administrativo (`status_118`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Prazo Resposta Processo Administrativo (`date_mkxcbdff`) | date | DIRETO | date |
+| Processo Administrativo Respondido (`color_mkxc8v59`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Já está na black list? (`color_mky56w54`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+
+**Prazos** (Monday `3961072966` → Sunday `A CRIAR`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Subelementos (`subelementos`) | subtasks | DERIVADO PELO CÓDIGO | subitens nativos (parent_item_id) |
+| Número Processo (`texto`) | text | DIRETO | text |
+| Processo Administrativo (`status_1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Status (`status`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Data (`data`) | date | DIRETO | date |
+| Fatal (`dup__of_data__1`) | date | DIRETO | date |
+| Pessoa (`person`) | people | TRANSFORMAÇÃO | people (owner) via de-para de usuários |
+| Arquivos (`arquivos6`) | file | TRANSFORMAÇÃO | attachments/link |
+| Controle de tempo (`controle_de_tempo`) | time_tracking | TRANSFORMAÇÃO | number (horas acumuladas) |
+| Processos Consumidores (`conectar_quadros`) | board_relation | TRANSFORMAÇÃO | board_relation (values) + mapa de IDs |
+
+**Audiências** (Monday `4443295406` → Sunday `72`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Subelementos (`subelementos__1`) | subtasks | DERIVADO PELO CÓDIGO | subitens nativos (parent_item_id) |
+| Data (`data`) | date | DIRETO | date ✓existe |
+| Local (`local`) | location | TRANSFORMAÇÃO | text |
+| Presencial ou Virtual (`status_1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Responsável por comparecer (`color`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Status documentos (`status3`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Link Audiência (se virtual) (`link`) | link | DIRETO | link |
+| Processo/Procon (`status8`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Arquivos (`arquivos`) | file | TRANSFORMAÇÃO | attachments/link |
+| Pessoas (`pessoas7`) | people | TRANSFORMAÇÃO | people (owner) via de-para de usuários |
+| Status (`status5`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) ✓existe |
+| E-mail (`e_mail7`) | email | DIRETO | email |
+| Processos Judiciais (`conectar_quadros__1`) | board_relation | TRANSFORMAÇÃO | board_relation (values) + mapa de IDs |
+| Processos Judiciais (`conectar_quadros8__1`) | board_relation | TRANSFORMAÇÃO | board_relation (values) + mapa de IDs |
+| Número do Processo (`n_meros6__1`) | long_text | DIRETO | long_text |
+| Orientações de Audiência (`texto__1`) | text | DIRETO | text |
+
+**Processos Judiciais** (Monday `5343921475` → Sunday `A CRIAR`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Subelementos (`subelementos__1`) | subtasks | DERIVADO PELO CÓDIGO | subitens nativos (parent_item_id) |
+| Processo relacionado a (`status85`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| SAC (`pessoas`) | people | TRANSFORMAÇÃO | people (owner) via de-para de usuários |
+| Tipo de Ação (`texto2`) | text | DIRETO | text |
+| Data de Distribuição (`data99`) | date | DIRETO | date |
+| Sistema (`status_15__1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Órgão/JEC (`status8`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| TJ (`status3`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Número (`n_mero`) | long_text | DIRETO | long_text |
+| Cópia do Processo (CONSUMIDOR) (`arquivos`) | file | TRANSFORMAÇÃO | attachments/link |
+| Cópia do Processo (NÃO CONSUMIDOR) (`file__1`) | file | TRANSFORMAÇÃO | attachments/link |
+| Prazo Resposta SAC (`data9`) | date | DIRETO | date |
+| Observações/Históricos (`long_text`) | long_text | DIRETO | long_text |
+| Houve Cancelamento de Assinatura? (`color_mknz5qfs`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Documentos SAC (`arquivos2`) | file | TRANSFORMAÇÃO | attachments/link |
+| Prazo Resposta Legal (`data0`) | date | DIRETO | date |
+| Audiência (`status_1__1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Data ad Audiência (`data9__1`) | date | DIRETO | date |
+| Local da Audiência (`local__1`) | location | TRANSFORMAÇÃO | text |
+| Pessoa responsável pela Audiência (`pessoas__1`) | people | TRANSFORMAÇÃO | people (owner) via de-para de usuários |
+| E-mail Metajur/LBZ (se houver) (`e_mail__1`) | email | DIRETO | email |
+| valor da causa (`n_meros6`) | numbers | DIRETO | number |
+| Movimentações (`texto_longo`) | long_text | DIRETO | long_text |
+| Risco (`status9`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Provisão B4A (`n_meros`) | numbers | DIRETO | number |
+| Provisão MMKT (`n_meros6__1`) | numbers | DIRETO | number |
+| Depósito B4A (`n_meros__1`) | numbers | DIRETO | number |
+| Depósito MMKT (`n_meros68`) | numbers | DIRETO | number |
+| Pagamentos B4A (`n_meros1__1`) | numbers | DIRETO | number |
+| Pagamentos MMKT (`n_meros5__1`) | numbers | DIRETO | number |
+| condenação (`n_meros1`) | numbers | DIRETO | number |
+| saving (`f_rmula`) | formula | CONFIGURAR MANUALMENTE | formula (expressão do Sunday) |
+| Problema Principal (se aplicável) (`status92`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Status (`status2`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Decisão Judicial (`status_10__1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+
+**Processos Trabalhista** (Monday `4443297481` → Sunday `A CRIAR`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Status (`status1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Tipo de Processo (`status0`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Parte Ré (`texto8`) | text | DIRETO | text |
+| Nº.: de Processo (`texto`) | text | DIRETO | text |
+| Local de Origem (`local`) | location | TRANSFORMAÇÃO | text |
+| Situação Atual (`texto6`) | text | DIRETO | text |
+| Valor da Causa (`n_meros`) | numbers | DIRETO | number |
+| Data de Distribuição (`data`) | date | DIRETO | date |
+| Risco (`status`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Depósito/Pagamento (`n_meros1`) | numbers | DIRETO | number |
+| Provisão (`n_meros9`) | numbers | DIRETO | number |
+| Vara de Origem (`texto88`) | text | DIRETO | text |
+| Saved (`f_rmula`) | formula | CONFIGURAR MANUALMENTE | formula (expressão do Sunday) |
+| Forma de Contratação (`status_1__1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+
+**KPI - Processos Consumidores** (Monday `5563754463` → Sunday `A CRIAR`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Estado (`status`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Ré (`status_1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Data Ajuizamento (`data`) | date | DIRETO | date |
+| Número do Processo (`texto_longo`) | long_text | DIRETO | long_text |
+| Causa 1 (`status_14`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Causa 2 (`dup__of_causa_19`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Causa 3 (`dup__of_causa_2`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Situação (`status_160`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Data da Decisão (`data2`) | date | DIRETO | date |
+| Resultado (`status_11`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Valor da Cusa (`n_meros`) | numbers | DIRETO | number |
+| Provisão (`n_meros15`) | numbers | DIRETO | number |
+| Valor da Condenação (`n_meros_1`) | numbers | DIRETO | number |
+| Valor Pago (`n_meros0`) | numbers | DIRETO | number |
+| Saving (`n_meros1`) | numbers | DIRETO | number |
+
+**Controle Assinaturas** (Monday `5301515799` → Sunday `77`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Subelementos (`subelementos`) | subtasks | DERIVADO PELO CÓDIGO | subitens nativos (parent_item_id) |
+| Status (`status`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) ✓existe |
+| Priority (`priority`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Data de Inclusão (na Plataforma) (`data`) | date | DIRETO | date |
+| Até quando assinar (`data2`) | date | DIRETO | date |
+| Data de Assinatura (`data0`) | date | DIRETO | date |
+| Link Contrato Assinado (SOMENTE se envolver o Jan) (`link`) | link | DIRETO | link |
+| Controle de tempo (`controle_de_tempo`) | time_tracking | TRANSFORMAÇÃO | number (horas acumuladas) |
+| Nome da Plataforma (`texto`) | text | DIRETO | text |
+| Link para assinatura (`long_text_mkvnwp6d`) | long_text | DIRETO | long_text |
+| Assunto (`texto6`) | text | DIRETO | text |
+| Quem Assina (`status_1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Pessoas (`pessoas`) | people | TRANSFORMAÇÃO | people (owner) via de-para de usuários |
+| Tipo (`status_1__1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| link to Notificações Carol - Assinaturas Jan (`board_relation_mkqxj7gv`) | board_relation | TRANSFORMAÇÃO | board_relation (values) + mapa de IDs |
+| Contrato relacionado (`board_relation_mm5ap90f`) | board_relation | TRANSFORMAÇÃO | board_relation (values) + mapa de IDs |
+
+**Contratos** (Monday `5385471914` → Sunday `A CRIAR`):
+
+| Coluna Monday (`id`) | Tipo | Estratégia | Alvo Sunday |
+|---|---|---|---|
+| Name (`name`) | name | DIRETO | name (campo de sistema) |
+| Subelementos (`subelementos`) | subtasks | DERIVADO PELO CÓDIGO | subitens nativos (parent_item_id) |
+| Empresa (`status1`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| CNPJ outra Parte (`texto8`) | text | DIRETO | text |
+| Tipo de Contrato (`texto`) | text | DIRETO | text |
+| Data do Contrato (`data`) | date | DIRETO | date |
+| Término (`data0`) | date | DIRETO | date |
+| Contrato (`arquivos`) | file | TRANSFORMAÇÃO | attachments/link |
+| Vigência (`status`) | status | CONFIGURAR MANUALMENTE | status (coluna custom com options 1:1) |
+| Observações (`texto_longo`) | long_text | DIRETO | long_text |
+| Responsável (`pessoas3`) | people | TRANSFORMAÇÃO | people (owner) via de-para de usuários |
+
+
+**Área (estrutural no Sunday):** nenhum domínio da Onda 1 tem coluna Monday
+correspondente à Área. Decisão: **ignorar** (não preencher, não alterar, não
+remover) em Prazos, Audiências, Processos, KPI e Trabalhista; em Procons e
+Contratos/Controle, recomendação opcional de preencher com valor fixo por board
+("Consumidor" / "Contratos") se o time quiser usar os filtros da home — decisão de
+preferência, não técnica. Desconhecer Área não impede criação/edição (F0.15).
+
+### F2.4 Status — de-para
+
+Nenhum label fora do schema foi encontrado nos itens do recorte (zero
+`MISSING_STATUS_MAPPING` no dry-run): o de-para é 1:1 label→option com key slug
+determinística (ex.: "Aguardando Assinatura"→`aguardando_assinatura`, "Não
+Vigente"→`nao_vigente`, 'Glam "Clube"'→`glam_clube`) — confiança ALTA, sem fuzzy
+match. Labels reais por board (levantados dos itens): Procons Status =
+Respondido/Baixado; Prazos Status = Não Iniciado/Em progresso/Feito/Cancelada;
+Audiências Status = Em Andamento/Feito/Cancelada; Processos Judiciais Status = Em
+Andamento/Suspenso/Encerrado; Trabalhista = Em andamento/Encerrado; Controle Status =
+Aguardando Assinatura/Aguardando outros/Assinado/Recusado/Bloqueado - aguardando
+providencia; Contratos Vigência = Vigente/Não Vigente (demais colunas de status nas
+tabelas F2.3 seguem a mesma regra 1:1).
+
+**Status de sistema do Sunday** (`to_do`/`follow_up`/`done`): derivado, não migrado —
+`done` quando o item é "concluído" pela semântica F2.1; `to_do` caso contrário
+(`follow_up` reservado para uso do time). O status de negócio fica na coluna custom.
+
+### F2.5 People — de-para
+
+58 usuários Monday distintos atribuídos nos boards da Onda 1: **28 com identidade
+técnica resolvida** (ativos; hash sha256 do e-mail em
+`docs/monday-user-identities-2026-08-11.json` — sem e-mail em claro) e **30 ids sem
+cadastro visível** na API (usuários desativados/excluídos) → **SEM_MATCH**
+definitivo, itens migram sem responsável (registrado no comentário de rastreio).
+Matching com o Sunday: **pendente** — exige `GET /users/directory` (o secret não
+existe nesta VM); o critério é **e-mail exato** = MATCH_EXATO; nome exato = apenas
+candidato (MATCH_PROVÁVEL, nunca usado automaticamente). O dry-run demonstra o
+impacto: sem de-para aprovado, 1.569 itens (76,2% do recorte) ficam MANUAL por
+`MISSING_USER_MAPPING`; com de-para aprovado, 0.
+
+### F2.6 Relações
+
+Uso REAL (dados de hoje): **57 itens do recorte têm conexões** — Prazos→Processos
+(35, coluna `conectar_quadros`), Audiências→Processos (20, colunas
+`conectar_quadros__1`/`conectar_quadros8__1` — duas colunas homônimas "Processos
+Judiciais"), Controle→Contratos (2, `board_relation_mm5ap90f`). A coluna "link to
+Notificações Carol" do Controle aponta para board fora da Onda 1 → NÃO MIGRAR
+(registrada em comentário). O vínculo dominante entre domínios continua sendo por
+chave de negócio (CNJ, Autentique ID), como no código atual.
+
+| Relação | Coluna Monday | Sunday source board | Coluna Sunday | `source_board_id` esperado |
+|---|---|---|---|---|
+| Prazos → Processos | `conectar_quadros` | board Prazos (a criar) | a criar | id do board Processos Judiciais (a criar) |
+| Audiências → Processos (2×) | `conectar_quadros__1`, `conectar_quadros8__1` | 72 | a criar | id do board Processos Judiciais (a criar) |
+| Controle → Contratos | `board_relation_mm5ap90f` | 77 | a criar | id do board Contratos (a criar) |
+
+Validação de integridade: como o Sunday **não valida** o board do item relacionado
+(F0.15 — o sandbox tinha coluna apontando para o board 79 de produção), o dry-run
+marca `config_ok` por coluna e o `SundayClient.set_relation` exige
+`expected_target_board_id`. Hoje: **nenhuma coluna de relação existe nos destinos** →
+todas entram no checklist como CONFIGURAÇÃO MANUAL OBRIGATÓRIA ANTES DA MIGRAÇÃO,
+com verificação automática do `source_board_id` no dry-run pós-checklist.
+
+### F2.7 Arquivos
+
+233 itens do recorte com arquivos; 2.442 assets (~2,5 GB) nos boards (inclui itens
+fora do recorte). URLs de asset do Monday são autenticadas e **expiram** → todos os
+arquivos exigem **materialização**: download do asset (token Monday) → upload ao
+Drive (infra já usada por Procon/Contratos) → `attachments/link` no Sunday + coluna
+`file_link` quando aplicável. Nenhum arquivo foi transferido nesta fase.
+
+### F2.8 Updates / comentários
+
+1.104 itens do recorte têm updates; volume por board ≥6.425 updates no total dos
+boards (Prazos atingiu o teto de paginação da contagem — "≥"). Estratégia (Fase 3):
+migrar updates dos itens do recorte como comments com corpo
+`[Monday · autor · data]\n<texto>`, autoria técnica do robô; conteúdo dos updates
+NÃO aparece em nenhum relatório desta fase (apenas contagens).
+
+### F2.9 IDs, idempotência e rastreabilidade
+
+Ledger persistente `data/monday-sunday-map.json` (JSON é a convenção de estado do
+repositório — não há banco), dict indexado por `"{monday_board_id}:{monday_item_id}"`
+com `sunday_board_id`, `sunday_item_id`, `domain`, `migration_status`
+(pending/migrated/skipped/error), `migrated_at`, `source_updated_at`, `error`,
+`attempts` (modelo `migration.models.LedgerRecord`). Garante reexecução sem
+duplicar (lookup O(1) antes de criar), retomada após falha, reconciliação, rollback
+lógico e auditoria. Redundância anti-perda: coluna **“Monday ID”** gravada em cada
+item migrado (permite reconstruir o ledger inteiro lendo o Sunday) + comentário de
+rastreio com origem. Escrita atômica (tmp+rename) e backup por execução.
+
+### F2.10 Performance e recorte
+
+- Leitura Monday (esta fase): ~60 requests, ~4 min para 4.391 itens (digest completo).
+- Escrita futura (Fase 3, estimativa sobre o recorte): ~2.060 criações + ~8.000
+  values + ~4.000 comments (updates dos itens do recorte) + ~500 anexos + releituras
+  de verify por board ≈ **15–25 mil requests**; a 3–5 req/s com backoff ≈ **1,5–3 h**
+  total, executável board a board com ledger (retomável). Rate limit do Sunday não é
+  publicado — usar lotes moderados + backoff em 429/5xx.
+- Padrão obrigatório de leitura no Sunday: **snapshot do board** (1 request) + cache/
+  índice em memória com lookup O(1) por id/chave — `get_item()` nunca em loop (regra
+  já embutida no desenho do executor; o motor de dry-run recebe dados prontos e não
+  faz HTTP por construção).
+- ETag/304: polling e reconciliação usam `If-None-Match` (primitivas da V1).
+- KPI: recorte = 0 itens (tudo concluído antes de 2025-08). **Decisão recomendada:**
+  migrar o board KPI integralmente mesmo assim (31 itens, dados de referência, custo
+  ~zero) — aguarda seu OK; alternativa é mantê-lo só-leitura no Monday.
+
+### F2.11 Dry-run — resultados reais
+
+Ferramenta: `scripts/sunday_migration_dry_run.py` (relatório agregado sanitizado;
+testes garantem que nenhum método de escrita é chamado). Recorte analisado: 4.391
+itens → **2.060 no recorte** / 2.331 SKIP. Três cenários:
+
+| Cenário | READY | MANUAL | ERROR | SKIP |
+|---|---|---|---|---|
+| Estado atual do Sunday | 0 (0%) | 2.060 (100%) | 0 | 2.331 |
+| Pós-checklist (schema criado) | 491 (23,8%) | 1.569 (76,2%) | 0 | 2.331 |
+| Pós-checklist + de-para de usuários aprovado | **2.060 (100%)** | **0** | **0** | 2.331 |
+
+Motivos de MANUAL: estado atual — `MISSING_TARGET_COLUMN` 2.060 (todos; 6 boards nem
+existem), `MISSING_USER_MAPPING` 1.569, `INVALID_RELATION_CONFIG` 57 (as colunas de
+relação não existem/não apontam para o destino certo); pós-checklist —
+`MISSING_USER_MAPPING` 1.569 (zera com o de-para aprovado). **Nenhum ERROR**: todas
+as 57 conexões apontam para itens existentes nos boards de destino da Onda 1.
+Flags informativas no recorte: 233 itens com arquivo (materialização), 1.104 com
+updates, 104 com subitens (aditivos de Contratos — viram filhos nativos).
+
+Esforço manual estimado: além do checklist (F2.12, ~2–4 h únicas de configuração) e
+da aprovação do de-para de usuários (28 matches a revisar, ~30 min), **nenhum item
+exige intervenção manual individual**. Fórmulas (2) e cronômetro (2) são configuração
+única já incluída no checklist. Itens dos 30 usuários desativados migram sem
+responsável (sem ação por item; registro no comentário de rastreio).
+
+### F2.12 Checklist de configuração manual no Sunday (pré-Fase 3)
+
+Ordem: primeiro os boards novos, depois colunas (as tabelas F2.3 dão nome/tipo
+exatos de cada coluna; options de status = labels Monday 1:1), por último as
+conexões (dependem dos IDs dos boards novos). Em todos os boards: criar também a
+coluna **Monday ID** (Texto curto) — rastreabilidade.
+
+- [ ] **Criar 6 boards** no workspace 22 (template board): `Legal - Procons`,
+  `Legal - Prazos`, `Legal - Processos Judiciais`, `Legal - Processos Trabalhista`,
+  `Legal - KPI Processos Consumidores` (se aprovado em F2.10), `Legal - Contratos`.
+  Anotar o board_id de cada um (aparece na URL).
+- [ ] **Legal - Contratos**: habilitar subitens (profundidade 2 — aditivos);
+  criar as 10 colunas da tabela Contratos (F2.3), com options de Empresa e Vigência.
+- [ ] **Legal - Processos Judiciais**: criar as ~33 colunas da tabela (12 status com
+  options 1:1; fórmula "saving" recriada à mão; "Local da Audiência" como Texto).
+- [ ] **Legal - Prazos**: criar colunas da tabela; coluna de conexão
+  **"Processos Consumidores"** (Conectar board) apontando para o board **Legal -
+  Processos Judiciais** recém-criado (source_board_id correto é obrigatório).
+- [ ] **Board 72 (Legal - Audiências)**: criar as colunas restantes da tabela;
+  **duas** colunas Conectar board "Processos Judiciais" (o Monday tem duas) → ambas
+  apontando para Legal - Processos Judiciais.
+- [ ] **Board 77 (Controle)**: criar grupos das filas (Jan / Luciano / Pendente
+  Fornecedor / Assinados / Recusado); criar colunas da tabela (Status com as 5
+  options; Quem Assina; Tipo com as 8 options; cronômetro se desejado); coluna
+  Conectar board **"Contrato relacionado"** → Legal - Contratos.
+- [ ] **Legal - Procons**: criar as ~20 colunas da tabela (10 status com options).
+- [ ] **Legal - Processos Trabalhista / KPI**: criar colunas das tabelas (fórmula
+  "Saved" à mão no Trabalhista).
+- [ ] Conferir com o dry-run: `python scripts/sunday_migration_dry_run.py
+  --refresh-sunday` (com o secret) — as relações devem sair `config_ok: true` e o
+  cenário "estado_atual" deve convergir para o "pós-checklist".
+
+Por quê: a API do Sunday não cria/altera colunas com token (F0.14/F0.15 — decisão
+C, configuração manual aceitável); cada coluna acima é pré-requisito direto de uma
+coluna Monday em uso real.
+
+### F2.13 Ordem recomendada de migração (Fase 3)
+
+1. **Legal - Contratos** — alvo das relações do Controle e pai dos 104 subitens.
+2. **Legal - Processos Judiciais** — alvo das relações de Prazos e Audiências.
+3. **Processos Trabalhista** e **KPI** (se aprovado) — pequenos, sem dependências.
+4. **Prazos** — relações apontando para Processos (já migrado).
+5. **Audiências** — idem (board 72).
+6. **Procons** — independente; volume médio; arquivos com materialização.
+7. **Controle Assinaturas** — por último: domínio mais crítico (sync Autentique
+   ativo), relações para Contratos já migrado, e o cutover do polling acontece na
+   fase seguinte.
+
+Justificativa: boards-alvo de relação migram antes dos boards que apontam para eles
+(o mapa de IDs precisa do destino resolvido); os críticos ficam por último para
+maximizar aprendizado com os de menor risco.
+
+### F2.14 Decisão para a Fase 3
+
+**GO COM PRÉ-REQUISITOS.** Nenhum bloqueante técnico: 0 ERROR no dry-run, 100% READY
+no cenário completo, relações íntegras, ferramentas e ledger desenhados. Pré-requisitos
+(seus):
+
+1. Executar o checklist F2.12 no Sunday (~2–4 h, única vez) e me passar os board_ids
+   criados.
+2. Aprovar o de-para de usuários: na Fase 3, com o secret disponível, eu gero a
+   proposta MATCH_EXATO por e-mail (28 identidades) para sua aprovação; os 30
+   desativados migram sem responsável (confirmar).
+3. Decidir se o KPI entra integral (F2.10) e confirmar o recorte de Contratos
+   ("Não Vigente" antigo fica no Monday, exceto os puxados por relação).
+4. Garantir os secrets `SUNDAY_API_TOKEN`/`SUNDAY_API_URL` numa sessão nova para a
+   execução (e, idealmente, o token da conta de serviço definitiva — decisão 2 da
+   Fase 0).
+
