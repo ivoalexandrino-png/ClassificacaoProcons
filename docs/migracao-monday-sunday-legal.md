@@ -1651,3 +1651,294 @@ no cenário completo, relações íntegras, ferramentas e ledger desenhados. Pr�
    execução (e, idealmente, o token da conta de serviço definitiva — decisão 2 da
    Fase 0).
 
+
+---
+
+## Fase 2.5 — Configuração manual assistida e preflight final (2026-08-11)
+
+> Executada **100% em LEITURA** (GET no Sunday, GraphQL de leitura no Monday). Nenhum
+> `POST`/`PATCH`/`DELETE` em Sunday ou Monday; nenhum item foi criado/alterado; nenhum
+> dado migrado. Objetivo: validar os 8 boards da Onda 1 já criados no workspace 22,
+> validar o schema atual, fazer o matching exato de usuários e gerar o **checklist
+> manual completo** para configuração humana no app do Sunday antes da Fase 3.
+
+### F2.5.1 IDs definitivos da Onda 1 (confirmados por leitura)
+
+Os 6 boards novos foram criados manualmente no workspace 22; os 2 já existentes
+permanecem conforme o mapping da Fase 2 (F2.2). Todos os 8 confirmados presentes em
+`GET /workspaces/22` (`Support - Finance, Legal, People`):
+
+| Board (nome no app) | Sunday board_id | Origem Monday | Nome confere? |
+|---|---|---|---|
+| Legal - Audiências | `72` | Audiências (4443295406) | ✅ exato |
+| Legal - Controle de Assinaturas - Jan & Luciano | `77` | Controle Assinaturas (5301515799) | ⚠️ nome real tem sufixo "- Jan & Luciano" |
+| Legal - Procons | `82` | Procons (4944254220) | ✅ exato |
+| Legal - Prazos | `83` | Prazos (3961072966) | ✅ exato |
+| Legal - Processos Judiciais | `84` | Processos Judiciais (5343921475) | ✅ exato |
+| Legal - Processos Trabalhista | `85` | Processos Trabalhista (4443297481) | ✅ exato |
+| Legal - KPI Processos Consumidores | `86` | KPI - Processos Consumidores (5563754463) | ✅ exato |
+| Legal - Contratos | `87` | Contratos (5385471914) | ✅ exato |
+
+**Discrepância de nome (board 77):** o nome real no Sunday é
+`Legal - Controle de Assinaturas - Jan & Luciano` (idêntico ao registrado na F0.13 e no
+mapping F2.2), não o encurtado `Legal - Controle de Assinaturas`. O ID `77` é
+inequívoco e corresponde ao board de Controle. Conforme instrução "não renomear nada",
+**nada foi alterado**; fica para decisão humana manter o nome atual (recomendado — bate
+com F2.2) ou encurtar no app.
+
+### F2.5.2 Schema atual dos 8 boards (leitura)
+
+Estado idêntico em todos: cada board tem **apenas as 5 colunas de sistema do template**
+e o `status_set` de sistema `to_do`/`follow_up`/`done`. **Nenhuma coluna customizada da
+F2.3 existe ainda** — confirma o cenário "estado atual" do dry-run
+(`MISSING_TARGET_COLUMN` em 100%).
+
+Colunas de sistema (não recriar) por board — `label` (`key`, tipo):
+`Nome` (`name`, text) · `Status` (`status`, status de sistema) ·
+`Responsável` (`owner`, people) · `Data` (`target_date`, date) ·
+`Área` (`area`, dropdown, `options=[]`).
+
+| Board | Grupos atuais |
+|---|---|
+| 72 Audiências | `Itens` (218), `Audiencias Pendentes` (219) |
+| 77 Controle | `Itens` (227) |
+| 82 Procons | `Itens` (251) |
+| 83 Prazos | `Itens` (252) |
+| 84 Processos Judiciais | `Itens` (253) |
+| 85 Processos Trabalhista | `Itens` (254) |
+| 86 KPI | `Itens` (255) |
+| 87 Contratos | `Itens` (256) |
+
+`capabilities` em todos: `process=false`, `subitems=false`, `approvals=false`,
+`time_tracking=false`, `calendar_anchor=true`; `hierarchy_depth=1`. Importante para o
+board 87 (subitens dos aditivos — ver F2.5.7).
+
+### F2.5.3 Secrets — nota de configuração
+
+Os dois secrets existem na sessão, mas estão **trocados/malformados**:
+`SUNDAY_API_URL` contém o **token** (`sun_pat_…`) e `SUNDAY_API_TOKEN` contém um
+**snippet `curl`** com a URL embutida. A validação desta fase reconstruiu os valores
+corretos em memória (base `https://sunday-api-…run.app`, token `sun_pat_…`) apenas para
+as leituras. **Antes da Fase 3 / do `--refresh-sunday`, corrigir os secrets**:
+`SUNDAY_API_URL=https://sunday-api-…run.app` e `SUNDAY_API_TOKEN=sun_pat_…`. Nenhum
+valor de secret foi impresso.
+
+### F2.5.4 Matching de usuários (leitura de `GET /users/directory`)
+
+Comparação **e-mail exato** (sha256(email)[:16], sem fuzzy) contra as 28 identidades
+técnicas ativas do Monday (`docs/monday-user-identities-2026-08-11.json`):
+
+- **MATCH EXATO: 25**
+- **SEM MATCH: 3** (ativos no Monday sem e-mail correspondente no diretório Sunday)
+- **30 desativados/sem identidade suficiente:** decisão definitiva **MIGRAR SEM
+  RESPONSÁVEL** (não atribuir pessoa semelhante).
+
+Diretório Sunday: 80 usuários (todos com e-mail). Nenhum e-mail foi exibido. O
+`sunday_user_id` de cada match será resolvido/aplicado só na Fase 3.
+
+### F2.5.5 Checklist manual — colunas por board
+
+Regras gerais para todos os boards:
+
+- **A) Colunas de sistema que NÃO recriar:** `Nome`, `Status` (sistema), `Responsável`,
+  `Data` (sistema), `Área`.
+- **C) Coluna técnica obrigatória em TODOS:** **`Monday ID`** (Texto) —
+  rastreabilidade/idempotência (F2.9).
+- **D) Substituições:** colunas `file` do Monday → **anexo por link** no item (não vira
+  coluna); `location` → coluna **Texto**; `time_tracking` → coluna **Número**
+  ("… (horas)"); `formula` → coluna **Fórmula** (F2.5.6).
+- **People:** o responsável principal usa a coluna de sistema **`Responsável`** (não
+  criar). Onde o Monday tem uma **segunda** coluna de pessoas (só em Processos
+  Judiciais), criar uma coluna **Pessoas** customizada para não perder o dado.
+- **Datas:** como há várias datas por board e o sistema só tem uma (`Data`), criar as
+  datas como colunas **Data** customizadas (a `Data` de sistema pode ficar sem uso).
+- **Status de negócio:** SEMPRE coluna **Status** customizada com options 1:1 (F2.5.6);
+  **não** usar o status de sistema como substituto (ele é derivado — F2.4).
+
+Contagem de colunas customizadas a criar (fora as 5 de sistema; `file`→anexo não conta):
+Procons ~20 · Prazos ~8 · Audiências ~13 · Processos Judiciais ~33 · Trabalhista ~14 ·
+KPI ~15 · Controle ~13 · Contratos ~9 — todas com "Monday ID" incluída.
+
+### F2.5.6 De-para de STATUS (Label → Key) — exato, sem fuzzy
+
+Keys geradas pelo slug determinístico da Fase 2 (`slugify_status_key`). Criar cada
+coluna como tipo **Status** e cadastrar as options exatamente com estes labels; as keys
+são o identificador estável usado pela migração.
+
+**82 Procons**
+- `Origem`: Men's "Loja"→`men_s_loja` · Glam "Clube"→`glam_clube` · Glam "Loja"→`glam_loja` · Men's "Clube"→`men_s_clube`
+- `Houve Cancelamento de Assinatura?`: Não→`nao` · Sim→`sim`
+- `Status`: Baixado→`baixado` · Respondido→`respondido`
+- `Causa 1`: Problemas com Cancelamento→`problemas_com_cancelamento` · Renovação Automática→`renovacao_automatica` · Problemas na experiência→`problemas_na_experiencia` · Problemas no pagamento→`problemas_no_pagamento` · Problemas com entrega→`problemas_com_entrega`
+- `Causa 2 (se houver)`: Problemas com Cancelamento→`problemas_com_cancelamento` · Problemas com Entrega→`problemas_com_entrega` · Problemas com Pagamentos→`problemas_com_pagamentos` · Renovação Automática→`renovacao_automatica` · Problemas na Experiência→`problemas_na_experiencia`
+- `Causa 3 (se houver)`: Problemas com Cancelamento→`problemas_com_cancelamento` · Problemas com Entrega→`problemas_com_entrega` · Renovação Automática→`renovacao_automatica` · Problemas com Pagamento→`problemas_com_pagamento` · Problemas na Experiência→`problemas_na_experiencia`
+- `Causa 4 (se houver)`: Problemas com Cancelamento→`problemas_com_cancelamento` · Problemas com a Experiência→`problemas_com_a_experiencia` · Problemas com a Entrega→`problemas_com_a_entrega` · Renovação Automática→`renovacao_automatica` · Problemas no pagamento→`problemas_no_pagamento`
+- `Gerou Processo Administrativo`: Sim→`sim` · Não→`nao`
+- `Processo Administrativo Respondido`: Sim→`sim` · Não→`nao` · Cancelado→`cancelado`
+- `Já está na black list?`: Não→`nao` · Sim→`sim` · Em análise→`em_analise`
+
+**83 Prazos**
+- `Processo Administrativo`: Não→`nao` · Sim→`sim`
+- `Status`: Em progresso→`em_progresso` · Feito→`feito` · Parado→`parado` · Não realizada→`nao_realizada` · Não Iniciado→`nao_iniciado` · Cancelada→`cancelada`
+
+**72 Audiências**
+- `Presencial ou Virtual`: Presencial→`presencial` · Virtual→`virtual`
+- `Responsável por comparecer`: Metajur→`metajur` · Interno-B4A→`interno_b4a` · LBZ→`lbz`
+- `Status documentos`: Prontos - pendente Protocolo→`prontos_pendente_protocolo` · Já Apresentados→`ja_apresentados` · A Fazer→`a_fazer`
+- `Processo/Procon`: Procon→`procon` · Processo→`processo` · Outro→`outro`
+- `Status`: Aguardando→`aguardando` · Feito→`feito` · Cancelada→`cancelada` · Em Andamento→`em_andamento` · Encerrado→`encerrado`
+
+**84 Processos Judiciais**
+- `Processo relacionado a`: Tributário→`tributario` · Consumidor→`consumidor` · Criminal→`criminal` · Administrativo→`administrativo` · Cível→`civel` · Trabalhista→`trabalhista`
+- `Sistema`: ESAJ→`esaj` · PJE→`pje` · PROJUDI→`projudi` · SISTEMA PRÓPRIO→`sistema_proprio` · EPROC→`eproc`
+- `Órgão/JEC`: JEC→`jec` · VC→`vc` · TRF→`trf` · VF→`vf` · JT→`jt`
+- `TJ`: TJAC→`tjac` · TJSP→`tjsp` · TJAL→`tjal` · TJAM→`tjam` · TJDF→`tjdf` · TJBA→`tjba` · TJES→`tjes` · TJCE→`tjce` · TJGO→`tjgo` · TJMA→`tjma` · TJAP→`tjap` · TJMG→`tjmg` · TJMS→`tjms` · TJMT→`tjmt` · TJPA→`tjpa` · TJPB→`tjpb` · TJPE→`tjpe` · TJPI→`tjpi` · TJPR→`tjpr` · TJRJ→`tjrj` · TJRN→`tjrn` · TJRO→`tjro` · TJRR→`tjrr` · TJRS→`tjrs` · TJSC→`tjsc` · TJSE→`tjse` · TJTO→`tjto` · TRT2→`trt2`
+- `Houve Cancelamento de Assinatura?`: Não→`nao` · Sim→`sim`
+- `Audiência`: Sim→`sim` · Não→`nao`
+- `Risco`: Possível→`possivel` · Remoto→`remoto` · Provável→`provavel`
+- `Problema Principal (se aplicável)`: Renovação Automática→`renovacao_automatica` · Problemas na Entrega→`problemas_na_entrega` · Problemas com Cancelamento→`problemas_com_cancelamento` · Problemas no Pagamento→`problemas_no_pagamento` · Problemas na Experiência→`problemas_na_experiencia`
+- `Status`: Encerrado→`encerrado` · Em Andamento→`em_andamento` · Suspenso→`suspenso`
+- `Decisão Judicial`: Acordo→`acordo` · Improcedente Favoravel a B4A/MMKT→`improcedente_favoravel_a_b4a_mmkt` · Condenação B4A/MMKT→`condenacao_b4a_mmkt` · Procedente Favoravel B4A/MMKT→`procedente_favoravel_b4a_mmkt` · Improcedente Desfavoravel B4A/MMKT→`improcedente_desfavoravel_b4a_mmkt`
+
+**85 Processos Trabalhista**
+- `Status`: Em andamento→`em_andamento` · Encerrado→`encerrado`
+- `Tipo de Processo`: Judicial - Tributária→`judicial_tributaria` · Judicial - Trabalhista→`judicial_trabalhista` · Judicial - Cível→`judicial_civel` · Administrativo→`administrativo` · Criminal→`criminal` · Judicial - Consumidor→`judicial_consumidor` · Administrativo - Regulatório→`administrativo_regulatorio`
+- `Risco`: Possível→`possivel` · Remoto→`remoto` · Provável→`provavel`
+- `Forma de Contratação`: Terceirizado→`terceirizado` · CLT→`clt` · PJ→`pj` · Estagiário→`estagiario` · N/A→`n_a`
+
+**86 KPI Processos Consumidores**
+- `Estado`: 27 UFs — AL→`al` · ES→`es` · RJ→`rj` · AC→`ac` · AP→`ap` · SP→`sp` · AM→`am` · MG→`mg` · PI→`pi` · BA→`ba` · DF→`df` · MT→`mt` · RS→`rs` · MS→`ms` · SC→`sc` · GO→`go` · TO→`to` · SE→`se` · CE→`ce` · MA→`ma` · PA→`pa` · PR→`pr` · PB→`pb` · PE→`pe` · RN→`rn` · RO→`ro` · RR→`rr`
+- `Ré`: B4A & MMKT→`b4a_mmkt` · B4A→`b4a` · MMKT→`mmkt`
+- `Causa 1`: Renovação Automática→`renovacao_automatica` · Problemas na Experiência→`problemas_na_experiencia` · Problemas no pagamento→`problemas_no_pagamento` · Problemas com Entrega→`problemas_com_entrega` · Problemas com Cancelamento→`problemas_com_cancelamento`
+- `Causa 2`: Renovação Automática→`renovacao_automatica` · Problemas com o Pagamento→`problemas_com_o_pagamento` · Problemas com a Experiência→`problemas_com_a_experiencia` · Problemas com o Cancelamento→`problemas_com_o_cancelamento` · Problemas na Entrega→`problemas_na_entrega`
+- `Causa 3`: Renovação Automática→`renovacao_automatica` · Problemas com o Pagamento→`problemas_com_o_pagamento` · Problemas na Experiência→`problemas_na_experiencia` · Problemas no Cancelamento→`problemas_no_cancelamento` · Problemas na Entrega→`problemas_na_entrega`
+- `Situação`: Arquivado→`arquivado` · Ativo→`ativo`
+- `Resultado`: Em andamento→`em_andamento` · Improcedência→`improcedencia` · Condenação→`condenacao` · Em Recurso (Nosso)→`em_recurso_nosso` · Acordo→`acordo`
+
+**77 Controle de Assinaturas**
+- `Status`: Aguardando Assinatura→`aguardando_assinatura` · Assinado→`assinado` · Recusado→`recusado` · Aguardando outros→`aguardando_outros` · Bloqueado - aguardando providencia→`bloqueado_aguardando_providencia`
+- `Priority`: Urgente ⚠️→`urgente` · Normal→`normal`
+- `Quem Assina`: Luciano→`luciano` · Jan→`jan`
+- `Tipo`: Contratos MMKT→`contratos_mmkt` · Contratos B4A→`contratos_b4a` · Contratos Itaro→`contratos_itaro` · Contratos RV BVI→`contratos_rv_bvi` · Contratos B2B→`contratos_b2b` · NDA→`nda` · Contratos Societários→`contratos_societarios` · Contratos Influencers (Queens)→`contratos_influencers_queens` · Contratos Jan→`contratos_jan` · Contratos Aurora→`contratos_aurora` · Pedidos Marcas Próprias→`pedidos_marcas_proprias` · RH→`rh`
+
+**87 Contratos**
+- `Empresa`: B4A & MMKT→`b4a_mmkt` · Itaro→`itaro` · B4A→`b4a` · MMKT→`mmkt` · Aurora→`aurora` · RV BVI→`rv_bvi` · Jan→`jan`
+- `Vigência`: Vigente→`vigente` · Não Vigente→`nao_vigente`
+
+### F2.5.7 Board 87 (Contratos) — subitens dos 104 aditivos
+
+Pela API, **não é possível confirmar** suporte a subitens: `capabilities.subitems=false`
+e `hierarchy_depth=1` no board 87; o token não altera essa configuração
+(`PATCH /boards/{id}` → 403). Nota: na F0.14, a criação de subitem via `parent_item_id`
+funcionou no sandbox mesmo com o flag desligado — porém, para garantir a exibição
+hierárquica no app, **ativar manualmente**:
+
+1. Abra o board **Legal - Contratos** (87).
+2. Canto superior direito do board → menu **⋯ / Configurações do board**.
+3. Procure **Subitens / Hierarquia** (ou "Habilitar subitens") e **ative** (profundidade
+   2). Se aparecer o botão de adicionar subitem numa linha (seta/`+` de expandir item),
+   já está ativo.
+4. **Não crie subitens reais agora.**
+
+### F2.5.8 Colunas/config específicas de Contratos (F2.3/F2.12)
+
+Board 87 — criar (além de `Monday ID`):
+- `Empresa` — Status (options acima) · `CNPJ outra Parte` — Texto ·
+  `Tipo de Contrato` — Texto · `Data do Contrato` — Data · `Término` — Data ·
+  `Vigência` — Status (options acima) · `Observações` — Texto longo.
+- `Contrato` (arquivo Monday) → **anexo por link** (não vira coluna).
+- `Responsável` (people) → coluna de sistema **Responsável**.
+- Subitens (aditivos) → **subitens nativos** (F2.5.7); não é coluna.
+- Grupos por Tipo do Monday (RH, Contratos B4A, … 17 grupos) **não** são pré-requisito
+  da migração — a categorização vive na coluna `Empresa`/`Vigência` e no fluxo de
+  contratos; não criar por ora.
+
+### F2.5.9 Board 77 (Controle) — grupos a criar
+
+Nomes **exatos** do Monday (board 5301515799). Board 77 hoje só tem `Itens`; criar:
+
+- `Contratos Pendentes de Assinatura Jan`
+- `Contratos Pendentes de Assinatura Luciano`
+- `Pendente Fornecedor`
+- `Assinados`
+- `Recusado`
+
+Criar já com o nome exato (renomear grupo é bloqueado para o token — F0.14).
+
+### F2.5.10 Área
+
+`Área` é coluna estrutural de sistema (dropdown, `is_system=true`, `options=[]`) — não
+excluir, não recriar, não renomear.
+
+| Board | Decisão |
+|---|---|
+| 72 Audiências | Área: IGNORAR |
+| 77 Controle | Área: IGNORAR |
+| 82 Procons | Área: IGNORAR |
+| 83 Prazos | Área: IGNORAR |
+| 84 Processos Judiciais | Área: IGNORAR |
+| 85 Processos Trabalhista | Área: IGNORAR |
+| 86 KPI | Área: IGNORAR |
+| 87 Contratos | Área: IGNORAR |
+
+Fase 2 (F2.3) deixou uma preferência **opcional** (não decidida) de preencher Área com
+valor fixo em Procons ("Consumidor") e Contratos/Controle ("Contratos") apenas se o time
+quiser usar os filtros da home — como não foi definido, aqui fica **IGNORAR**.
+
+### F2.5.11 Fórmulas (configuração manual)
+
+Duas colunas `formula` (não há transpiler; recriar à mão **depois** das colunas de
+número de que dependem):
+
+| Board | Nome | Origem Monday | Equivalente Sunday | Dependências |
+|---|---|---|---|---|
+| 84 Processos Judiciais | `saving` | `{valor da causa} - {condenação}` | Fórmula: `{valor da causa} - {condenação}` | criar antes: `valor da causa`, `condenação` (Número) |
+| 85 Processos Trabalhista | `Saved` | `{Valor da Causa} - {Depósito/Pagamento} - {Provisão}` | Fórmula: `{Valor da Causa} - {Depósito/Pagamento} - {Provisão}` | criar antes: `Valor da Causa`, `Depósito/Pagamento`, `Provisão` (Número) |
+
+A linguagem de expressão do Sunday pode diferir na sintaxe de referência de coluna;
+se não houver equivalente literal, deixar a coluna Número e calcular no relatório.
+
+### F2.5.12 Relações entre boards (board_relation) — config exata
+
+IDs de destino agora conhecidos. Criar cada coluna **Conectar board** com o
+`source_board_id` exato **antes** da migração (o dry-run pós-checklist confere
+`config_ok`). A API Sunday **não** valida o board-alvo — `source_board_id` errado deve
+bloquear o dry-run.
+
+| # | Origem (board) | ID origem | Coluna (nome exato) | Tipo | Destino | ID destino / `source_board_id` | Cardinalidade |
+|---|---|---|---|---|---|---|---|
+| 1 | Legal - Prazos | `83` | `Processos Consumidores` | Conectar board | Legal - Processos Judiciais | `84` | muitos→1 (lista suportada) |
+| 2 | Legal - Audiências | `72` | `Processos Judiciais` | Conectar board | Legal - Processos Judiciais | `84` | muitos→1 |
+| 3 | Legal - Audiências | `72` | `Processos Judiciais (2)` | Conectar board | Legal - Processos Judiciais | `84` | muitos→1 |
+| 4 | Legal - Controle | `77` | `Contrato relacionado` | Conectar board | Legal - Contratos | `87` | muitos→1 |
+
+Observação (2): o Monday tem **duas** colunas homônimas "Processos Judiciais" em
+Audiências (`conectar_quadros__1`, `conectar_quadros8__1`) — criar as duas no Sunday
+(sugerido diferenciar a segunda como `Processos Judiciais (2)`), ambas com
+`source_board_id=84`.
+
+**Quarta relação identificada no inventário (F2.6):** a coluna do Controle
+`link to Notificações Carol - Assinaturas Jan` (`board_relation_mkqxj7gv`) aponta para
+um board **fora da Onda 1** → **NÃO MIGRAR** (registrada em comentário; não criar coluna
+de relação para ela).
+
+### F2.5.13 Ordem recomendada de execução manual
+
+1. Confirmar/ativar **subitens no board 87** (F2.5.7).
+2. Criar **colunas Número** dependentes das fórmulas em 84 e 85 (F2.5.11).
+3. Criar as demais colunas (Status/Texto/Texto longo/Data/Número/Link/E-mail) de cada
+   board, com options 1:1 (F2.5.6), incluindo `Monday ID` em todos.
+4. Criar as **fórmulas** `saving` (84) e `Saved` (85) depois dos números.
+5. Criar os **grupos do board 77** (F2.5.9).
+6. Criar as **colunas de relação** (F2.5.12) por último — dependem dos IDs de destino.
+7. Corrigir os **secrets** (F2.5.3) e rodar
+   `python scripts/sunday_migration_dry_run.py --refresh-sunday` — as relações devem
+   sair `config_ok: true` e o cenário "estado_atual" convergir para "pós-checklist".
+
+### F2.5.14 Decisões definitivas reafirmadas
+
+- **KPI (86):** migra os **31 itens integralmente** (não aplicar o recorte normal).
+- **30 usuários desativados:** migram **sem responsável** (não atribuir semelhante).
+- **Nesta fase nada foi escrito** em Sunday/Monday. Próximo passo é humano: executar
+  este checklist no app do Sunday; depois faremos leitura + `--refresh-sunday` + dry-run
+  final antes da Fase 3.
