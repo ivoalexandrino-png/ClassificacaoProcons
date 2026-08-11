@@ -726,7 +726,10 @@ nenhum board novo foi criado. A execução produziu 65 registros: 33 passos HTTP
 30 passos não-2xx e 2 registros de observação do webhook. Considerando os oito testes
 funcionais como unidades, **1 passou integralmente (webhook) e 7 falharam ou ficaram
 parciais**. Relatório sanitizado:
-`docs/sunday-fase0-write-report-2026-08-11.json`.
+`docs/sunday-fase0-write-report-2026-08-11.json`. Um **follow-up** na mesma data
+(26 passos; ver subseção abaixo) fechou as lacunas de DELETE, campos de sistema,
+rota de values e `/links`; relatório:
+`docs/sunday-fase0-write-followup-report-2026-08-11.json`.
 
 Antes da execução, os guard-rails foram reforçados para validar o vínculo do board 80
 ao workspace 22, aceitar somente o payload exato do sandbox de relação, bloquear
@@ -739,7 +742,7 @@ enviados pelos testes eram fictícios.
 | Funcionalidade | Endpoint | Método | Payload confirmado | HTTP | Resultado | Limitação | Fallback |
 |---|---|---|---|---|---|---|---|
 | T1 — grupo | `/boards/80/groups`; `/boards/groups/{id}` | `POST`; `PATCH` | `{"name":"TESTE-FICTICIO Grupo A","color":"blue"}`; alteração de `name` | `201`; `403` | criação confirmada; alteração negada | token não pode alterar/excluir configuração; exclusão não foi exercitada | criar grupos via API; renomear/excluir manualmente na configuração |
-| T1 — item/status | `/boards/80/items`; `/boards/items/{id}`; `/status` | `POST`; `GET`; `PATCH` | `name`, `group_id`; depois `name`, `description`; `status`, `cascade` | `201`; `200`; `200` | criar, listar e alterar item e status de sistema funciona | exclusão de item não foi exercitada | nativo para o fluxo; limpeza manual residual |
+| T1 — item/status | `/boards/80/items`; `/boards/items/{id}`; `/status` | `POST`; `GET`; `PATCH`; `DELETE` | `name`, `group_id`; depois `name`, `description`; `status`, `cascade` | `201`; `200`; `200`; `200` | criar, listar, alterar e **excluir** item e alterar status de sistema funciona (DELETE confirmado no follow-up; GET posterior retorna 404) | mover item de grupo depois de criado exige login (`PATCH /boards/items/{id}/group` → 403; `group_id` no PATCH genérico é ignorado em silêncio) | nativo para o fluxo; atribuir o grupo certo na criação |
 | T1 — coluna/value | `/boards/80/columns`; `/boards/items/{id}/values/{column_id}` | `POST`; `PATCH`; `GET` | coluna `text`; value textual fictício | `403`; `404`; `200` | coluna não criada; sem `column_id`, a escrita de value não ocorreu; leitura retornou lista vazia | criação/alteração de coluna exige login; escrita de values essenciais continua **não confirmada** | pré-configurar colunas manualmente e repetir values; sem essa confirmação, não iniciar o adapter |
 | T2 — tipos de coluna | `/boards/80/columns` | `POST` | `label`, `type` e opções quando aplicável | `403` em 20/20 tipos | nenhum tipo foi criado pela API | `text`, `long_text`, `number`, `status`, `status_multi`, `dropdown`, `date`, `checkbox`, `people`, `timeline`, `rating`, `tags`, `link`, `file_link`, `email`, `phone`, `dependency`, `formula`, `time_tracking` e `creation_log` não foram validados para escrita | configuração manual única; transformar tipos não suportados, mas values ainda precisam de reteste |
 | T3 — `board_relation` | `/boards/81/items`; `/boards/80/columns`; `/boards/items/{id}/values/{column_id}` | `POST`; `POST`; `PATCH`/`GET` planejados | item alvo fictício; coluna com `source_board_id:"81"`; relação `{links:[{item_id}]}` planejada | `201`; `403`; não executados | item alvo criado; relação não pôde ser criada, preservada, relida nem reconstruída | bloqueio ocorreu na criação da coluna, antes do teste de values | tabela local de relações + IDs externos; `/links` é dispensável para o fallback, mas o fluxo nativo segue **não determinado** |
@@ -753,18 +756,42 @@ enviados pelos testes eram fictícios.
 application/json`, `User-Agent: node`, com body
 `{"board_id":"80","item_id":"7638","item_name":"TESTE-FICTICIO dispara webhook OK"}`.
 Também foram observados `Accept: */*`, `Accept-Encoding: br, gzip, deflate` e
-`Content-Length: 82`; nenhum header sensível foi preservado. Com o receptor em HTTP
-500, foram observadas **6 requisições adicionais** em aproximadamente 42 segundos,
-mas o relatório dessa fase preservou apenas timestamps e houve criação concorrente de
-itens no mesmo sandbox. Portanto, não é possível separar retries de novos eventos. O
-Sunday registrou os runs como `success` apesar do 500. Método, headers e body
-específicos da fase 500, retries, política após a janela observada e timeout:
-**NÃO DETERMINADOS**.
+`Content-Length: 82`; nenhum header sensível foi preservado. A dúvida sobre retries
+foi resolvida cruzando `GET /automations/{id}/runs` com o receptor: a automação
+acumulou **18 runs** (um por item criado no board, inclusive pelos scripts
+concorrentes) e o receptor registrou **exatamente 18 requisições**, correspondência
+1:1 por `item_id`/timestamp — ou seja, as requisições "extras" da fase 500 eram novos
+eventos de criação concorrente, **não retries**. Com o receptor devolvendo HTTP 500,
+não houve nenhuma reentrega na janela observada de ~3 minutos e os runs continuaram
+`success` (entrega fire-and-forget; o status do run não reflete o HTTP do destino).
+Retries além dessa janela e timeout: **NÃO DETERMINADOS**.
 
 **Teste extra de subitem.** `PATCH /boards/80` com `{"hierarchy_depth":2}` retornou
-`403`, mas `POST /boards/80/items` com `parent_item_id` retornou `201`; o board já
-aceitava hierarquia. Assim, criar subitem é nativo quando a hierarquia foi
-pré-configurada; alterar essa configuração exige login.
+`403`, mas `POST /boards/80/items` com `parent_item_id` retornou `201` e o
+`parent_item_id` persistiu na releitura; o board já aceitava hierarquia. Assim, criar
+subitem é nativo quando a hierarquia foi pré-configurada; alterar essa configuração
+exige login.
+
+**Follow-up de escrita (mesma data, `scripts/sunday_fase0_write_tests_followup.py`;
+relatório `docs/sunday-fase0-write-followup-report-2026-08-11.json`).** Fecha as
+lacunas que o escopo do token deixou na primeira execução:
+
+| Funcionalidade | Endpoint | Método | Payload confirmado | HTTP | Resultado | Limitação | Fallback |
+|---|---|---|---|---|---|---|---|
+| Values em coluna de sistema | `/boards/items/{id}/values/{column_id}` | `PATCH` | `{"value": …}` nas colunas `name`/`status`/`owner`/`target_date`/`area` | `400` | erro **semântico**: `"System columns são atualizadas via PATCH /boards/items/:id."` — o token **passa na autorização** da rota de values (400 de validação, não 403 de guarda) | colunas de sistema não usam a rota de values; colunas custom seguem inexistentes no sandbox | campos de sistema via `PATCH` do item; values custom pendem só do payload (reteste) |
+| Campos de sistema no item | `/boards/items/{id}` | `PATCH` | `{"target_date":"2026-04-01","area":"…"}` | `200` | **confirmado e persistido** na releitura (`target_date` normalizado para `T12:00:00Z`) | `group_id` e `assignee_user_ids` no mesmo `PATCH` são **ignorados em silêncio** (200 sem efeito) | grupo definido na criação do item; responsáveis: NÃO DETERMINADO (não testado com usuário real de propósito) |
+| Mover item de grupo | `/boards/items/{id}/group` | `PATCH` | `{"group_id": …}` | `403` | rota exclusiva de sessão | mover depois de criado exige login | criar o item já no grupo certo (confirmado no T1) |
+| Excluir item | `/boards/items/{id}` | `DELETE` | — | `200` | exclusão confirmada (GET posterior → `404`) | — | nativo |
+| Excluir grupo / anexo; editar capabilities | `/boards/groups/{id}`; `/boards/attachments/{id}`; `/boards/{id}/capabilities` | `DELETE`; `DELETE`; `PATCH` | — | `403` | rotas de configuração/exclusão exigem login | limpeza e configuração ficam manuais | aceitável (config única) |
+| Ler item único | `/boards/items/{id}` | `GET` | — | `404` | rota não existe | leitura é sempre pela coleção do board | cache local do polling (T9) já cobre |
+| Links de board | `/boards/{id}/links` | `GET` **e** `POST` | `{"target_board_id":"81"}` | `403` | ambos exclusivos de sessão | `/links` é **indisponível** para token também na escrita | tabela local de relações (o fluxo não pode depender de `/links`) |
+| Criação de board | `/boards` | `POST` | `{name, description, template_key, workspace_id}` | `201` | o board `81` foi criado por uma das execuções concorrentes deste mesmo script (proveniência confirmada: descrição idêntica, dono = usuário do token, `created_at` na janela da execução) | colunas do board novo são só as 5 de sistema | estrutura de colunas continua manual |
+
+Observação operacional: os secrets desta tarefa foram injetados em **várias VMs em
+paralelo**, e cada uma executou o mesmo script contra o sandbox — daí os conjuntos
+duplicados de dados fictícios no board 80 e a criação do board 81 por outra execução.
+Todas as automações de teste terminaram desativadas; os dados fictícios permanecem no
+sandbox como evidência.
 
 Os Testes 9–13 são analíticos e foram **concluídos** com os dados reais já coletados
 (F0.7 e F0.13), com os ajustes de escrita abaixo:
@@ -794,16 +821,16 @@ ausente no token) fica **dispensável**; a busca textual nunca foi usada pelo c�
 
 | Recurso Monday | Uso real | Equivalente Sunday | Estratégia | Auto/Manual | Risco |
 |---|---|---|---|---|---|
-| Boards (8 integrados + ~15 de dados) | estrutura dos domínios | `POST /boards` + grupos/colunas | pré-criar estrutura e IDs; criação de board não foi exercitada nesta execução | Manual + Auto | médio |
+| Boards (8 integrados + ~15 de dados) | estrutura dos domínios | `POST /boards` + grupos/colunas | criação de board via token **confirmada** (`201`, board 81); colunas do board novo são só as de sistema | Auto (board/grupos) + Manual (colunas) | médio |
 | Grupos (meses/filas/estágios) | filas Jan/Luciano, grupos por ano | `POST /boards/{id}/groups` | criação automática (`201`); renomear/excluir manualmente (`403`) | Auto + Manual residual | baixo |
 | Items | casos, contratos, prazos | `POST /boards/{id}/items` | migração com mapa de IDs | Auto | baixo |
 | Status (44 colunas) | Status/Quem Assina/Tipo/causas | coluna `status`/`dropdown` + Status de sistema | colunas/opções pré-configuradas manualmente; values precisam de reteste | Manual + pendente | **alto** |
-| Datas (20) | prazos, audiências | `date` (`include_time` p/ hora) | coluna pré-configurada; value e data-com-hora não confirmados | Manual + pendente | **alto** |
+| Datas (20) | prazos, audiências | `date` (`include_time` p/ hora) | campo de sistema `target_date` aceita `YYYY-MM-DD` e persiste (**confirmado** no follow-up); coluna `date` custom e data-com-hora pendem do reteste | Manual (coluna) + pendente (value custom) | médio |
 | Pessoas (6) | responsáveis | `people` | coluna pré-configurada; value não testado para evitar usar identidade real | Manual + pendente | **alto** |
 | Textos/números/e-mails/links | CNPJ, CIP/FA, valores, provisões | `text`/`long_text`/`number`/`email`/`link` | colunas pré-configuradas; escrita de values precisa de reteste | Manual + pendente | **alto** |
 | Arquivos (8 colunas file) | notificações Procon, contratos | anexo por link | Monday/Drive/GCS → URL estável → `attachments/link` (`201`) | Auto c/ transform. | médio |
 | Updates/timeline | histórico dos casos | `comments` | criar comentários em ordem; não editar | Auto c/ transform. | baixo |
-| Conexão de quadros (5) | Prazos/Audiências→Processos; Controle→Contratos | não confirmado | tabela local de relações + IDs externos | Auto (fallback) | médio |
+| Conexão de quadros (5) | Prazos/Audiências→Processos; Controle→Contratos | não confirmado | tabela local de relações + IDs externos (`/boards/{id}/links` é 403 para token também no `POST` — o fluxo não pode depender dele) | Auto (fallback) | médio |
 | Mirror | espelhos nos quadros de legal | leitura bloqueada p/ token | cópia do valor no sync (lookup no nosso código) | Auto (fallback) | baixo |
 | Automações (2 regras) | Assinado→Contratos; mestre→audiências | webhook confirmado; sem `create_item` cross-board | polling principal + regra no código; webhook como aceleração | Auto (código) | médio |
 | Busca por valor de coluna | dedup protocolo/CPF/CNJ | inexistente | índice local (T10) | Auto (fallback) | baixo |
@@ -851,16 +878,16 @@ aceitável · D bloqueante):**
 
 | Requisito | Classe | Observação |
 |---|---|---|
-| Criar/listar/alterar itens e status de sistema | A | `POST`/`GET`/`PATCH` confirmados |
-| Criar grupos | A | `POST` confirmado |
+| Criar/listar/alterar/excluir itens e status de sistema | A | `POST`/`GET`/`PATCH`/`DELETE` confirmados (follow-up); campos de sistema `target_date`/`area` gravam via `PATCH` do item |
+| Criar grupos / criar boards | A | `POST` confirmados (board 81 criado via token); item entra no grupo certo na criação (mover depois exige login) |
 | Renomear/excluir grupos e configurar boards/colunas | C | exige login/interface; configuração única |
-| Escrever/alterar values essenciais | **D** | não testado: criação da coluna falhou e deixou `column_id` vazio |
-| Status, datas, textos, números, links, e-mails | **D** | nenhum value confirmado; pré-configurar e retestar |
-| Pessoas | **D** | não testado, inclusive para não usar identidade real |
+| Escrever/alterar values essenciais | **D (pendente, risco reduzido)** | a autorização do token na rota de values foi confirmada no follow-up (400 semântico ≠ 403); falta só coluna custom no sandbox para confirmar payload/round-trip |
+| Status, datas, textos, números, links, e-mails | **D (pendente)** | nenhum value custom confirmado; `target_date` de sistema confirmado; pré-configurar colunas e retestar |
+| Pessoas | **D (pendente)** | não testado, inclusive para não usar identidade real; `assignee_user_ids` no `PATCH` genérico é ignorado |
 | Subitens (aditivos Contratos) | A/C | criação nativa; `hierarchy_depth` exige configuração manual |
 | Arquivos (PDF Procon/Contratos) | B | Drive/GCS + anexo por link; upload binário retornou 403 |
 | Updates/histórico | A/B | criar/listar/excluir comentário funciona; editar vira correção adicional |
-| Conexões entre quadros | B | nativo não determinado; tabela local de relações dispensa `/links` |
+| Conexões entre quadros | B | nativo não determinado; tabela local de relações dispensa `/links` (403 para token em GET e POST) |
 | Mirror | B | cópia/lookup no sync |
 | Automações cross-board | B | nosso código |
 | Evento de item criado (Controle) | A/B | webhook nativo confirmado; polling+ETag como resiliência |
@@ -870,16 +897,29 @@ aceitável · D bloqueante):**
 | `formula` | C | 2 colunas |
 | `time_tracking` | B/C | total em `number` + configuração manual |
 
-**Decisão: NO-GO para iniciar `sunday/client.py`.** O bloqueio não é a ausência de
-`/links`, `/mirror-values`, search, mirror ou webhook: todos têm fallback razoável, e
-o webhook foi confirmado. O bloqueio é mais básico: a execução não confirmou escrita
-de **nenhum value de coluna**, operação essencial para contratos, jurídico e Procon.
+**Decisão: NO-GO (condicional e estreito) para iniciar `sunday/client.py`.** O
+bloqueio não é a ausência de `/links`, `/mirror-values`, search, mirror ou webhook:
+todos têm fallback razoável, e o webhook foi confirmado. O bloqueio é mais básico: a
+execução não confirmou escrita de **nenhum value de coluna custom**, operação
+essencial para contratos, jurídico e Procon. O follow-up reduziu bastante o risco
+residual — o token **passa na autorização** da rota de values (o 400 é semântico, de
+validação de coluna de sistema, não um 403 de guarda) — mas o payload e o round-trip
+em coluna custom (inclusive `board_relation`) seguem sem demonstração empírica.
 Implementar o adapter agora cristalizaria um contrato de API ainda não demonstrado.
 
-**Critério objetivo para reavaliar o Go:** pré-configurar manualmente no board 80
-colunas fictícias `text`, `number`, `status`, `date`, `link`, `email` e
-`board_relation` apontando para o board 81; então repetir `PATCH` e `GET
-/boards/items/{id}/values/{column_id}` para criar, alterar, reler e reconstruir os
-values. `long_text`, `dropdown`, arquivos e `time_tracking` podem usar os fallbacks
-documentados se seus testes continuarem falhando. Até esse reteste, não implementar
-`sunday/client.py`.
+**Critério objetivo para reavaliar o Go (um passo manual + um reteste):**
+pré-configurar manualmente no board 80 colunas fictícias `text`, `number`, `status`,
+`date`, `link`, `email` e `board_relation` apontando para o board 81 (5–10 minutos na
+interface); então repetir `PATCH` e `GET /boards/items/{id}/values/{column_id}` para
+criar, alterar, reler e reconstruir os values. `long_text`, `dropdown`, arquivos e
+`time_tracking` podem usar os fallbacks documentados se seus testes continuarem
+falhando. Até esse reteste, não implementar `sunday/client.py`.
+
+**Plano condicionado ao Go (para não rediscutir depois):** V1 do adapter — auth,
+CRUD de itens (criar com `group_id`/`parent_item_id`, `PATCH` de campos de sistema,
+status, `DELETE`), values de colunas custom, comentários, anexos por link, polling
+com ETag + cache local, índice local de dedup e mapa de IDs (T13). V2 — gestão de
+automações `webhook`, espelhos por lookup materializado, reconstrução de
+`board_relation` (nativa ou por tabela local, conforme o reteste), views. MANUAL —
+criação de colunas por board (config única), fórmulas (2), configuração de
+`time_tracking`/`hierarchy_depth`/capabilities e revisão de views/membros.
