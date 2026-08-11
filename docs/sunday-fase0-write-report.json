@@ -1,0 +1,2992 @@
+[
+  {
+    "note": "identidade do token",
+    "method": "GET",
+    "path": "/auth/me",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "37",
+      "email": "[REDACTED]",
+      "name": "[REDACTED]",
+      "preferred_name": "[REDACTED]",
+      "avatar_url": "[REDACTED]",
+      "job_title": "Gerente Jurídico",
+      "status": "ativo",
+      "user_type": "employee",
+      "seniority_key": "manager",
+      "hierarchy_level": 10,
+      "hierarchy_label": "Manager / Gerente",
+      "business_unit": "shared",
+      "team_id": "20",
+      "manager_user_id": "57",
+      "access_level": "contributor",
+      "admin_scopes": [],
+      "sunday_enabled": true,
+      "archived": false,
+      "activated_at": "[REDACTED]",
+      "last_login_at": "[REDACTED]",
+      "hire_date": "[REDACTED]",
+      "home_prefs": null
+    }
+  },
+  {
+    "note": "preflight sandbox",
+    "method": "GET",
+    "path": "/boards/80",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "80",
+      "name": "SANDBOX - API SUNDAY - NÃO USAR",
+      "description": null,
+      "status": "active",
+      "template_key": "board",
+      "status_set": [
+        {
+          "key": "to_do",
+          "color": "amber",
+          "label": "A fazer",
+          "terminal": false
+        },
+        {
+          "key": "follow_up",
+          "color": "sky",
+          "label": "Follow-up",
+          "terminal": false
+        },
+        {
+          "key": "done",
+          "color": "emerald",
+          "label": "Feito",
+          "terminal": true
+        }
+      ],
+      "hierarchy_depth": 1,
+      "capabilities": {
+        "process": false,
+        "subitems": false,
+        "approvals": false,
+        "time_tracking": false,
+        "calendar_anchor": true
+      },
+      "approval_workflow_config": null,
+      "process_config": null,
+      "open_submissions": null,
+      "open_submissions_set_at": null,
+      "owner_user_id": "37",
+      "calendar_event_id": null,
+      "calendar_event_organizer_email": "[REDACTED]",
+      "recurrence_rule": null,
+      "area_options": [],
+      "team_ids": [],
+      "approver_user_ids": [],
+      "created_at": "2026-08-11T00:12:18.275Z",
+      "updated_at": "2026-08-11T00:12:18.275Z",
+      "members": [
+        {
+          "id": "137",
+          "board_id": "80",
+          "user_id": "37",
+          "role": "owner",
+          "created_at": "2026-08-11T00:12:18.275Z"
+        }
+      ]
+    }
+  },
+  {
+    "note": "usuário para menções/people",
+    "method": "GET",
+    "path": "/auth/me",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "37",
+      "email": "[REDACTED]",
+      "name": "[REDACTED]",
+      "preferred_name": "[REDACTED]",
+      "avatar_url": "[REDACTED]",
+      "job_title": "Gerente Jurídico",
+      "status": "ativo",
+      "user_type": "employee",
+      "seniority_key": "manager",
+      "hierarchy_level": 10,
+      "hierarchy_label": "Manager / Gerente",
+      "business_unit": "shared",
+      "team_id": "20",
+      "manager_user_id": "57",
+      "access_level": "contributor",
+      "admin_scopes": [],
+      "sunday_enabled": true,
+      "archived": false,
+      "activated_at": "[REDACTED]",
+      "last_login_at": "[REDACTED]",
+      "hire_date": "[REDACTED]",
+      "home_prefs": null
+    }
+  },
+  {
+    "note": "T1 grupos antes",
+    "method": "GET",
+    "path": "/boards/80/groups",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "240",
+        "board_id": "80",
+        "name": "[REDACTED]",
+        "color": "neutral",
+        "position": 1,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:12:18.323Z",
+        "updated_at": "2026-08-11T00:12:18.323Z"
+      },
+      {
+        "id": "241",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 2,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:10.605Z",
+        "updated_at": "2026-08-11T00:35:10.605Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 cria grupo",
+    "method": "POST",
+    "path": "/boards/80/groups",
+    "request_body": {
+      "name": "TESTE-FICTICIO Grupo A",
+      "color": "blue"
+    },
+    "status": 201,
+    "response": {
+      "id": "243",
+      "board_id": "80",
+      "name": "TESTE-FICTICIO Grupo A",
+      "color": "blue",
+      "position": 3,
+      "is_collapsed_default": false,
+      "created_at": "2026-08-11T00:35:17.490Z",
+      "updated_at": "2026-08-11T00:35:17.490Z"
+    }
+  },
+  {
+    "note": "T1 altera grupo",
+    "method": "PATCH",
+    "path": "/boards/groups/243",
+    "request_body": {
+      "name": "TESTE-FICTICIO Grupo A (editado)"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T1 cria item",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 1",
+      "group_id": "243"
+    },
+    "status": 201,
+    "response": {
+      "id": "7608",
+      "board_id": "80",
+      "group_id": "243",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:17.693Z",
+      "updated_at": "2026-08-11T00:35:17.693Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T1 lê itens",
+    "method": "GET",
+    "path": "/boards/80/items",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "7604",
+        "board_id": "80",
+        "group_id": "241",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:10.831Z",
+        "updated_at": "2026-08-11T00:35:11.212Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7605",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:12.529Z",
+        "updated_at": "2026-08-11T00:35:12.529Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7608",
+        "board_id": "80",
+        "group_id": "243",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:17.693Z",
+        "updated_at": "2026-08-11T00:35:17.693Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7609",
+        "board_id": "80",
+        "group_id": "240",
+        "linked_user_id": null,
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:17.813Z",
+        "updated_at": "2026-08-11T00:35:17.813Z",
+        "assignee_user_ids": []
+      },
+      {
+        "id": "7607",
+        "board_id": "80",
+        "group_id": null,
+        "linked_user_id": null,
+        "parent_item_id": "7604",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "owner_user_id": "37",
+        "creator_user_id": "37",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:15.528Z",
+        "updated_at": "2026-08-11T00:35:15.528Z",
+        "assignee_user_ids": []
+      }
+    ]
+  },
+  {
+    "note": "T1 altera item",
+    "method": "PATCH",
+    "path": "/boards/items/7608",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia."
+    },
+    "status": 200,
+    "response": {
+      "id": "7608",
+      "board_id": "80",
+      "group_id": "243",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia.",
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:17.693Z",
+      "updated_at": "2026-08-11T00:35:18.011Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T1 altera status de sistema",
+    "method": "PATCH",
+    "path": "/boards/items/7608/status",
+    "request_body": {
+      "status": "follow_up",
+      "cascade": false
+    },
+    "status": 200,
+    "response": {
+      "id": "7608",
+      "board_id": "80",
+      "group_id": "243",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia.",
+      "status": "follow_up",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:17.693Z",
+      "updated_at": "2026-08-11T00:35:18.131Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T1 cria coluna text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Texto",
+      "type": "text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T1 lê colunas",
+    "method": "GET",
+    "path": "/boards/80/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "443",
+        "board_id": "80",
+        "key": "name",
+        "type": "text",
+        "label": "Nome",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "444",
+        "board_id": "80",
+        "key": "status",
+        "type": "status",
+        "label": "Status",
+        "position": 1,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "445",
+        "board_id": "80",
+        "key": "owner",
+        "type": "people",
+        "label": "Responsável",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "446",
+        "board_id": "80",
+        "key": "target_date",
+        "type": "date",
+        "label": "Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "447",
+        "board_id": "80",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 grava value",
+    "method": "PATCH",
+    "path": "/boards/items/7608/values/",
+    "request_body": {
+      "value": "valor fictício v1"
+    },
+    "status": 404,
+    "response": {
+      "message": "Cannot PATCH /boards/items/7608/values/",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T1 lê values",
+    "method": "GET",
+    "path": "/boards/items/7608/values",
+    "request_body": null,
+    "status": 200,
+    "response": []
+  },
+  {
+    "note": "T1 altera value",
+    "method": "PATCH",
+    "path": "/boards/items/7608/values/",
+    "request_body": {
+      "value": "valor fictício v2"
+    },
+    "status": 404,
+    "response": {
+      "message": "Cannot PATCH /boards/items/7608/values/",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T1 cria comentário",
+    "method": "POST",
+    "path": "/boards/items/7608/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO comentário 1",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2060",
+      "body": "TESTE-FICTICIO comentário 1",
+      "kind": "reply",
+      "mentions": [],
+      "author_user_id": "37",
+      "author_name": "[REDACTED]",
+      "is_external": false,
+      "created_at": "2026-08-11T00:35:18.705Z"
+    }
+  },
+  {
+    "note": "T1 lê comentários",
+    "method": "GET",
+    "path": "/boards/items/7608/comments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "2060",
+        "body": "TESTE-FICTICIO comentário 1",
+        "kind": "reply",
+        "mentions": [],
+        "author_user_id": "37",
+        "author_name": "[REDACTED]",
+        "is_external": false,
+        "created_at": "2026-08-11T00:35:18.705Z"
+      }
+    ]
+  },
+  {
+    "note": "item auxiliar p/ dependency",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 2 (dependência)"
+    },
+    "status": 201,
+    "response": {
+      "id": "7610",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 2 (dependência)",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:19.272Z",
+      "updated_at": "2026-08-11T00:35:19.272Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T2 cria coluna text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO text",
+      "type": "text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna long_text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO long_text",
+      "type": "long_text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna number",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO number",
+      "type": "number"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna status",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO status",
+      "type": "status",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "Aberto",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "Fechado",
+          "color": "green"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna status_multi",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO status_multi",
+      "type": "status_multi",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "A",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "B",
+          "color": "pink"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna dropdown",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO dropdown",
+      "type": "dropdown",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "Um",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "Dois",
+          "color": "sky"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna date",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO date",
+      "type": "date"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna checkbox",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO checkbox",
+      "type": "checkbox"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna people",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO people",
+      "type": "people"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna timeline",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO timeline",
+      "type": "timeline"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna rating",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO rating",
+      "type": "rating"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna tags",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO tags",
+      "type": "tags"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna link",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO link",
+      "type": "link"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna file_link",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO file_link",
+      "type": "file_link"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna email",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO email",
+      "type": "email"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna phone",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO phone",
+      "type": "phone"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna dependency",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO dependency",
+      "type": "dependency"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna formula",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO formula",
+      "type": "formula",
+      "expression": "1 + 1"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna time_tracking",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO time_tracking",
+      "type": "time_tracking"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna creation_log",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO creation_log",
+      "type": "creation_log"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T3 boards visíveis (dedup do RELATION)",
+    "method": "GET",
+    "path": "/boards",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "81",
+        "name": "SANDBOX - API SUNDAY - RELATION",
+        "description": "Sandbox de teste de board_relation. Pode apagar.",
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-11T00:35:14.609Z",
+        "updated_at": "2026-08-11T00:35:14.609Z"
+      },
+      {
+        "id": "80",
+        "name": "SANDBOX - API SUNDAY - NÃO USAR",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-11T00:12:18.275Z",
+        "updated_at": "2026-08-11T00:12:18.275Z"
+      },
+      {
+        "id": "79",
+        "name": "Legal - Seguros",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-10T19:11:34.734Z",
+        "updated_at": "2026-08-10T19:11:34.734Z"
+      },
+      {
+        "id": "78",
+        "name": "Legal - Acessos",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-10T19:11:24.249Z",
+        "updated_at": "2026-08-10T19:11:24.249Z"
+      },
+      {
+        "id": "77",
+        "name": "Legal - Controle de Assinaturas - Jan & Luciano",
+        "description": "",
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-10T19:05:29.118Z",
+        "updated_at": "2026-08-10T19:05:47.590Z"
+      },
+      {
+        "id": "74",
+        "name": "Cronograma + Processos Finance",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "94",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-08-07T14:34:24.300Z",
+        "updated_at": "2026-08-07T14:34:24.300Z"
+      },
+      {
+        "id": "72",
+        "name": "Legal - Audiências",
+        "description": "",
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "37",
+        "calendar_event_id": "61fg2lp7k6rfbuo753iedjsbvc",
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-07-27T22:00:11.353Z",
+        "updated_at": "2026-07-28T13:47:43.004Z"
+      },
+      {
+        "id": "70",
+        "name": "Weekly Support",
+        "description": null,
+        "status": "active",
+        "template_key": "board",
+        "status_set": [
+          {
+            "key": "to_do",
+            "color": "amber",
+            "label": "A fazer",
+            "terminal": false
+          },
+          {
+            "key": "follow_up",
+            "color": "sky",
+            "label": "Follow-up",
+            "terminal": false
+          },
+          {
+            "key": "done",
+            "color": "emerald",
+            "label": "Feito",
+            "terminal": true
+          }
+        ],
+        "hierarchy_depth": 1,
+        "capabilities": {
+          "process": false,
+          "subitems": false,
+          "approvals": false,
+          "time_tracking": false,
+          "calendar_anchor": true
+        },
+        "approval_workflow_config": null,
+        "process_config": null,
+        "open_submissions": null,
+        "open_submissions_set_at": null,
+        "owner_user_id": "57",
+        "calendar_event_id": null,
+        "calendar_event_organizer_email": "[REDACTED]",
+        "recurrence_rule": null,
+        "area_options": [],
+        "team_ids": [],
+        "approver_user_ids": [],
+        "created_at": "2026-07-27T17:33:11.358Z",
+        "updated_at": "2026-07-27T17:33:11.358Z"
+      }
+    ]
+  },
+  {
+    "note": "T3 cria item no RELATION",
+    "method": "POST",
+    "path": "/boards/81/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Alvo da relação"
+    },
+    "status": 201,
+    "response": {
+      "id": "7611",
+      "board_id": "81",
+      "group_id": "242",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Alvo da relação",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:21.390Z",
+      "updated_at": "2026-08-11T00:35:21.390Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T3 cria coluna board_relation",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Conexão",
+      "type": "board_relation",
+      "source_board_id": "81"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T5 colunas do RELATION",
+    "method": "GET",
+    "path": "/boards/81/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "448",
+        "board_id": "81",
+        "key": "name",
+        "type": "text",
+        "label": "Nome",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "449",
+        "board_id": "81",
+        "key": "status",
+        "type": "status",
+        "label": "Status",
+        "position": 1,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "450",
+        "board_id": "81",
+        "key": "owner",
+        "type": "people",
+        "label": "Responsável",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "451",
+        "board_id": "81",
+        "key": "target_date",
+        "type": "date",
+        "label": "Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "452",
+        "board_id": "81",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      }
+    ]
+  },
+  {
+    "note": "T5 cria coluna mirror",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Espelho",
+      "type": "mirror",
+      "source_board_id": "81",
+      "source_column_id": "448"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T5 values com mirror",
+    "method": "GET",
+    "path": "/boards/items/7608/values",
+    "request_body": null,
+    "status": 200,
+    "response": []
+  },
+  {
+    "note": "T5 mirror-values (esperado 403 p/ token)",
+    "method": "GET",
+    "path": "/boards/80/mirror-values?column_id=",
+    "request_body": null,
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "TX habilita subitens (hierarchy_depth=2)",
+    "method": "PATCH",
+    "path": "/boards/80",
+    "request_body": {
+      "hierarchy_depth": 2
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "TX cria subitem",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Subitem 1",
+      "parent_item_id": "7608"
+    },
+    "status": 201,
+    "response": {
+      "id": "7612",
+      "board_id": "80",
+      "group_id": null,
+      "linked_user_id": null,
+      "parent_item_id": "7608",
+      "position": 0,
+      "name": "TESTE-FICTICIO Subitem 1",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:22.100Z",
+      "updated_at": "2026-08-11T00:35:22.100Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "TX diretório de usuários (mapeamento people)",
+    "method": "GET",
+    "path": "/users/directory",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "141",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "2",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Supervisora Logística II",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11962099674"
+      },
+      {
+        "id": "110",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de E-commerce",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "5511963735809"
+      },
+      {
+        "id": "142",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "3",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenador de Audiovisual",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "5521979796779"
+      },
+      {
+        "id": "140",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "4",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de Atendimento Jr",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11988218484"
+      },
+      {
+        "id": "8",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Product Designer Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11954463127"
+      },
+      {
+        "id": "11",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista Comercial Jr.",
+        "business_unit": "bfluence",
+        "email": "[REDACTED]",
+        "phone": "11954700649"
+      },
+      {
+        "id": "139",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "123",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Gerente Comercial",
+        "business_unit": "bfluence",
+        "email": "[REDACTED]",
+        "phone": "11997677171"
+      },
+      {
+        "id": "122",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Executiva de Contas",
+        "business_unit": "bfluence",
+        "email": "[REDACTED]",
+        "phone": "11971423696"
+      },
+      {
+        "id": "13",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Head de Product & Dev.",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "17981474070"
+      },
+      {
+        "id": "14",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Head de B2B2C",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11949567765"
+      },
+      {
+        "id": "102",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Especialista Fiscal",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11953353423"
+      },
+      {
+        "id": "16",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "VP de B2C",
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": "15981001505"
+      },
+      {
+        "id": "79",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenadora de Assistência Executiva",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11986842835"
+      },
+      {
+        "id": "18",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente Administrativo",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11962373717"
+      },
+      {
+        "id": "21",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11977510929"
+      },
+      {
+        "id": "22",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Head de Comunicação",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11981694505"
+      },
+      {
+        "id": "23",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Head de bfluence",
+        "business_unit": "bfluence",
+        "email": "[REDACTED]",
+        "phone": "11984848577"
+      },
+      {
+        "id": "25",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Gerente de IT Operations",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11997930727"
+      },
+      {
+        "id": "27",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Supervisora Logística I",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11964997594"
+      },
+      {
+        "id": "114",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de CRM Pl",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "5521994414102"
+      },
+      {
+        "id": "28",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Desenvolvedor Pl",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "17981988306"
+      },
+      {
+        "id": "30",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11912970914"
+      },
+      {
+        "id": "31",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Auxiliar Financeiro",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11959693805"
+      },
+      {
+        "id": "32",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista Portfólio Pleno",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11963961860"
+      },
+      {
+        "id": "104",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Estagiária de Marketing",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "5511982201050"
+      },
+      {
+        "id": "35",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Especialista em Desenvolvimento de Produto",
+        "business_unit": "own_brands",
+        "email": "[REDACTED]",
+        "phone": "11963823488"
+      },
+      {
+        "id": "113",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Estagiária em Business Intelligence",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "5511945455215"
+      },
+      {
+        "id": "34",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de Influencers Jr.",
+        "business_unit": "bfluence",
+        "email": "[REDACTED]",
+        "phone": "11951950204"
+      },
+      {
+        "id": "36",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de RH Jr.",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11948704487"
+      },
+      {
+        "id": "37",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Gerente Jurídico",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11992462378"
+      },
+      {
+        "id": "137",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenador B2B2C",
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "38",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "CEO",
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": "11997132201"
+      },
+      {
+        "id": "41",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de Testes Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "17997471604"
+      },
+      {
+        "id": "44",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenadora de Delivery",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11983223970"
+      },
+      {
+        "id": "144",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "47",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de BI Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11977304729"
+      },
+      {
+        "id": "48",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista Mídias Sociais Sr",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11964924549"
+      },
+      {
+        "id": "109",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de Influencers Pl.",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "5514997833941"
+      },
+      {
+        "id": "49",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Desenvolvedor Jr",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "17997927022"
+      },
+      {
+        "id": "51",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11988047645"
+      },
+      {
+        "id": "52",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenadora Financeira",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "5531975578491"
+      },
+      {
+        "id": "126",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Engenheiro de IA Agentic Jr.",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "5521972402221"
+      },
+      {
+        "id": "53",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenador de CD",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11968501678"
+      },
+      {
+        "id": "54",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenador de Growth",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11999001132"
+      },
+      {
+        "id": "118",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Engenheiro de IA Agentic Pl.",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "21995313560"
+      },
+      {
+        "id": "55",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de IT Operations JR.",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11942697489"
+      },
+      {
+        "id": "56",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Diretor de Product & Dev.",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11987496518"
+      },
+      {
+        "id": "57",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "VP de Support (CFO)",
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": "11971164887"
+      },
+      {
+        "id": "58",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente de Delivery",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11970485354"
+      },
+      {
+        "id": "59",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "VP de Operations (COO)",
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": "11991771817"
+      },
+      {
+        "id": "61",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente Administrativo",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11959657692"
+      },
+      {
+        "id": "62",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11983097586"
+      },
+      {
+        "id": "135",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "67",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Videomaker Pleno",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11974388563"
+      },
+      {
+        "id": "68",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Designer Sr.",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11977494940"
+      },
+      {
+        "id": "69",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Produtora de Audiovisual Pleno",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11933290376"
+      },
+      {
+        "id": "72",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenadora de Campanhas",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11958073913"
+      },
+      {
+        "id": "111",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista bfluence Pl.",
+        "business_unit": "bfluence",
+        "email": "[REDACTED]",
+        "phone": "5511952949354"
+      },
+      {
+        "id": "73",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Diretor de Logística",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "5521997129085"
+      },
+      {
+        "id": "74",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Estagiária de Marketing",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11993767111"
+      },
+      {
+        "id": "75",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de Marca Pessoal & Mídias Sociais",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "5511911487274"
+      },
+      {
+        "id": "76",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Gerente de Marcas Próprias",
+        "business_unit": "own_brands",
+        "email": "[REDACTED]",
+        "phone": "11941576679"
+      },
+      {
+        "id": "78",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Assistente de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11964584355"
+      },
+      {
+        "id": "80",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Tech Lead",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11948868757"
+      },
+      {
+        "id": "143",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "83",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Desenvolvedor Sr",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "98987898368"
+      },
+      {
+        "id": "87",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Auxiliar de produção III",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11987656749"
+      },
+      {
+        "id": "89",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista Administrativo Jr",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11962512373"
+      },
+      {
+        "id": "138",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": null,
+        "business_unit": null,
+        "email": "[REDACTED]",
+        "phone": null
+      },
+      {
+        "id": "91",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenador de Integrações",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "17988151828"
+      },
+      {
+        "id": "92",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Trainee Financeiro",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11953199872"
+      },
+      {
+        "id": "94",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Head of Finance",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11951437019"
+      },
+      {
+        "id": "95",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Executiva de Contas",
+        "business_unit": "bfluence",
+        "email": "[REDACTED]",
+        "phone": "83996893796"
+      },
+      {
+        "id": "97",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de Influencers Pl.",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11995995353"
+      },
+      {
+        "id": "99",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Coordenadora de Atendimento",
+        "business_unit": "shared",
+        "email": "[REDACTED]",
+        "phone": "11964395639"
+      },
+      {
+        "id": "100",
+        "name": "[REDACTED]",
+        "preferred_name": "[REDACTED]",
+        "avatar_url": "[REDACTED]",
+        "job_title": "Analista de Compras Jr",
+        "business_unit": "b2c",
+        "email": "[REDACTED]",
+        "phone": "11988763819"
+      }
+    ]
+  },
+  {
+    "note": "T6 upload PDF fictício (193 bytes)",
+    "method": "POST",
+    "path": "/boards/items/7608/attachments/file",
+    "request_body": "<binário 408B>",
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T6 anexo por link",
+    "method": "POST",
+    "path": "/boards/items/7608/attachments/link",
+    "request_body": {
+      "url": "https://example.com/anexo-ficticio",
+      "filename": "link fictício"
+    },
+    "status": 201,
+    "response": {
+      "id": "88",
+      "item_id": "7608",
+      "kind": "link",
+      "url": "https://example.com/anexo-ficticio",
+      "filename": "link fictício",
+      "mime": null,
+      "size_bytes": null,
+      "uploader_user_id": "37",
+      "created_at": "2026-08-11T00:35:22.473Z"
+    }
+  },
+  {
+    "note": "T6 lista anexos",
+    "method": "GET",
+    "path": "/boards/items/7608/attachments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "88",
+        "item_id": "7608",
+        "kind": "link",
+        "url": "https://example.com/anexo-ficticio",
+        "filename": "link fictício",
+        "mime": null,
+        "size_bytes": null,
+        "uploader_user_id": "37",
+        "created_at": "2026-08-11T00:35:22.473Z"
+      }
+    ]
+  },
+  {
+    "note": "T7 comentário com menção",
+    "method": "POST",
+    "path": "/boards/items/7608/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO com menção",
+      "kind": "reply",
+      "mention_user_ids": [
+        "37"
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": "2061",
+      "body": "TESTE-FICTICIO com menção",
+      "kind": "reply",
+      "mentions": [
+        {
+          "user_id": "37",
+          "display_name": "[REDACTED]"
+        }
+      ],
+      "author_user_id": "37",
+      "author_name": "[REDACTED]",
+      "is_external": false,
+      "created_at": "2026-08-11T00:35:22.706Z"
+    }
+  },
+  {
+    "note": "T7 edita comentário",
+    "method": "PATCH",
+    "path": "/boards/comments/2061",
+    "request_body": {
+      "body": "TESTE-FICTICIO com menção (editado)"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T7 comentário descartável",
+    "method": "POST",
+    "path": "/boards/items/7608/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO para excluir",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2062",
+      "body": "TESTE-FICTICIO para excluir",
+      "kind": "reply",
+      "mentions": [],
+      "author_user_id": "37",
+      "author_name": "[REDACTED]",
+      "is_external": false,
+      "created_at": "2026-08-11T00:35:23.275Z"
+    }
+  },
+  {
+    "note": "T7 exclui comentário",
+    "method": "DELETE",
+    "path": "/boards/comments/2062",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "ok": true
+    }
+  },
+  {
+    "note": "T7 relê comentários",
+    "method": "GET",
+    "path": "/boards/items/7608/comments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "2060",
+        "body": "TESTE-FICTICIO comentário 1",
+        "kind": "reply",
+        "mentions": [],
+        "author_user_id": "37",
+        "author_name": "[REDACTED]",
+        "is_external": false,
+        "created_at": "2026-08-11T00:35:18.705Z"
+      },
+      {
+        "id": "2061",
+        "body": "TESTE-FICTICIO com menção",
+        "kind": "reply",
+        "mentions": [
+          {
+            "user_id": "37",
+            "display_name": "[REDACTED]"
+          }
+        ],
+        "author_user_id": "37",
+        "author_name": "[REDACTED]",
+        "is_external": false,
+        "created_at": "2026-08-11T00:35:22.706Z"
+      }
+    ]
+  },
+  {
+    "note": "T8 cria automação item_created→webhook",
+    "method": "POST",
+    "path": "/boards/80/automations",
+    "request_body": {
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": true,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/5a387069-60c5-45a8-bdc2-61ea5ddb6fc1"
+          }
+        }
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": "23",
+      "board_id": "80",
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": true,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/5a387069-60c5-45a8-bdc2-61ea5ddb6fc1"
+          }
+        }
+      ],
+      "created_by": "37",
+      "created_at": "2026-08-11T00:35:24.300Z",
+      "updated_at": "2026-08-11T00:35:24.300Z"
+    }
+  },
+  {
+    "note": "T8 item para disparo (endpoint 200)",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO dispara webhook OK"
+    },
+    "status": 201,
+    "response": {
+      "id": "7613",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO dispara webhook OK",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:24.413Z",
+      "updated_at": "2026-08-11T00:35:24.413Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T8 entregas com endpoint 200",
+    "count": 2,
+    "deliveries": [
+      {
+        "method": "POST",
+        "headers": {
+          "content-length": [
+            "84"
+          ],
+          "accept-encoding": [
+            "br, gzip, deflate"
+          ],
+          "user-agent": [
+            "node"
+          ],
+          "sec-fetch-mode": [
+            "cors"
+          ],
+          "accept-language": [
+            "*"
+          ],
+          "accept": [
+            "*/*"
+          ],
+          "content-type": [
+            "application/json"
+          ],
+          "host": [
+            "webhook.site"
+          ]
+        },
+        "content": "{\"board_id\":\"80\",\"item_id\":\"7614\",\"item_name\":\"TESTE-FICTICIO dispara webhook ERRO\"}",
+        "created_at": "2026-08-11 00:35:29"
+      },
+      {
+        "method": "POST",
+        "headers": {
+          "content-length": [
+            "82"
+          ],
+          "accept-encoding": [
+            "br, gzip, deflate"
+          ],
+          "user-agent": [
+            "node"
+          ],
+          "sec-fetch-mode": [
+            "cors"
+          ],
+          "accept-language": [
+            "*"
+          ],
+          "accept": [
+            "*/*"
+          ],
+          "content-type": [
+            "application/json"
+          ],
+          "host": [
+            "webhook.site"
+          ]
+        },
+        "content": "{\"board_id\":\"80\",\"item_id\":\"7613\",\"item_name\":\"TESTE-FICTICIO dispara webhook OK\"}",
+        "created_at": "2026-08-11 00:35:24"
+      }
+    ]
+  },
+  {
+    "note": "T8 item para disparo (endpoint 500)",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO dispara webhook ERRO"
+    },
+    "status": 201,
+    "response": {
+      "id": "7615",
+      "board_id": "80",
+      "group_id": "240",
+      "linked_user_id": null,
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO dispara webhook ERRO",
+      "description": null,
+      "status": "to_do",
+      "owner_user_id": "37",
+      "creator_user_id": "37",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:35:35.357Z",
+      "updated_at": "2026-08-11T00:35:35.357Z",
+      "assignee_user_ids": []
+    }
+  },
+  {
+    "note": "T8 entregas na fase 500 (retries em ~3min)",
+    "total_requests_no_endpoint": 23,
+    "timestamps": [
+      "2026-08-11 00:38:21",
+      "2026-08-11 00:38:10",
+      "2026-08-11 00:38:07",
+      "2026-08-11 00:38:04",
+      "2026-08-11 00:38:03",
+      "2026-08-11 00:36:06",
+      "2026-08-11 00:35:58",
+      "2026-08-11 00:35:57",
+      "2026-08-11 00:35:55",
+      "2026-08-11 00:35:53"
+    ]
+  },
+  {
+    "note": "T8 runs da automação",
+    "method": "GET",
+    "path": "/automations/23/runs",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "1835",
+        "automation_id": "23",
+        "item_id": "7639",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:21.969Z"
+      },
+      {
+        "id": "1829",
+        "automation_id": "23",
+        "item_id": "7638",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:10.770Z"
+      },
+      {
+        "id": "1824",
+        "automation_id": "23",
+        "item_id": "7637",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:07.149Z"
+      },
+      {
+        "id": "1819",
+        "automation_id": "23",
+        "item_id": "7635",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:04.543Z"
+      },
+      {
+        "id": "1814",
+        "automation_id": "23",
+        "item_id": "7634",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:03.257Z"
+      },
+      {
+        "id": "1809",
+        "automation_id": "23",
+        "item_id": "7633",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:36:06.554Z"
+      },
+      {
+        "id": "1803",
+        "automation_id": "23",
+        "item_id": "7632",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:36:00.269Z"
+      },
+      {
+        "id": "1799",
+        "automation_id": "23",
+        "item_id": "7631",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:57.969Z"
+      },
+      {
+        "id": "1794",
+        "automation_id": "23",
+        "item_id": "7630",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:55.770Z"
+      },
+      {
+        "id": "1790",
+        "automation_id": "23",
+        "item_id": "7629",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:53.373Z"
+      },
+      {
+        "id": "1786",
+        "automation_id": "23",
+        "item_id": "7627",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:50.489Z"
+      },
+      {
+        "id": "1782",
+        "automation_id": "23",
+        "item_id": "7626",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:48.999Z"
+      },
+      {
+        "id": "1778",
+        "automation_id": "23",
+        "item_id": "7625",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:46.469Z"
+      },
+      {
+        "id": "1775",
+        "automation_id": "23",
+        "item_id": "7624",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:45.435Z"
+      },
+      {
+        "id": "1773",
+        "automation_id": "23",
+        "item_id": "7623",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:44.013Z"
+      },
+      {
+        "id": "1771",
+        "automation_id": "23",
+        "item_id": "7621",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:42.960Z"
+      },
+      {
+        "id": "1769",
+        "automation_id": "23",
+        "item_id": "7619",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:41.438Z"
+      },
+      {
+        "id": "1767",
+        "automation_id": "23",
+        "item_id": "7618",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:40.278Z"
+      },
+      {
+        "id": "1765",
+        "automation_id": "23",
+        "item_id": "7617",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:39.835Z"
+      },
+      {
+        "id": "1763",
+        "automation_id": "23",
+        "item_id": "7616",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:38.722Z"
+      },
+      {
+        "id": "1761",
+        "automation_id": "23",
+        "item_id": "7615",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:37.498Z"
+      },
+      {
+        "id": "1759",
+        "automation_id": "23",
+        "item_id": "7614",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:29.082Z"
+      },
+      {
+        "id": "1757",
+        "automation_id": "23",
+        "item_id": "7613",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:35:24.970Z"
+      }
+    ]
+  },
+  {
+    "note": "T8 desativa automação (limpeza)",
+    "method": "PATCH",
+    "path": "/automations/23",
+    "request_body": {
+      "enabled": false
+    },
+    "status": 200,
+    "response": {
+      "id": "23",
+      "board_id": "80",
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": false,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/5a387069-60c5-45a8-bdc2-61ea5ddb6fc1"
+          }
+        }
+      ],
+      "created_by": "37",
+      "created_at": "2026-08-11T00:35:24.300Z",
+      "updated_at": "2026-08-11T00:38:36.198Z"
+    }
+  }
+]
