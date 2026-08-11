@@ -1,0 +1,2024 @@
+[
+  {
+    "note": "identidade do token",
+    "method": "GET",
+    "path": "/auth/me",
+    "request_body": null,
+    "status": 200,
+    "response": "<omitido: dados de identidade/workspace>"
+  },
+  {
+    "note": "preflight sandbox",
+    "method": "GET",
+    "path": "/boards/80",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "80",
+      "name": "SANDBOX - API SUNDAY - NÃO USAR",
+      "description": null,
+      "status": "active",
+      "template_key": "board",
+      "status_set": [
+        {
+          "key": "to_do",
+          "color": "amber",
+          "label": "A fazer",
+          "terminal": false
+        },
+        {
+          "key": "follow_up",
+          "color": "sky",
+          "label": "Follow-up",
+          "terminal": false
+        },
+        {
+          "key": "done",
+          "color": "emerald",
+          "label": "Feito",
+          "terminal": true
+        }
+      ],
+      "hierarchy_depth": 1,
+      "capabilities": {
+        "process": false,
+        "subitems": false,
+        "approvals": false,
+        "time_tracking": false,
+        "calendar_anchor": true
+      },
+      "approval_workflow_config": null,
+      "process_config": null,
+      "open_submissions": null,
+      "open_submissions_set_at": null,
+      "calendar_event_id": null,
+      "recurrence_rule": null,
+      "area_options": [],
+      "created_at": "2026-08-11T00:12:18.275Z",
+      "updated_at": "2026-08-11T00:12:18.275Z"
+    }
+  },
+  {
+    "note": "preflight workspace",
+    "method": "GET",
+    "path": "/workspaces/22",
+    "request_body": null,
+    "status": 200,
+    "response": "<omitido: dados de identidade/workspace>"
+  },
+  {
+    "note": "usuário para menções/people",
+    "method": "GET",
+    "path": "/auth/me",
+    "request_body": null,
+    "status": 200,
+    "response": "<omitido: dados de identidade/workspace>"
+  },
+  {
+    "note": "T1 grupos antes",
+    "method": "GET",
+    "path": "/boards/80/groups",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "240",
+        "board_id": "80",
+        "name": "Itens",
+        "color": "neutral",
+        "position": 1,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:12:18.323Z",
+        "updated_at": "2026-08-11T00:12:18.323Z"
+      },
+      {
+        "id": "241",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 2,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:10.605Z",
+        "updated_at": "2026-08-11T00:35:10.605Z"
+      },
+      {
+        "id": "243",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 3,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:17.490Z",
+        "updated_at": "2026-08-11T00:35:17.490Z"
+      },
+      {
+        "id": "244",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 4,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:38.234Z",
+        "updated_at": "2026-08-11T00:35:38.234Z"
+      },
+      {
+        "id": "245",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 5,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:39.312Z",
+        "updated_at": "2026-08-11T00:35:39.312Z"
+      },
+      {
+        "id": "246",
+        "board_id": "80",
+        "name": "TESTE-FICTICIO Grupo A",
+        "color": "blue",
+        "position": 6,
+        "is_collapsed_default": false,
+        "created_at": "2026-08-11T00:35:48.488Z",
+        "updated_at": "2026-08-11T00:35:48.488Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 cria grupo",
+    "method": "POST",
+    "path": "/boards/80/groups",
+    "request_body": {
+      "name": "TESTE-FICTICIO Grupo A",
+      "color": "blue"
+    },
+    "status": 201,
+    "response": {
+      "id": "247",
+      "board_id": "80",
+      "name": "TESTE-FICTICIO Grupo A",
+      "color": "blue",
+      "position": 7,
+      "is_collapsed_default": false,
+      "created_at": "2026-08-11T00:38:02.474Z",
+      "updated_at": "2026-08-11T00:38:02.474Z"
+    }
+  },
+  {
+    "note": "T1 altera grupo",
+    "method": "PATCH",
+    "path": "/boards/groups/247",
+    "request_body": {
+      "name": "TESTE-FICTICIO Grupo A (editado)"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T1 cria item",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 1",
+      "group_id": "247"
+    },
+    "status": 201,
+    "response": {
+      "id": "7634",
+      "board_id": "80",
+      "group_id": "247",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1",
+      "description": null,
+      "status": "to_do",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:02.699Z",
+      "updated_at": "2026-08-11T00:38:02.699Z"
+    }
+  },
+  {
+    "note": "T1 lê itens",
+    "method": "GET",
+    "path": "/boards/80/items",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "7604",
+        "board_id": "80",
+        "group_id": "241",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:10.831Z",
+        "updated_at": "2026-08-11T00:35:11.212Z"
+      },
+      {
+        "id": "7605",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:12.529Z",
+        "updated_at": "2026-08-11T00:35:12.529Z"
+      },
+      {
+        "id": "7608",
+        "board_id": "80",
+        "group_id": "243",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:17.693Z",
+        "updated_at": "2026-08-11T00:35:18.131Z"
+      },
+      {
+        "id": "7609",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:17.813Z",
+        "updated_at": "2026-08-11T00:35:17.813Z"
+      },
+      {
+        "id": "7610",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:19.272Z",
+        "updated_at": "2026-08-11T00:35:19.272Z"
+      },
+      {
+        "id": "7613",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:24.413Z",
+        "updated_at": "2026-08-11T00:35:24.413Z"
+      },
+      {
+        "id": "7614",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:28.778Z",
+        "updated_at": "2026-08-11T00:35:28.778Z"
+      },
+      {
+        "id": "7615",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:35.357Z",
+        "updated_at": "2026-08-11T00:35:35.357Z"
+      },
+      {
+        "id": "7616",
+        "board_id": "80",
+        "group_id": "244",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:38.418Z",
+        "updated_at": "2026-08-11T00:35:38.822Z"
+      },
+      {
+        "id": "7617",
+        "board_id": "80",
+        "group_id": "245",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:39.534Z",
+        "updated_at": "2026-08-11T00:35:39.903Z"
+      },
+      {
+        "id": "7618",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:39.942Z",
+        "updated_at": "2026-08-11T00:35:39.942Z"
+      },
+      {
+        "id": "7619",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:41.123Z",
+        "updated_at": "2026-08-11T00:35:41.123Z"
+      },
+      {
+        "id": "7624",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:45.121Z",
+        "updated_at": "2026-08-11T00:35:45.121Z"
+      },
+      {
+        "id": "7625",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:45.913Z",
+        "updated_at": "2026-08-11T00:35:45.913Z"
+      },
+      {
+        "id": "7626",
+        "board_id": "80",
+        "group_id": "246",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1 (editado)",
+        "description": "Descrição fictícia.",
+        "status": "follow_up",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:48.691Z",
+        "updated_at": "2026-08-11T00:35:49.025Z"
+      },
+      {
+        "id": "7627",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 2 (dependência)",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:50.187Z",
+        "updated_at": "2026-08-11T00:35:50.187Z"
+      },
+      {
+        "id": "7630",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook OK",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:55.310Z",
+        "updated_at": "2026-08-11T00:35:55.310Z"
+      },
+      {
+        "id": "7631",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:56.099Z",
+        "updated_at": "2026-08-11T00:35:56.099Z"
+      },
+      {
+        "id": "7632",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:56.881Z",
+        "updated_at": "2026-08-11T00:35:56.881Z"
+      },
+      {
+        "id": "7633",
+        "board_id": "80",
+        "group_id": "240",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO dispara webhook ERRO",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:36:06.250Z",
+        "updated_at": "2026-08-11T00:36:06.250Z"
+      },
+      {
+        "id": "7634",
+        "board_id": "80",
+        "group_id": "247",
+        "parent_item_id": null,
+        "position": 0,
+        "name": "TESTE-FICTICIO Item 1",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:38:02.699Z",
+        "updated_at": "2026-08-11T00:38:02.699Z"
+      },
+      {
+        "id": "7607",
+        "board_id": "80",
+        "group_id": null,
+        "parent_item_id": "7604",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:15.528Z",
+        "updated_at": "2026-08-11T00:35:15.528Z"
+      },
+      {
+        "id": "7612",
+        "board_id": "80",
+        "group_id": null,
+        "parent_item_id": "7608",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:22.100Z",
+        "updated_at": "2026-08-11T00:35:22.100Z"
+      },
+      {
+        "id": "7621",
+        "board_id": "80",
+        "group_id": null,
+        "parent_item_id": "7616",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:42.618Z",
+        "updated_at": "2026-08-11T00:35:42.618Z"
+      },
+      {
+        "id": "7623",
+        "board_id": "80",
+        "group_id": null,
+        "parent_item_id": "7617",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:43.723Z",
+        "updated_at": "2026-08-11T00:35:43.723Z"
+      },
+      {
+        "id": "7629",
+        "board_id": "80",
+        "group_id": null,
+        "parent_item_id": "7626",
+        "position": 0,
+        "name": "TESTE-FICTICIO Subitem 1",
+        "description": null,
+        "status": "to_do",
+        "target_date": null,
+        "area": null,
+        "custom_fields": null,
+        "pushed_forward_count": 0,
+        "last_pushed_at": null,
+        "done_at": null,
+        "done_at_calendar_occurrence_id": null,
+        "approval_state": null,
+        "created_at": "2026-08-11T00:35:53.067Z",
+        "updated_at": "2026-08-11T00:35:53.067Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 altera item",
+    "method": "PATCH",
+    "path": "/boards/items/7634",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia."
+    },
+    "status": 200,
+    "response": {
+      "id": "7634",
+      "board_id": "80",
+      "group_id": "247",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia.",
+      "status": "to_do",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:02.699Z",
+      "updated_at": "2026-08-11T00:38:02.923Z"
+    }
+  },
+  {
+    "note": "T1 altera status de sistema",
+    "method": "PATCH",
+    "path": "/boards/items/7634/status",
+    "request_body": {
+      "status": "follow_up",
+      "cascade": false
+    },
+    "status": 200,
+    "response": {
+      "id": "7634",
+      "board_id": "80",
+      "group_id": "247",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 1 (editado)",
+      "description": "Descrição fictícia.",
+      "status": "follow_up",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:02.699Z",
+      "updated_at": "2026-08-11T00:38:03.039Z"
+    }
+  },
+  {
+    "note": "T1 cria coluna text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Texto",
+      "type": "text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T1 lê colunas",
+    "method": "GET",
+    "path": "/boards/80/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "443",
+        "board_id": "80",
+        "key": "name",
+        "type": "text",
+        "label": "Nome",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "444",
+        "board_id": "80",
+        "key": "status",
+        "type": "status",
+        "label": "Status",
+        "position": 1,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "445",
+        "board_id": "80",
+        "key": "owner",
+        "type": "people",
+        "label": "Responsável",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "446",
+        "board_id": "80",
+        "key": "target_date",
+        "type": "date",
+        "label": "Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      },
+      {
+        "id": "447",
+        "board_id": "80",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:12:18.313Z",
+        "updated_at": "2026-08-11T00:12:18.313Z"
+      }
+    ]
+  },
+  {
+    "note": "T1 grava value",
+    "method": "PATCH",
+    "path": "/boards/items/7634/values/",
+    "request_body": {
+      "value": "valor fictício v1"
+    },
+    "status": 404,
+    "response": {
+      "message": "Cannot PATCH /boards/items/7634/values/",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T1 lê values",
+    "method": "GET",
+    "path": "/boards/items/7634/values",
+    "request_body": null,
+    "status": 200,
+    "response": []
+  },
+  {
+    "note": "T1 altera value",
+    "method": "PATCH",
+    "path": "/boards/items/7634/values/",
+    "request_body": {
+      "value": "valor fictício v2"
+    },
+    "status": 404,
+    "response": {
+      "message": "Cannot PATCH /boards/items/7634/values/",
+      "error": "Not Found",
+      "statusCode": 404
+    }
+  },
+  {
+    "note": "T1 cria comentário",
+    "method": "POST",
+    "path": "/boards/items/7634/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO comentário 1",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2072",
+      "body": "TESTE-FICTICIO comentário 1",
+      "kind": "reply",
+      "mentions": [],
+      "is_external": false,
+      "created_at": "2026-08-11T00:38:03.640Z"
+    }
+  },
+  {
+    "note": "T1 lê comentários",
+    "method": "GET",
+    "path": "/boards/items/7634/comments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "2072",
+        "body": "TESTE-FICTICIO comentário 1",
+        "kind": "reply",
+        "mentions": [],
+        "is_external": false,
+        "created_at": "2026-08-11T00:38:03.640Z"
+      }
+    ]
+  },
+  {
+    "note": "item auxiliar p/ dependency",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Item 2 (dependência)"
+    },
+    "status": 201,
+    "response": {
+      "id": "7635",
+      "board_id": "80",
+      "group_id": "240",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Item 2 (dependência)",
+      "description": null,
+      "status": "to_do",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:04.238Z",
+      "updated_at": "2026-08-11T00:38:04.238Z"
+    }
+  },
+  {
+    "note": "T2 cria coluna text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO text",
+      "type": "text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna long_text",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO long_text",
+      "type": "long_text"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna number",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO number",
+      "type": "number"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna status",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO status",
+      "type": "status",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "Aberto",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "Fechado",
+          "color": "green"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna status_multi",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO status_multi",
+      "type": "status_multi",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "A",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "B",
+          "color": "pink"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna dropdown",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO dropdown",
+      "type": "dropdown",
+      "options": [
+        {
+          "key": "opt_1",
+          "label": "Um",
+          "color": "sky"
+        },
+        {
+          "key": "opt_2",
+          "label": "Dois",
+          "color": "sky"
+        }
+      ]
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna date",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO date",
+      "type": "date"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna checkbox",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO checkbox",
+      "type": "checkbox"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna people",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO people",
+      "type": "people"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna timeline",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO timeline",
+      "type": "timeline"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna rating",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO rating",
+      "type": "rating"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna tags",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO tags",
+      "type": "tags"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna link",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO link",
+      "type": "link"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna file_link",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO file_link",
+      "type": "file_link"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna email",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO email",
+      "type": "email"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna phone",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO phone",
+      "type": "phone"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna dependency",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO dependency",
+      "type": "dependency"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna formula",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO formula",
+      "type": "formula",
+      "expression": "1 + 1"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna time_tracking",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO time_tracking",
+      "type": "time_tracking"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T2 cria coluna creation_log",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO creation_log",
+      "type": "creation_log"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T3 boards do workspace (dedup do RELATION)",
+    "method": "GET",
+    "path": "/workspaces/22",
+    "request_body": null,
+    "status": 200,
+    "response": "<omitido: dados de identidade/workspace>"
+  },
+  {
+    "note": "T3 valida board RELATION existente",
+    "method": "GET",
+    "path": "/boards/81",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "id": "81",
+      "name": "SANDBOX - API SUNDAY - RELATION",
+      "description": "Sandbox de teste de board_relation. Pode apagar.",
+      "status": "active",
+      "template_key": "board",
+      "status_set": [
+        {
+          "key": "to_do",
+          "color": "amber",
+          "label": "A fazer",
+          "terminal": false
+        },
+        {
+          "key": "follow_up",
+          "color": "sky",
+          "label": "Follow-up",
+          "terminal": false
+        },
+        {
+          "key": "done",
+          "color": "emerald",
+          "label": "Feito",
+          "terminal": true
+        }
+      ],
+      "hierarchy_depth": 1,
+      "capabilities": {
+        "process": false,
+        "subitems": false,
+        "approvals": false,
+        "time_tracking": false,
+        "calendar_anchor": true
+      },
+      "approval_workflow_config": null,
+      "process_config": null,
+      "open_submissions": null,
+      "open_submissions_set_at": null,
+      "calendar_event_id": null,
+      "recurrence_rule": null,
+      "area_options": [],
+      "created_at": "2026-08-11T00:35:14.609Z",
+      "updated_at": "2026-08-11T00:35:14.609Z"
+    }
+  },
+  {
+    "note": "T3 cria item no RELATION",
+    "method": "POST",
+    "path": "/boards/81/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Alvo da relação"
+    },
+    "status": 201,
+    "response": {
+      "id": "7636",
+      "board_id": "81",
+      "group_id": "242",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO Alvo da relação",
+      "description": null,
+      "status": "to_do",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:06.236Z",
+      "updated_at": "2026-08-11T00:38:06.236Z"
+    }
+  },
+  {
+    "note": "T3 cria coluna board_relation",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Conexão",
+      "type": "board_relation",
+      "source_board_id": "81"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T5 colunas do RELATION",
+    "method": "GET",
+    "path": "/boards/81/columns",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "448",
+        "board_id": "81",
+        "key": "name",
+        "type": "text",
+        "label": "Nome",
+        "position": 0,
+        "is_system": true,
+        "settings": {},
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "449",
+        "board_id": "81",
+        "key": "status",
+        "type": "status",
+        "label": "Status",
+        "position": 1,
+        "is_system": true,
+        "settings": {
+          "use_board_status_set": true
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "450",
+        "board_id": "81",
+        "key": "owner",
+        "type": "people",
+        "label": "Responsável",
+        "position": 2,
+        "is_system": true,
+        "settings": {
+          "multi": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "451",
+        "board_id": "81",
+        "key": "target_date",
+        "type": "date",
+        "label": "Data",
+        "position": 3,
+        "is_system": true,
+        "settings": {
+          "include_time": false
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      },
+      {
+        "id": "452",
+        "board_id": "81",
+        "key": "area",
+        "type": "dropdown",
+        "label": "Área",
+        "position": 4,
+        "is_system": true,
+        "settings": {
+          "multi": false,
+          "options": []
+        },
+        "default_visible": true,
+        "on_form": false,
+        "form_required": false,
+        "form_show_if": null,
+        "created_at": "2026-08-11T00:35:14.662Z",
+        "updated_at": "2026-08-11T00:35:14.662Z"
+      }
+    ]
+  },
+  {
+    "note": "T5 cria coluna mirror",
+    "method": "POST",
+    "path": "/boards/80/columns",
+    "request_body": {
+      "label": "TESTE-FICTICIO Espelho",
+      "type": "mirror",
+      "source_board_id": "81",
+      "source_column_id": "448"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T5 values com mirror",
+    "method": "GET",
+    "path": "/boards/items/7634/values",
+    "request_body": null,
+    "status": 200,
+    "response": []
+  },
+  {
+    "note": "T5 mirror-values (esperado 403 p/ token)",
+    "method": "GET",
+    "path": "/boards/80/mirror-values?column_id=",
+    "request_body": null,
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "TX habilita subitens (hierarchy_depth=2)",
+    "method": "PATCH",
+    "path": "/boards/80",
+    "request_body": {
+      "hierarchy_depth": 2
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "TX cria subitem",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO Subitem 1",
+      "parent_item_id": "7634"
+    },
+    "status": 201,
+    "response": {
+      "id": "7637",
+      "board_id": "80",
+      "group_id": null,
+      "parent_item_id": "7634",
+      "position": 0,
+      "name": "TESTE-FICTICIO Subitem 1",
+      "description": null,
+      "status": "to_do",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:06.858Z",
+      "updated_at": "2026-08-11T00:38:06.858Z"
+    }
+  },
+  {
+    "note": "TX diretório de usuários (mapeamento people)",
+    "method": "GET",
+    "path": "/users/directory",
+    "request_body": null,
+    "status": 200,
+    "response": "<omitido: dados de identidade/workspace>"
+  },
+  {
+    "note": "T6 upload PDF fictício (193 bytes)",
+    "method": "POST",
+    "path": "/boards/items/7634/attachments/file",
+    "request_body": "<binário 408B>",
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T6 anexo por link",
+    "method": "POST",
+    "path": "/boards/items/7634/attachments/link",
+    "request_body": {
+      "url": "https://example.com/anexo-ficticio",
+      "filename": "link fictício"
+    },
+    "status": 201,
+    "response": {
+      "id": "92",
+      "item_id": "7634",
+      "kind": "link",
+      "url": "https://example.com/anexo-ficticio",
+      "filename": "link fictício",
+      "mime": null,
+      "size_bytes": null,
+      "created_at": "2026-08-11T00:38:07.130Z"
+    }
+  },
+  {
+    "note": "T6 lista anexos",
+    "method": "GET",
+    "path": "/boards/items/7634/attachments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "92",
+        "item_id": "7634",
+        "kind": "link",
+        "url": "https://example.com/anexo-ficticio",
+        "filename": "link fictício",
+        "mime": null,
+        "size_bytes": null,
+        "created_at": "2026-08-11T00:38:07.130Z"
+      }
+    ]
+  },
+  {
+    "note": "T7 comentário com menção",
+    "method": "POST",
+    "path": "/boards/items/7634/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO com menção",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2073",
+      "body": "TESTE-FICTICIO com menção",
+      "kind": "reply",
+      "mentions": [
+        {
+          "user_id": "37",
+          "display_name": "Ivo Alexandrino da Conceição"
+        }
+      ],
+      "is_external": false,
+      "created_at": "2026-08-11T00:38:07.346Z"
+    }
+  },
+  {
+    "note": "T7 edita comentário",
+    "method": "PATCH",
+    "path": "/boards/comments/2073",
+    "request_body": {
+      "body": "TESTE-FICTICIO com menção (editado)"
+    },
+    "status": 403,
+    "response": {
+      "message": "Este token de acesso não pode usar esta rota. Excluir ou alterar configurações exige login.",
+      "error": "Forbidden",
+      "statusCode": 403
+    }
+  },
+  {
+    "note": "T7 comentário descartável",
+    "method": "POST",
+    "path": "/boards/items/7634/comments",
+    "request_body": {
+      "body": "TESTE-FICTICIO para excluir",
+      "kind": "reply"
+    },
+    "status": 201,
+    "response": {
+      "id": "2074",
+      "body": "TESTE-FICTICIO para excluir",
+      "kind": "reply",
+      "mentions": [],
+      "is_external": false,
+      "created_at": "2026-08-11T00:38:07.870Z"
+    }
+  },
+  {
+    "note": "T7 exclui comentário",
+    "method": "DELETE",
+    "path": "/boards/comments/2074",
+    "request_body": null,
+    "status": 200,
+    "response": {
+      "ok": true
+    }
+  },
+  {
+    "note": "T7 relê comentários",
+    "method": "GET",
+    "path": "/boards/items/7634/comments",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "2072",
+        "body": "TESTE-FICTICIO comentário 1",
+        "kind": "reply",
+        "mentions": [],
+        "is_external": false,
+        "created_at": "2026-08-11T00:38:03.640Z"
+      },
+      {
+        "id": "2073",
+        "body": "TESTE-FICTICIO com menção",
+        "kind": "reply",
+        "mentions": [
+          {
+            "user_id": "37",
+            "display_name": "Ivo Alexandrino da Conceição"
+          }
+        ],
+        "is_external": false,
+        "created_at": "2026-08-11T00:38:07.346Z"
+      }
+    ]
+  },
+  {
+    "note": "T8 cria automação item_created→webhook",
+    "method": "POST",
+    "path": "/boards/80/automations",
+    "request_body": {
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": true,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/[REDACTED]"
+          }
+        }
+      ]
+    },
+    "status": 201,
+    "response": {
+      "id": "27",
+      "board_id": "80",
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": true,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/[REDACTED]"
+          }
+        }
+      ],
+      "created_at": "2026-08-11T00:38:08.843Z",
+      "updated_at": "2026-08-11T00:38:08.843Z"
+    }
+  },
+  {
+    "note": "T8 item para disparo (endpoint 200)",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO dispara webhook OK"
+    },
+    "status": 201,
+    "response": {
+      "id": "7638",
+      "board_id": "80",
+      "group_id": "240",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO dispara webhook OK",
+      "description": null,
+      "status": "to_do",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:08.940Z",
+      "updated_at": "2026-08-11T00:38:08.940Z"
+    }
+  },
+  {
+    "note": "T8 entregas com endpoint 200",
+    "count": 1,
+    "deliveries": [
+      {
+        "method": "POST",
+        "headers": {
+          "content-length": [
+            "82"
+          ],
+          "accept-encoding": [
+            "br, gzip, deflate"
+          ],
+          "user-agent": [
+            "node"
+          ],
+          "accept": [
+            "*/*"
+          ],
+          "content-type": [
+            "application/json"
+          ]
+        },
+        "content": "{\"board_id\":\"80\",\"item_id\":\"7638\",\"item_name\":\"TESTE-FICTICIO dispara webhook OK\"}",
+        "created_at": "2026-08-11 00:38:12"
+      }
+    ]
+  },
+  {
+    "note": "T8 item para disparo (endpoint 500)",
+    "method": "POST",
+    "path": "/boards/80/items",
+    "request_body": {
+      "name": "TESTE-FICTICIO dispara webhook ERRO"
+    },
+    "status": 201,
+    "response": {
+      "id": "7639",
+      "board_id": "80",
+      "group_id": "240",
+      "parent_item_id": null,
+      "position": 0,
+      "name": "TESTE-FICTICIO dispara webhook ERRO",
+      "description": null,
+      "status": "to_do",
+      "target_date": null,
+      "area": null,
+      "custom_fields": null,
+      "pushed_forward_count": 0,
+      "last_pushed_at": null,
+      "done_at": null,
+      "done_at_calendar_occurrence_id": null,
+      "approval_state": null,
+      "created_at": "2026-08-11T00:38:20.045Z",
+      "updated_at": "2026-08-11T00:38:20.045Z"
+    }
+  },
+  {
+    "note": "T8 entregas na fase 500 (retries em ~3min)",
+    "total_requests_no_endpoint": 7,
+    "timestamps": [
+      "2026-08-11 00:39:06",
+      "2026-08-11 00:38:54",
+      "2026-08-11 00:38:43",
+      "2026-08-11 00:38:40",
+      "2026-08-11 00:38:39",
+      "2026-08-11 00:38:24",
+      "2026-08-11 00:38:12"
+    ]
+  },
+  {
+    "note": "T8 runs da automação",
+    "method": "GET",
+    "path": "/automations/27/runs",
+    "request_body": null,
+    "status": 200,
+    "response": [
+      {
+        "id": "1858",
+        "automation_id": "27",
+        "item_id": "7645",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:39:06.916Z"
+      },
+      {
+        "id": "1855",
+        "automation_id": "27",
+        "item_id": "7644",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:55.070Z"
+      },
+      {
+        "id": "1851",
+        "automation_id": "27",
+        "item_id": "7643",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:43.815Z"
+      },
+      {
+        "id": "1847",
+        "automation_id": "27",
+        "item_id": "7641",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:41.069Z"
+      },
+      {
+        "id": "1843",
+        "automation_id": "27",
+        "item_id": "7640",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:39.829Z"
+      },
+      {
+        "id": "1839",
+        "automation_id": "27",
+        "item_id": "7639",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:24.470Z"
+      },
+      {
+        "id": "1833",
+        "automation_id": "27",
+        "item_id": "7638",
+        "status": "success",
+        "detail": "webhook",
+        "created_at": "2026-08-11T00:38:12.329Z"
+      }
+    ]
+  },
+  {
+    "note": "T8 desativa automação (limpeza)",
+    "method": "PATCH",
+    "path": "/automations/27",
+    "request_body": {
+      "enabled": false
+    },
+    "status": 200,
+    "response": {
+      "id": "27",
+      "board_id": "80",
+      "title": "TESTE-FICTICIO webhook",
+      "enabled": false,
+      "trigger": {
+        "type": "item_created",
+        "config": {}
+      },
+      "conditions": [],
+      "actions": [
+        {
+          "type": "webhook",
+          "config": {
+            "url": "https://webhook.site/[REDACTED]"
+          }
+        }
+      ],
+      "created_at": "2026-08-11T00:38:08.843Z",
+      "updated_at": "2026-08-11T00:41:20.804Z"
+    }
+  }
+]
