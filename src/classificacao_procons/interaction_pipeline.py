@@ -64,6 +64,7 @@ class ConsumerInteractionPipelineOptions:
     monday_board_name: str = DEFAULT_BOARD_NAME
     fetch_portal: bool = True
     download_dir: Path = Path("downloads")
+    message_ids: tuple[str, ...] | None = None
 
 
 def _load_state(state_path: Path) -> tuple[set[str], list[PendingConsumerInteraction]]:
@@ -458,9 +459,19 @@ def process_consumer_interactions(
     )
 
     try:
-        notifications = fetcher.list_unread_consumer_interactions(
-            max_results=options.max_results,
-        )
+        if options.message_ids:
+            notifications = []
+            for message_id in options.message_ids:
+                notification = fetcher.fetch_notification(message_id)
+                if notification is None:
+                    continue
+                if notification.notification_type != "interacao_consumidor":
+                    continue
+                notifications.append(notification)
+        else:
+            notifications = fetcher.list_unread_consumer_interactions(
+                max_results=options.max_results,
+            )
     except GmailClientError as exc:
         raise ConsumerInteractionPipelineError(str(exc)) from exc
 
