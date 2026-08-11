@@ -713,11 +713,83 @@ def teste8_webhook() -> None:
         )
 
 
+ROUNDTRIP_TYPES = ("text", "long_text", "email", "phone", "link")
+
+
+def roundtrip_minimal() -> int:
+    """Fluxo mínimo: PATCH value em coluna custom JÁ EXISTENTE → GET → valor idêntico?
+
+    A criação de coluna via token é 403 (F0.14); a coluna deve existir previamente
+    (criada pelo app no board 80). Falha com instrução clara se não houver nenhuma.
+    """
+    preflight()
+    _, cols = api("GET", f"/boards/{SANDBOX_BOARD_ID}/columns", note="RT colunas existentes")
+    col_id, col_label = "", ""
+    if isinstance(cols, list):
+        for col_type in ROUNDTRIP_TYPES:
+            for col in cols:
+                if (
+                    isinstance(col, dict)
+                    and col.get("type") == col_type
+                    and not col.get("is_system")
+                ):
+                    col_id, col_label = str(col["id"]), str(col.get("label", ""))
+                    break
+            if col_id:
+                break
+    if not col_id:
+        print(
+            "\nROUNDTRIP INCONCLUSIVO: o board 80 não tem nenhuma coluna custom de tipo "
+            f"{'/'.join(ROUNDTRIP_TYPES)} (criação via token é 403). Crie uma coluna "
+            "'Texto curto' pelo app no board 80 e rode novamente.",
+        )
+        return 3
+    _, payload = api(
+        "POST",
+        f"/boards/{SANDBOX_BOARD_ID}/items",
+        {"name": f"{FICT} roundtrip"},
+        note="RT item de teste",
+    )
+    item_id = _own("items", payload) or ""
+    expected = f"roundtrip-{uuid.uuid4().hex[:12]}"
+    api(
+        "PATCH",
+        f"/boards/items/{item_id}/values/{col_id}",
+        {"value": expected},
+        note="RT PATCH value",
+    )
+    _, values = api("GET", f"/boards/items/{item_id}/values", note="RT GET values")
+    got = None
+    if isinstance(values, list):
+        for entry in values:
+            if isinstance(entry, dict) and str(entry.get("column_id")) == col_id:
+                got = entry.get("value")
+    ok = got == expected
+    print(
+        f"\nROUNDTRIP {'PASS' if ok else 'FAIL'}: "
+        f"gravado={expected!r} lido={got!r} "
+        f"(board {SANDBOX_BOARD_ID}, item {item_id}, coluna {col_id} {col_label!r} pré-existente)",
+    )
+    return 0 if ok else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="/tmp/sunday-write-report.json")
     parser.add_argument("--skip-webhook", action="store_true")
+    parser.add_argument(
+        "--minimal",
+        action="store_true",
+        help="só o round-trip PATCH value → GET (PASS/FAIL)",
+    )
     args = parser.parse_args()
+
+    if args.minimal:
+        result = roundtrip_minimal()
+        with open(args.out, "w", encoding="utf-8") as handle:
+            json.dump(REPORT, handle, ensure_ascii=False, indent=2, default=str)
+        print(f"Relatório: {args.out}")
+        return result
 
     preflight()
 
