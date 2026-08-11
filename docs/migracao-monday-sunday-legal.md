@@ -544,36 +544,41 @@ paginação aparente e headers de rate limit. Resultado detalhado em F0.13.
 **Tokens de API (Settings → API Access):**
 
 - Endpoints: `GET /auth/me/api-tokens` (lista), `POST /auth/me/api-tokens` (cria),
-  `DELETE /auth/me/api-tokens/{id}` (revoga).
+  `DELETE /auth/me/api-tokens/{id}` (revoga). *Nota: com autenticação por token, a rota de
+  listagem responde 403 — gestão de tokens é exclusiva de sessão (F0.13).*
 - Payload de criação: **somente `{name}`** (opcional). A resposta traz `{secret, token}`
   e o secret aparece uma única vez. **Não existem** campos de scopes, permissions, role,
-  board_ids ou workspace_ids — nem na UI nem no service do SPA.
+  board_ids ou workspace_ids na criação — nem na UI nem no service do SPA. O usuário não
+  tem nenhum controle sobre as permissões do próprio token.
 - Texto oficial da página: "Conecte o Claude, o Cursor ou qualquer IDE diretamente à sua
   conta do Sunday. Gere um token pessoal e entregue ao assistente — ele passa a criar
   tarefas, comentar e **agir como você**, via API."
-- Conclusão: por design, o token **herda as permissões do usuário** (impersonação plena);
-  não há como "gerar token com mais permissões" — a permissão é do usuário, não do token.
+- **Porém, o backend aplica restrições próprias aos tokens** (comprovado na leitura
+  autenticada, F0.13), em duas camadas distintas:
+  1. **Escopos de token server-side**: `GET /boards/search` → 403 `"Este token não tem o
+     escopo \"search\" necessário para esta ação."`. Ou seja, tokens têm um conjunto de
+     escopos atribuído pelo backend na emissão; o catálogo não é observável por leitura e
+     não há UI para alterá-lo.
+  2. **Rotas exclusivas de sessão (JWT)**: `GET /boards/{id}/views`, `/links`,
+     `/mirror-values`, `GET /boards/me/items` e `GET /auth/me/api-tokens` → 403 `"Este
+     token de acesso não pode usar esta rota. Excluir ou alterar configurações exige
+     login."` — nenhum token de API passa nessas rotas, independente de escopo.
+- Conclusão: o token herda a **identidade** do usuário (age como ele nos boards que ele
+  acessa), mas com um **subconjunto** de rotas/escopos definido pelo backend.
 
-**Sobre o 403 em board/grupos/colunas/itens/automações com token de `contributor`:**
+**Causas confirmadas de 403 com token (nenhuma é falta de acesso do usuário):**
 
-- A regra documentada de board para `contributor` (dono, membro do board, ou board ligado
-  a workspace do qual é membro) é a mesma que faz o app funcionar — o SPA chama exatamente
-  os mesmos endpoints (`GET /boards/{id}`, `/groups`, `/columns`, `/items`,
-  `/automations`) com JWT de sessão. Logo, se o mesmo usuário recebe 200 via app e 403 via
-  token, a divergência está no **guard de autenticação por token no backend** (por
-  exemplo, principal montado sem as memberships de workspace) — não é falta de acesso do
-  usuário nem scope de token, que não existe.
-- Alternativa a descartar antes de concluir bug: 403 usado como resposta genérica para
-  **board id inexistente/não visível** (anti-enumeração). Se o teste anterior consultou um
-  id incorreto (ex.: id do Monday, ou board de outro workspace), o 403 seria esperado.
-- Bateria de discriminação (somente GET, com o token, em VM nova):
-  1. `GET /auth/me` → confirmar `id`/`access_level` da conta esperada;
-  2. `GET /workspaces/mine` → workspace 22 presente?
-  3. `GET /workspaces/22/boards` → capturar os ids reais dos boards;
-  4. `GET /boards/{id}` com um id **retornado no passo 3** → se 403 aqui, é o guard do
-     token (reportar ao time do Sunday); se 200, o 403 anterior era id errado;
-  5. repetir para `/groups`, `/columns`, `/items`, `/automations` e registrar o status de
-     cada um (o guard pode diferir por rota).
+1. **ID errado**: `GET /workspaces/22` retorna em `boards[]` o `id` do **vínculo**
+   workspace-board e o `board_id` real. Usar o id do vínculo em `/boards/{id}` produz 403
+   (anti-enumeração). Com o `board_id` correto, board, grupos, colunas, itens, values e
+   automações respondem **200** para o token `contributor` (F0.13).
+2. **Escopo de token faltante**: só observado em `/boards/search` (escopo `search`).
+3. **Rota exclusiva de sessão**: views, links, mirror-values, me/items e gestão de
+   tokens — bloqueadas para qualquer token de API.
+
+Impacto prático: a leitura de conexões entre boards (`/boards/{id}/links` e
+`/mirror-values`) está bloqueada para tokens — destravar com o time do Sunday antes da
+Fase 1 (é pré-requisito para migrar `board_relation`).
 
 ### F0.12 Segurança
 
