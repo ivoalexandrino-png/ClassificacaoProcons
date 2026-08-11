@@ -590,7 +590,7 @@ Impacto prático: a leitura de conexões entre boards (`/boards/{id}/links` e
 `/mirror-values`) está bloqueada para tokens — destravar com o time do Sunday antes da
 Fase 1 (é pré-requisito para migrar `board_relation`).
 
-### F0.12 Segurança
+### F0.12 Segurança (Fase 0)
 
 - Nenhum secret foi impresso, copiado ou registrado em log. No Sunday, o board
   `Legal - Acessos` está vazio; foram consultados apenas seu esquema e a lista vazia de
@@ -1083,3 +1083,115 @@ produção); confirmar people com um segundo usuário; criar 1 coluna customizad
 tipo restante (`text`, `long_text`, `email`, `status`/`dropdown` com options) para
 fixar os payloads no adapter. Nada de `sunday/client.py`, workflows ou migração de
 dados reais foi implementado nesta rodada.
+
+---
+
+## Fase 1 — Sunday Client V1 (2026-08-11)
+
+> Implementação do cliente genérico autorizada após o GO da Fase 0. Escopo desta fase:
+> **somente** o client + testes automatizados. Nenhum workflow foi alterado, nenhuma
+> integração Monday foi tocada, nenhum dado foi migrado, nenhum board real foi alterado.
+
+### Arquitetura
+
+Pacote `src/classificacao_procons/sunday/`:
+
+- `http.py` — camada HTTP centralizada: `SundayConfig` (lê `SUNDAY_API_URL` +
+  `SUNDAY_API_TOKEN`; token com `repr=False`), `SundayHttp` (base URL, header
+  `X-Sunday-Token`, timeout, JSON, ETag/`If-None-Match`/304, mapeamento de erros) e
+  transporte **injetável** (`urllib` por padrão; fake nos testes). Retry: apenas `GET`
+  em 5xx (máx. 3 tentativas, backoff exponencial); POST/PATCH/DELETE **nunca** são
+  repetidos em silêncio (risco de duplicidade).
+- `errors.py` — exceções: `SundayConfigError`, `SundayAuthError` (401),
+  `SundayForbiddenError` (403), `SundayNotFoundError` (404), `SundayValidationError`
+  (400/payload), `SundayConflictError` (409/422), `SundayHTTPError` (genérico/rede),
+  `SundayRelationIntegrityError` (relação com board errado) e `SundayVerifyError`
+  (2xx sem persistir). Mensagens carregam método, caminho, status e a mensagem de
+  negócio da API — nunca token/headers.
+- `models.py` — dataclasses congeladas com `raw` preservando campos não modelados:
+  `Board` (+`status_set`), `Group`, `Column` (+`settings.source_board_id`), `Item`
+  (campos de sistema + `updated_at`), `ItemValue` (tipo JSON preservado), `Comment`,
+  `Attachment`, `SundayUser`, `Workspace`/`WorkspaceBoardRef` (separa `link_id` de
+  `board_id` — F0.13), `ItemsResult`/`ValuesResult` (ETag/304) e helpers
+  `parse_sunday_date`/`format_target_date`/`normalize_relation_value`. IDs sempre
+  strings.
+- `client.py` — `SundayClient`, genérico e sem hardcode de boards reais.
+- `tracking.py` — `MigrationRecord`/`MigrationStatus` para a futura camada de
+  migração (fora do client de propósito).
+
+### Métodos e endpoints encapsulados (todos empíricos, F0.13–F0.15)
+
+| Método | Endpoint |
+|---|---|
+| `get_me()` | `GET /auth/me` |
+| `list_users_directory()` | `GET /users/directory` |
+| `list_boards()` / `get_board(id)` | `GET /boards` / `GET /boards/{id}` (cache) |
+| `get_workspace(id)` | `GET /workspaces/{id}` |
+| `list_groups` / `create_group` | `GET`/`POST /boards/{id}/groups` |
+| `list_columns` / `get_column` | `GET /boards/{id}/columns` (cache por board) |
+| `list_items(etag=…)` | `GET /boards/{id}/items` (+`If-None-Match` → 304) |
+| `get_item` | filtro sobre a listagem (GET individual não existe — 404) |
+| `create_item` | `POST /boards/{id}/items` (`group_id`/`parent_item_id`/…) |
+| `update_item(verify=…)` | `PATCH /boards/items/{id}` (name/description/target_date/owner_user_id/area) |
+| `delete_item` | `DELETE /boards/items/{id}` |
+| `set_status(verify=…)` | `PATCH /boards/items/{id}/status` (rota dedicada) |
+| `list_values(etag=…)` / `get_value` | `GET /boards/items/{id}/values` |
+| `set_custom_value(verify=…)` | `PATCH /boards/items/{id}/values/{col}` |
+| `set_relation(verify=…)` / `get_relation` | idem values (board_relation) |
+| `list_comments` / `add_comment` / `delete_comment` | `GET`/`POST /boards/items/{id}/comments`, `DELETE /boards/comments/{id}` |
+| `list_attachments` / `add_link_attachment` | `GET /boards/items/{id}/attachments`, `POST …/attachments/link` |
+
+### Decisões de segurança e comportamento
+
+- **Token**: só existe no header montado no envio; fora de `repr`, exceções, logs e
+  relatórios (testado).
+- **Status**: `update_item` **não tem** parâmetro `status` (o PATCH genérico devolve
+  200 e ignora — F0.15). `set_status()` valida a key contra o `status_set` do board e
+  aceita `verify=True` (write→read→compare).
+- **Campos de sistema** (`name`, `status`, `target_date`, `owner`, `area`): nunca via
+  rota de values — o client rejeita antes (a API devolveria 400 de negócio). `area` só
+  é enviada quando explicitamente informada (coluna estrutural; desconhecê-la não
+  impede criar/editar item).
+- **Datas**: escrita `YYYY-MM-DD`; a API normaliza para meio-dia UTC
+  (`…T12:00:00.000Z`). `parse_sunday_date` extrai o dia do negócio sem conversão de
+  fuso (que poderia mudar o dia); `verify` de `target_date` compara só a parte de
+  data. Coberto por testes.
+- **People**: `owner_user_id` implementado conforme contrato aceito; troca efetiva
+  entre usuários distintos segue **não totalmente validada** (1 usuário na F0.15) —
+  nenhuma lógica de domínio deve depender disso na V1.
+- **board_relation e integridade**: a API **não valida** o board do item relacionado
+  (aceitou item do board 81 em coluna configurada para o 79). `set_relation()` exige
+  `expected_target_board_id`, confere `type == board_relation` e
+  `settings.source_board_id` **antes** de gravar; divergência → 
+  `SundayRelationIntegrityError` sem nenhuma chamada de escrita. Suporta 1 alvo,
+  lista e remoção (`null`); leitura reconstrói a relação só por values (sem `/links`).
+- **Verify-after-write**: opt-in (`verify=True`) em `update_item`, `set_status`,
+  `set_custom_value` e `set_relation` — HTTP 200 isolado não é prova de persistência.
+- **Schema manual (classe C)**: o client **não** cria/altera/exclui colunas, mirror,
+  formula, time_tracking nem views. `/boards/search` não é usado (dedup ficará em
+  cache/índice local da camada superior; `updated_at` preservado nos modelos).
+- **Anexos**: só por link na V1 (upload binário é 403 para tokens); arquitetura:
+  Drive/GCS → URL → `attachments/link`.
+- **Comentários**: criar/listar/excluir; edição não exposta (403). O client recebe o
+  `body` pronto — transformações de migração (ex.: `[Monday · autor · data]`) ficam na
+  camada de migração.
+
+### Testes
+
+- `tests/test_sunday_client.py` — 49 testes unitários com transporte fake (nenhuma
+  chamada real): header/sanitização do token, IDs como strings, CRUD, status dedicado
+  (+ proibição no PATCH genérico + verify falhando quando 200 não persiste), custom
+  values (string/número/booleano/null/lista, preservação de tipo, releitura), relação
+  1:1/1:N/remoção/verify/board errado/coluna sem config, comentários, anexo por link,
+  ETag/If-None-Match/304 (items e values), erros 400/401/403/404, normalização de
+  datas e vínculo workspace-board.
+- `tests/test_sunday_integration.py` — smoke **opt-in** (`SUNDAY_INTEGRATION_SANDBOX=1`
+  + secrets), somente leitura nos sandboxes 80/81; nunca roda no pytest padrão.
+
+### Limitações conhecidas (ficam para V2/fases seguintes)
+
+Upload binário; automação `webhook`; mirror por lookup; views; aprovações; troca de
+owner com 2º usuário; payloads de colunas customizadas `long_text`/`email`/`phone`/
+`dropdown`-com-options (inferidos, não exercitados — fixar quando as colunas forem
+criadas nos boards); seletor de backend `monday|sunday|dual` e o cron de Contratos
+(usarão as primitivas de ETag/cache do client).
