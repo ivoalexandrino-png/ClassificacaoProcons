@@ -46,6 +46,37 @@ SENSITIVE_FIELD_NAMES = {
     "x-auth-token",
     "x-sunday-token",
 }
+PRIVATE_FIELD_NAMES = {
+    "approver_user_ids",
+    "assignee_user_ids",
+    "author_name",
+    "author_user_id",
+    "calendar_event_organizer_email",
+    "created_by",
+    "creator_user_id",
+    "email",
+    "linked_user_id",
+    "manager_user_id",
+    "members",
+    "mention_user_ids",
+    "owner_user_id",
+    "team_ids",
+    "uploader_user_id",
+}
+PRIVATE_RESPONSE_NOTES = {
+    "identidade do token",
+    "preflight workspace",
+    "T3 boards do workspace (dedup do RELATION)",
+    "TX diretório de usuários (mapeamento people)",
+    "usuário para menções/people",
+}
+SAFE_WEBHOOK_HEADERS = {
+    "accept",
+    "accept-encoding",
+    "content-length",
+    "content-type",
+    "user-agent",
+}
 
 REPORT: list[dict] = []
 OWNED: dict[str, set[str]] = {
@@ -80,24 +111,43 @@ def _sanitize(value: object) -> object:
     token = os.environ.get("SUNDAY_API_TOKEN", "")
     if isinstance(value, dict):
         return {
-            str(key): (
-                "[REDACTED]"
-                if str(key).lower() in SENSITIVE_FIELD_NAMES
-                else _sanitize(item)
-            )
+            str(key): _sanitize(item)
             for key, item in value.items()
+            if str(key).lower() not in SENSITIVE_FIELD_NAMES | PRIVATE_FIELD_NAMES
         }
     if isinstance(value, list):
         return [_sanitize(item) for item in value]
     if isinstance(value, tuple):
         return [_sanitize(item) for item in value]
+    if isinstance(value, str) and value.startswith(f"{WEBHOOK_SITE}/"):
+        return f"{WEBHOOK_SITE}/[REDACTED]"
     if isinstance(value, str) and token:
         return value.replace(token, "[REDACTED]")
     return value
 
 
+def _sanitize_entry(entry: dict) -> dict:
+    safe_entry = dict(entry)
+    if safe_entry.get("note") in PRIVATE_RESPONSE_NOTES:
+        safe_entry["response"] = "<omitido: dados de identidade/workspace>"
+    if safe_entry.get("note") == "T8 entregas com endpoint 200":
+        safe_deliveries = []
+        for delivery in safe_entry.get("deliveries", []):
+            safe_delivery = dict(delivery)
+            headers = safe_delivery.get("headers")
+            if isinstance(headers, dict):
+                safe_delivery["headers"] = {
+                    key: value
+                    for key, value in headers.items()
+                    if str(key).lower() in SAFE_WEBHOOK_HEADERS
+                }
+            safe_deliveries.append(safe_delivery)
+        safe_entry["deliveries"] = safe_deliveries
+    return _sanitize(safe_entry)
+
+
 def _record(entry: dict) -> None:
-    REPORT.append(_sanitize(entry))
+    REPORT.append(_sanitize_entry(entry))
 
 
 def _assert_write_allowed(method: str, path: str, body: dict | None = None) -> None:
@@ -332,7 +382,7 @@ COLUMN_TYPE_CASES: list[tuple[str, dict, object, object]] = [
     ),
     ("date", {}, "2026-01-15", "2026-02-20"),
     ("checkbox", {}, True, False),
-    ("people", {}, "@ME@", None),
+    ("people", {}, None, None),
     ("timeline", {}, {"start": "2026-01-01", "end": "2026-01-31"},
      {"start": "2026-02-01", "end": "2026-02-28"}),
     ("rating", {}, 3, 5),
@@ -348,7 +398,7 @@ COLUMN_TYPE_CASES: list[tuple[str, dict, object, object]] = [
 ]
 
 
-def teste2_tipos(item_id: str, second_item_id: str, me_id: str) -> None:
+def teste2_tipos(item_id: str, second_item_id: str) -> None:
     """Cria uma coluna de cada tipo e grava/lê/altera values fictícios."""
     for col_type, extra, v1, v2 in COLUMN_TYPE_CASES:
         payload_body = {"label": f"{FICT} {col_type}", "type": col_type, **extra}
@@ -364,8 +414,6 @@ def teste2_tipos(item_id: str, second_item_id: str, me_id: str) -> None:
         for tag, value in (("v1", v1), ("v2", v2)):
             if value is None:
                 continue
-            if value == "@ME@":
-                value = me_id
             if value == "@ITEM2@":
                 value = {"links": [{"item_id": second_item_id}]}
             api(
@@ -513,7 +561,6 @@ def teste_extra_subitens(parent_item: str) -> None:
         note="TX cria subitem",
     )
     _own("items", payload)
-    api("GET", "/users/directory", note="TX diretório de usuários (mapeamento people)")
 
 
 def teste6_anexos(item_id: str) -> None:
@@ -544,12 +591,12 @@ def teste6_anexos(item_id: str) -> None:
     api("GET", f"/boards/items/{item_id}/attachments", note="T6 lista anexos")
 
 
-def teste7_comentarios(item_id: str, me_id: str) -> None:
+def teste7_comentarios(item_id: str) -> None:
     _, payload = api(
         "POST",
         f"/boards/items/{item_id}/comments",
-        {"body": f"{FICT} com menção", "kind": "reply", "mention_user_ids": [me_id]},
-        note="T7 comentário com menção",
+        {"body": f"{FICT} comentário editável", "kind": "reply"},
+        note="T7 comentário editável",
     )
     comment_id = _own("comments", payload)
     if comment_id:
@@ -673,8 +720,6 @@ def main() -> int:
     args = parser.parse_args()
 
     preflight()
-    _, me = api("GET", "/auth/me", note="usuário para menções/people")
-    me_id = str(me.get("id", "")) if isinstance(me, dict) else ""
 
     ids = teste1_crud()
     _, payload = api(
@@ -684,12 +729,12 @@ def main() -> int:
         note="item auxiliar p/ dependency",
     )
     second_item = _own("items", payload) or ""
-    teste2_tipos(ids["item"], second_item, me_id)
+    teste2_tipos(ids["item"], second_item)
     relation_board, _target, _col = teste3_relation(ids["item"])
     teste5_mirror(relation_board, ids["item"])
     teste_extra_subitens(ids["item"])
     teste6_anexos(ids["item"])
-    teste7_comentarios(ids["item"], me_id)
+    teste7_comentarios(ids["item"])
     if not args.skip_webhook:
         teste8_webhook()
 

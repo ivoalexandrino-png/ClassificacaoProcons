@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "sunday_fase0_write_tests.py"
 SPEC = importlib.util.spec_from_file_location("sunday_fase0_write_tests", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None
@@ -30,12 +29,52 @@ def test_should_redact_sensitive_headers_and_token_occurrences(monkeypatch: pyte
 
     assert sanitized == {
         "headers": {
-            "Authorization": "[REDACTED]",
-            "Cookie": "[REDACTED]",
-            "X-Sunday-Token": "[REDACTED]",
             "Content-Type": "application/json",
         },
         "body": "prefixo [REDACTED] sufixo",
+    }
+
+
+def test_should_remove_private_identity_fields():
+    sanitized = sunday_write_tests._sanitize(
+        {
+            "id": "test-resource",
+            "creator_user_id": "real-user",
+            "author_name": "Real Name",
+            "members": [{"email": "real@example.com"}],
+        },
+    )
+
+    assert sanitized == {"id": "test-resource"}
+
+
+def test_should_keep_only_safe_webhook_headers():
+    sanitized = sunday_write_tests._sanitize_entry(
+        {
+            "note": "T8 entregas com endpoint 200",
+            "deliveries": [
+                {
+                    "headers": {
+                        "content-type": ["application/json"],
+                        "user-agent": ["node"],
+                        "x-forwarded-for": ["192.0.2.1"],
+                        "x-internal-header": ["private"],
+                    },
+                },
+            ],
+        },
+    )
+
+    assert sanitized == {
+        "note": "T8 entregas com endpoint 200",
+        "deliveries": [
+            {
+                "headers": {
+                    "content-type": ["application/json"],
+                    "user-agent": ["node"],
+                },
+            },
+        ],
     }
 
 
