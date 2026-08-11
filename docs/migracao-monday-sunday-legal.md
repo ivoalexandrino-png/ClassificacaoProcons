@@ -261,3 +261,192 @@ Monday.
 3. Fazer upload de um anexo pequeno para confirmar limite, resposta e associação ao item.
 4. Criar uma relação entre boards para verificar a restrição entre workspaces.
 5. Criar uma coluna `time_tracking` para confirmar se esse tipo é aceito pela API.
+
+---
+
+## Fase 0 — Reteste de *values* e `board_relation` (2026-08-11)
+
+> Reteste **focado**, executado no sandbox autorizado (workspace 22, boards **80**
+> `SANDBOX - API SUNDAY - NÃO USAR` e **81** `SANDBOX - API SUNDAY - RELATION`), com dados
+> 100% fictícios. Nada foi tocado no Monday e nenhum outro board sofreu escrita. O token e a
+> identidade do usuário não foram impressos nem gravados. Script reproduzível:
+> `scripts/sunday_fase0_values_retest.py`; passo a passo sanitizado (37 chamadas):
+> `docs/sunday-fase0-values-report-2026-08-11.json`.
+
+**Decisão de arquitetura assumida (do pedido):** o *schema* dos boards é configurado
+**manualmente** no Sunday; o adapter só manipula **dados**. Portanto o 403 na criação de
+colunas (confirmado na F0.14) é **`C — configuração manual aceitável`**, não bloqueante.
+
+### Duas rotas de escrita (descoberta central)
+
+O board 80 já vem com **colunas de sistema** (`is_system: true`, embutidas em todo board:
+`name`, `status`, `owner`, `target_date`, `area`) além das colunas custom. As duas famílias
+gravam por rotas diferentes — o adapter precisa decidir a rota **por coluna**, lendo
+`is_system`/`key` de `GET /boards/{id}/columns`:
+
+- **Colunas de sistema** → `PATCH /boards/items/{id}` (campos `name`, `target_date`,
+  `owner_user_id`, `area`…) e `PATCH /boards/items/{id}/status`. O endpoint de values as
+  **recusa** com `400 "System columns são atualizadas via PATCH /boards/items/:id."`.
+- **Colunas custom** → `PATCH /boards/items/{id}/values/{columnId}` com corpo `{"value": …}`.
+- **Leitura de ambas**: values custom via `GET /boards/items/{id}/values`
+  (`[{column_id, value, …}]`); campos de sistema no próprio objeto do item
+  (`GET /boards/{id}/items`).
+
+> ⚠️ No sandbox, o operador rotulou as colunas de sistema como se fossem custom
+> (`TESTE - Texto` = `name`; `TESTE - Status` = `status`; `TESTE - Data` = `target_date`;
+> `TESTE - Responsável` = `owner`). Por isso Texto/Status/Data/People foram validados pela
+> rota de sistema. Número/Link/Checkbox/Relação são custom de verdade e validaram a rota de
+> values — cobrindo **as duas rotas**.
+
+### 1. Column IDs encontrados (board 80)
+
+| Coluna (rótulo) | column_id | key | type | is_system | Rota de escrita |
+|---|---|---|---|---|---|
+| TESTE - Texto | `443` | `name` | text | **sim** | `PATCH /boards/items/{id}` (name) |
+| TESTE - Número | `453` | `teste_numero` | number | não | `PATCH …/values/453` |
+| TESTE - Status | `444` | `status` | status | **sim** | `PATCH …/items/{id}/status` |
+| TESTE - Data | `446` | `target_date` | date | **sim** | `PATCH /boards/items/{id}` (target_date) |
+| TESTE - Responsável | `445` | `owner` | people | **sim** | `PATCH /boards/items/{id}` (owner_user_id) |
+| TESTE - Link | `454` | `teste_link` | link | não | `PATCH …/values/454` |
+| TESTE - Checkbox | `455` | `teste_checkbox` | checkbox | não | `PATCH …/values/455` |
+| TESTE - Relação | `456` | `teste_relacao` | board_relation | não | `PATCH …/values/456` |
+
+Status de sistema disponível (`board.status_set`): `to_do` (A fazer), `follow_up`
+(Follow-up), `done` (Feito).
+
+### 2–9. Resultado por tipo (round-trip gravar→ler)
+
+| # | Tipo | Payload enviado (aceito) | GET devolve | Round-trip |
+|---|---|---|---|---|
+| 3 | Texto (`name`) | `PATCH item {"name":"Teste Sunday API"}` | `name:"Teste Sunday API"` | ✅ igual |
+| 4 | Número | `PATCH values {"value":12345}` | `12345` (int) | ✅ igual |
+| 5 | Status | `PATCH …/status {"status":"follow_up"}` | `status:"follow_up"` | ✅ igual |
+| 6 | Data | `PATCH item {"target_date":"2026-01-15"}` | `"2026-01-15T12:00:00.000Z"` | ✅ (grava `YYYY-MM-DD`, lê ISO datetime, 12:00Z) |
+| 7 | Checkbox | `PATCH values {"value":true}` / `false` | `true` / `false` (bool) | ✅ ambos |
+| 8 | Link | `PATCH values {"value":"https://example.com/teste-sunday-api"}` | string idêntica | ✅ igual |
+| 9 | People | `PATCH item {"owner_user_id":<me>}` (id via `GET /auth/me`) | `owner_user_id` = enviado | ✅ igual |
+
+- **People não é bloqueante** e, além disso, **funciona**: a rota de values recusa (`400`,
+  system column), mas `owner_user_id` no `PATCH` do item grava e relê corretamente. Não foi
+  inventado `user_id`: usou-se o próprio usuário autenticado (`GET /auth/me`).
+
+### 10. `board_relation` — o teste mais importante
+
+A coluna `TESTE - RELAÇÃO` (456) veio configurada com `settings.source_board_id = "79"`
+(**board `79` = "Legal - Seguros"**, e **não** o board 81, como o enunciado presumia — ver
+"ressalva de configuração" abaixo). Testes (todos gravando **apenas** no item do board 80;
+board 79 só foi **lido**):
+
+- Alvo em **board 81** (item fictício `TESTE TARGET RELATION - PODE EXCLUIR`, criado aqui):
+  **aceito** (`200`) — a API **não valida** se o alvo pertence ao board conectado.
+- Alvo em **board 79** (item fictício preexistente `PODE EXCLUIR`, apenas referenciado):
+  **aceito** (`200`).
+- Ambos os formatos de `value` são aceitos e persistidos **como enviados**:
+  - `{"links":[{"item_id":"<id>"}]}` → GET devolve `{"links":[{"item_id":"<id>"}]}`
+    (**formato robusto: suporta múltiplos alvos** — ex.: Controle tem 2 `board_relation`);
+  - `"<id>"` (string simples) → GET devolve `"<id>"` (atalho de alvo único).
+- **Sem escrita recíproca**: os values do item-alvo (7655) eram `[]` antes e continuaram
+  `[]` depois — gravar a relação **não** cria back-reference no board conectado (só muta o
+  item de origem, o que também confirma o guard-rail de não escrever em outros boards).
+
+**Respostas objetivas (Teste 10):**
+
+1. **O Sunday aceitou gravar a relação?** Sim (`200`), nos dois formatos.
+2. **O GET dos values devolve o target item_id?** Sim — em
+   `GET /boards/items/{id}/values`, a coluna 456 traz o(s) `item_id` do(s) alvo(s).
+3. **O target board pode ser identificado?** Sim, de forma determinística, por
+   `settings.source_board_id` da coluna (a *value* carrega só `item_id`; o board vem da
+   configuração da coluna, que é nossa e conhecida).
+4. **Reconstruir `source → target` sem `/boards/{id}/links`?** Sim. `/boards/{id}/links` e
+   `/mirror-values` seguem `403` para o token, mas são **desnecessários**: a relação sai
+   inteira de `GET /boards/items/{id}/values`.
+5. **Manter a relação só com os endpoints normais de items/values?** Sim — CRUD completo via
+   `PATCH …/values/{col}` (grava) e `GET …/values` (lê).
+
+→ **Relações funcionam NATIVAMENTE** via values. **Fallback local não é necessário** para
+viabilizar o adapter. (A tabela de correspondência `monday_*_item_id ↔ sunday_*_item_id`
+continua recomendável na Fase 2 apenas para **regravar chaves** na migração de dados — não
+como substituta da relação nativa.) Classificação: **`A — FUNCIONA` (nativo)**.
+
+### 10. Payload real aceito × formato retornado pelo GET (resumo)
+
+| Tipo | Payload aceito (escrita) | Formato no GET |
+|---|---|---|
+| text (name) | `{"name": "<str>"}` no `PATCH` do item | `name: "<str>"` |
+| number | `{"value": <int/float>}` | número (mesmo tipo) |
+| status (sistema) | `{"status": "<key>"}` no `…/status` | `status: "<key>"` |
+| date (sistema) | `{"target_date": "YYYY-MM-DD"}` no `PATCH` do item | ISO datetime `…T12:00:00.000Z` |
+| checkbox | `{"value": true|false}` | booleano |
+| link | `{"value": "<url>"}` | string idêntica |
+| people (sistema) | `{"owner_user_id": "<id>"}` no `PATCH` do item | `owner_user_id: "<id>"` |
+| board_relation | `{"value": {"links":[{"item_id":"<id>"}]}}` **ou** `{"value": "<id>"}` | igual ao enviado (`{links:[…]}` ou string) |
+
+### 12–13. Quais values funcionam / não funcionam
+
+- **Funcionam (dados):** texto/`name`, número, status, data, checkbox, link, people e
+  `board_relation` — **todos** com round-trip confirmado.
+- **Não funcionam para o token (todos de *schema*/config, não de *dados*):** criar/alterar
+  coluna (`403`), renomear/mover/excluir grupo (`403`), editar/excluir comentário e anexo
+  (`403`), upload binário de arquivo (`403`), `GET/POST /boards/{id}/links` e
+  `/mirror-values` (`403`). Nenhum deles é de *value* e nenhum é requisito de GO (schema
+  manual + anexo por link via Drive/GCS).
+
+### 14–15. Relações nativas × fallback local
+
+- **Nativas:** sim (ver Teste 10).
+- **Fallback local:** **não necessário** para viabilidade. Permanece útil só como índice de
+  regravação de chaves na migração (Fase 2) e como cache do N+1 de leitura de values.
+
+### 16. Nova matriz A/B/C/D
+
+Legenda — **A**: funciona nativamente · **B**: funciona com fallback local · **C**:
+configuração manual aceitável (não bloqueante) · **D**: bloqueante.
+
+| Capacidade | Classe | Evidência |
+|---|---|---|
+| Criar/ler/alterar/excluir **item** | **A** | `POST/PATCH/GET/DELETE` `201/200` (F0.14 + reteste) |
+| **Values** de colunas custom (número, link, checkbox) | **A** | `PATCH …/values/{col}` + `GET …/values`, round-trip ok |
+| **Campos de sistema** (texto/name, status, data, people) | **A** | `PATCH item` / `…/status`, round-trip ok |
+| **Status** | **A** | `follow_up` gravado e relido |
+| **Data** | **A** | grava `YYYY-MM-DD`, lê ISO datetime |
+| **Checkbox / Link / Número** | **A** | round-trip exato |
+| **People** | **A** | `owner_user_id` grava/relê (não bloqueante de qualquer modo) |
+| **`board_relation`** | **A** | grava/relê via values; multi via `{links:[…]}`; sem `/links` |
+| **Comentários** | **A** | criar/ler/excluir `201/200` (F0.14); editar `403` (não usado) |
+| **Identificação de registros** (dedup) | **A/B** | `GET items` + `GET values` client-side; índice/cache local (F0.8) |
+| Criar/alterar **schema** (colunas/grupos) | **C** | `403` — configuração manual 1×/board |
+| **Arquivos** (upload binário) | **C** | `403`; anexo por **link** (`201`) via Drive/GCS |
+| **Mirror** / `/links` (leitura) | **B** | `403` p/ token; espelho reconstruído no nosso código |
+| **Search por valor de coluna** | **B** | sem server-side; índice local (F0.8) |
+| **Webhook de saída** | **A/opcional** | ação `webhook` confirmada (F0.14); **polling** é a base |
+
+### 17. Decisão final
+
+> ## **GO** para implementar `sunday/client.py`.
+
+Os requisitos essenciais de GO estão **todos** satisfeitos com os endpoints normais e o token
+atual: CRUD de item, escrita/leitura de values de colunas existentes (custom **e** sistema),
+comentários, identificação de registros e **relações nativas** (sem depender de `/links`).
+Arquivos entram por link (Drive/GCS), mirror/search por lookup/índice local, e webhook é
+opcional (polling é a arquitetura principal). A impossibilidade de criar *schema* via API é
+**`C — configuração manual aceitável`** e **não** bloqueia.
+
+### Ressalva de configuração (ação do time, não bloqueante)
+
+A coluna `TESTE - RELAÇÃO` aponta para o board **79 ("Legal - Seguros")**, não para o **81**
+como o enunciado pressupunha. A gravação/leitura funcionou mesmo assim (a API não valida o
+board do alvo), mas, para a **UI do Sunday renderizar** o item vinculado, a coluna de
+produção deve ter `source_board_id` **igual ao board realmente conectado**. Recomendação para
+a configuração manual do schema (Fase 1): apontar cada `board_relation` para o board-alvo
+correto (ex.: Prazos→Processos, Audiências→Processos, Controle→Contratos). Programaticamente,
+a reconstrução `source → target` independe disso.
+
+### Notas de implementação para `sunday/client.py`
+
+- Resolver a rota de escrita **por coluna** via `GET /boards/{id}/columns` (`is_system`/
+  `key`): sistema → `PATCH item`/`…/status`; custom → `…/values/{col}`.
+- `board_relation`: usar sempre `{"value": {"links": [{"item_id": …}]}}` (suporta múltiplos
+  alvos); ler de `GET …/values`. O board-alvo vem da configuração da coluna.
+- Datas: enviar `YYYY-MM-DD`; ao ler, normalizar ISO datetime.
+- People: `owner_user_id` no `PATCH` do item; `user_id` obtido de diretório/`/auth/me`.
+- Leitura de values é **N+1** (1 chamada por item) — manter cache/índice local no polling.
