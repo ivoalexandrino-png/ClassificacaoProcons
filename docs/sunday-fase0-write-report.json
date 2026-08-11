@@ -7,7 +7,7 @@
     "status": 200,
     "response": {
       "id": "37",
-      "email": "[REDACTED_EMAIL]",
+      "email": "ivo.alexandrino@b4a.com.br",
       "name": "Ivo Alexandrino da Conceição",
       "preferred_name": null,
       "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLnTQJhiHpamaRCnYUiuNANjcHc8gKf8rQ1kHTHf_DP6IQj_nkd=s96-c",
@@ -102,7 +102,7 @@
     "status": 200,
     "response": {
       "id": "37",
-      "email": "[REDACTED_EMAIL]",
+      "email": "ivo.alexandrino@b4a.com.br",
       "name": "Ivo Alexandrino da Conceição",
       "preferred_name": null,
       "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLnTQJhiHpamaRCnYUiuNANjcHc8gKf8rQ1kHTHf_DP6IQj_nkd=s96-c",
@@ -1986,7 +1986,7 @@
         "open_submissions_set_at": null,
         "owner_user_id": "37",
         "calendar_event_id": "61fg2lp7k6rfbuo753iedjsbvc",
-        "calendar_event_organizer_email": "[REDACTED_EMAIL]",
+        "calendar_event_organizer_email": "ivo.alexandrino@b4a.com.br",
         "recurrence_rule": null,
         "area_options": [],
         "team_ids": [],
@@ -2290,7 +2290,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKbiY_LGq0pkxW08-S55lt720mx9dBa1cjNsl61zFoScUpqtM4=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "adriano@b4a.com.br",
         "phone": null
       },
       {
@@ -2300,7 +2300,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJKoYJ8NTX6SFMP4w--yxfcwOUDsIADNxCRsfqdVzbi30g_QDyy=s96-c",
         "job_title": "Supervisora Logística II",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "alcione.sena@b4a.com.br",
         "phone": "11962099674"
       },
       {
@@ -2310,7 +2310,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIyOl21Lmti3FpibrRd55C9P7WhrkCkiPLGuTsLuxd2fUzbqw=s96-c",
         "job_title": "Analista de E-commerce",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "alessandra.oliveira@b4a.com.br",
         "phone": "5511963735809"
       },
       {
@@ -2320,7 +2320,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ6F5jh9mOrpA75M5eysrKOQOWfA-05lNoCtSCQC3Db5k1AXw=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "alexandre.alves@b4a.com.br",
         "phone": null
       },
       {
@@ -2330,7 +2330,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocILRq0xTTTh82y811V_1a0kTdHZJ26jB6eezQ_SiV-Cz74jOmk=s96-c",
         "job_title": "Coordenador de Audiovisual",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "alexandre.amaral@b4a.com.br",
         "phone": "5521979796779"
       },
       {
@@ -2340,7 +2340,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIo-v_FKdLyUv_oaQGqd5v420iXDKT5e1QMTbWx_eHVCMsIr_A=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "alexandre.landim@b4a.com.br",
         "phone": null
       },
       {
@@ -2350,7 +2350,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIef6Z_0nfyfX5Ff9HQRtpRy1FHE6VsQLc4xdinrpf9c82KUS0=s96-c",
         "job_title": "Analista de Atendimento Jr",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "aline.toledo@b4a.com.br",
         "phone": "11988218484"
       },
       {
@@ -2360,7 +2360,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJQ4pVCw7RNlw4aabD-PXY2iD5tEBj-kYNfnQy3Chp-K7E8sKVg=s96-c",
         "job_title": "Product Designer Sr",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "augusto.xavier@b4a.com.br",
         "phone": "11954463127"
       },
       {
@@ -2370,7 +2370,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLD5CRfnKJzEgHujnyyEu3zOSwOaLBCEiFdM1RVojUj0-UcG34=s96-c",
         "job_title": "Analista Comercial Jr.",
         "business_unit": "bfluence",
-        "email": "[REDACTED_EMAIL]",
+        "email": "beatriz.lopes@b4a.com.br",
         "phone": "11954700649"
       },
       {
@@ -2380,7 +2380,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLJ1_xmSEHE74HPbaI7ZXbgg37ClYuUxB-ZY93X9efkDCle0Q=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "beatriz.pereira@b4a.com.br",
         "phone": null
       },
       {
@@ -2390,7 +2390,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ_oZ4qSnA4rrD4NsUm4TcDZB8-8bpuXAotAg1Qt5X-6E07PQ=s96-c",
         "job_title": "Gerente Comercial",
         "business_unit": "bfluence",
-        "email": "[REDACTED_EMAIL]",
+        "email": "bruna.coelho@b4a.com.br",
         "phone": "11997677171"
       },
       {
@@ -2400,7 +2400,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLk-6vfaUangU2mXIiH4woutbAEMAj6HIn275F53Evr9_t2qFo=s96-c",
         "job_title": "Executiva de Contas",
         "business_unit": "bfluence",
-        "email": "[REDACTED_EMAIL]",
+        "email": "bruna.fernandes@b4a.com.br",
         "phone": "11971423696"
       },
       {
@@ -2410,7 +2410,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ7UwfrUc4W78ppFzLKZHmSAbYIg332e3Kg7T_ZUG-eierIPE1s=s96-c",
         "job_title": "Head de Product & Dev.",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "bruna.martins@b4a.com.br",
         "phone": "17981474070"
       },
       {
@@ -2420,7 +2420,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK4merN_8tZrg1gw0lGjZQXXfwuc_Ow2BnRR9Zc2hbeGg15_5zX=s96-c",
         "job_title": "Head de B2B2C",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "bruno.castro@b4a.com.br",
         "phone": "11949567765"
       },
       {
@@ -2430,7 +2430,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIbse-BZKSelO3x65k2XTj6Qoz_cVkrpjfdOzRk0E49UP9zGA=s96-c",
         "job_title": "Especialista Fiscal",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "carla.pereira@b4a.com.br",
         "phone": "11953353423"
       },
       {
@@ -2440,7 +2440,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK3xpYkYVhBs8D4Jm_5vIIQVT0-YyROQFiq_Uepsnb2mD_KU34=s96-c",
         "job_title": "VP de B2C",
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "carol@b4a.com.br",
         "phone": "15981001505"
       },
       {
@@ -2450,7 +2450,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKfw3CoXT5DYEn8K6LCWghIXJ7Gk2JTaRkfKbnHOKdAijQUzQvD=s96-c",
         "job_title": "Coordenadora de Assistência Executiva",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "caroline.moreira@b4a.com.br",
         "phone": "11986842835"
       },
       {
@@ -2460,7 +2460,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK8JGY9oDGcs4HLvP-0qAqW0gsA2B_ZnQa49iaPZIaNLXUndE4=s96-c",
         "job_title": "Assistente Administrativo",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "celina.ferreira@b4a.com.br",
         "phone": "11962373717"
       },
       {
@@ -2470,7 +2470,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKO29LPS6aufmbZqE6AqCqwpkVuLKcVXCJR0bTuSQKgLfQmzYR6=s96-c",
         "job_title": "Assistente de Atendimento",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "danielle.marques@b4a.com.br",
         "phone": "11977510929"
       },
       {
@@ -2480,7 +2480,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJqSFn3-0m7odiYFDNZ1W85s-kP_VgbfLO2bN1Mz0RHtKEj_JUV=s96-c",
         "job_title": "Head de Comunicação",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "debora.duarte@b4a.com.br",
         "phone": "11981694505"
       },
       {
@@ -2490,7 +2490,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKczDmHpT69tXbvjlce6bk31HxXTG5NENGVFcwEGCsAeVAmhC0y=s96-c",
         "job_title": "Head de bfluence",
         "business_unit": "bfluence",
-        "email": "[REDACTED_EMAIL]",
+        "email": "deborah.camerini@b4a.com.br",
         "phone": "11984848577"
       },
       {
@@ -2500,7 +2500,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLC5AKjg8gp8_8pGZipZGarcpSawiB1L1ZXDZFTbqh9Fy2OkgNl=s96-c",
         "job_title": "Gerente de IT Operations",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "drausio.lucas@b4a.com.br",
         "phone": "11997930727"
       },
       {
@@ -2510,7 +2510,7 @@
         "avatar_url": null,
         "job_title": "Supervisora Logística I",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "elaine.delphino@b4a.com.br",
         "phone": "11964997594"
       },
       {
@@ -2520,7 +2520,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKrtP5MQHeL6BGz8VTni_F8f0COkioPTbNmLKFI6A6GN9Dmoio=s96-c",
         "job_title": "Analista de CRM Pl",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "emily.bentes@b4a.com.br",
         "phone": "5521994414102"
       },
       {
@@ -2530,7 +2530,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocILH6SGRk0frsP9J1g_ozJI36jGyFY9FNHZaYVfv1vDxiYAZA=s96-c",
         "job_title": "Desenvolvedor Pl",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "enilson.filho@b4a.com.br",
         "phone": "17981988306"
       },
       {
@@ -2540,7 +2540,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocI4aADXRhqPW0CG9vCe57ePnMBAaJN_7ONYc5IbFLBIpIpQ70M=s96-c",
         "job_title": "Assistente de Atendimento",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "gabriel.rios@b4a.com.br",
         "phone": "11912970914"
       },
       {
@@ -2550,7 +2550,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocI-5CCaxXx2YO3YTyJ1kOTv8vkVG3kYxVFcRIMVfSe-yN3Hyt8=s96-c",
         "job_title": "Auxiliar Financeiro",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "geovanna.rodrigues@b4a.com.br",
         "phone": "11959693805"
       },
       {
@@ -2560,7 +2560,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLBXpFPQwSpZZkhzRSrpZf_m05n9CikOzMLC4Bw28fekgwakQ=s96-c",
         "job_title": "Analista Portfólio Pleno",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "giovanna.miyasato@b4a.com.br",
         "phone": "11963961860"
       },
       {
@@ -2570,7 +2570,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJIBrG81QE5KW_DfXUg0l4rGaEBq47ElwQWtyaop3WvbS-3RUQ=s96-c",
         "job_title": "Estagiária de Marketing",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "helena.seixas@b4a.com.br",
         "phone": "5511982201050"
       },
       {
@@ -2580,7 +2580,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLbKBcZCFDrYqvGX98KoAH_LRL-vUFxHDyE7lGRpt9m-DWddik=s96-c",
         "job_title": "Especialista em Desenvolvimento de Produto",
         "business_unit": "own_brands",
-        "email": "[REDACTED_EMAIL]",
+        "email": "isabela.calmon@b4a.com.br",
         "phone": "11963823488"
       },
       {
@@ -2590,7 +2590,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLwG7h3mrpPNUQjVR9n3eyjcvg6IrlK9LZlRZlr2OxKMg7RqNk=s96-c",
         "job_title": "Estagiária em Business Intelligence",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "isabella.amaro@b4a.com.br",
         "phone": "5511945455215"
       },
       {
@@ -2600,7 +2600,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJo2eQKDhg9soYhX6_qmmv86kAQcxhDosAqaPod7xvOSI0jm0bE=s96-c",
         "job_title": "Analista de Influencers Jr.",
         "business_unit": "bfluence",
-        "email": "[REDACTED_EMAIL]",
+        "email": "isabel.mattos@b4a.com.br",
         "phone": "11951950204"
       },
       {
@@ -2610,7 +2610,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJRI8J59a5NnoRXA0pEOu763zi5sqryqA6pAl0WiogyWYnA8TM=s96-c",
         "job_title": "Analista de RH Jr.",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "isadora.maso@b4a.com.br",
         "phone": "11948704487"
       },
       {
@@ -2620,7 +2620,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLnTQJhiHpamaRCnYUiuNANjcHc8gKf8rQ1kHTHf_DP6IQj_nkd=s96-c",
         "job_title": "Gerente Jurídico",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "ivo.alexandrino@b4a.com.br",
         "phone": "11992462378"
       },
       {
@@ -2630,7 +2630,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKxbf6s-PU98RBijI02x49lUlcGnll8ZLWJK46VXmT2oXvESfz3=s96-c",
         "job_title": "Coordenador B2B2C",
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "jamil.wahid@b4a.com.br",
         "phone": null
       },
       {
@@ -2640,7 +2640,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ-gIUKmHYNa7DgODy1ZGaJWYoRbaXn5bTVWAgykBYm4OuPecA=s96-c",
         "job_title": "CEO",
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "jan@b4a.com.br",
         "phone": "11997132201"
       },
       {
@@ -2650,7 +2650,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLGyyBw-sA3ifcdOBHMA7qsbf6LvB3EMEGT8KeBLdqh5T3cVJc=s96-c",
         "job_title": "Analista de Testes Sr",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "joao.matta@b4a.com.br",
         "phone": "17997471604"
       },
       {
@@ -2660,7 +2660,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKxhAtr_-2TrLuFp1rgslr3uHNZYz0o9BTp0s_YQikJunVDJgmH=s96-c",
         "job_title": "Coordenadora de Delivery",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "juliana.correia@b4a.com.br",
         "phone": "11983223970"
       },
       {
@@ -2670,7 +2670,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIXEU8F-tPwnglvY9HSnNa91VJZ6xXMjRIg3aZF1mY2WSQQhg=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "juliana.fiori@b4a.com.br",
         "phone": null
       },
       {
@@ -2680,7 +2680,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLEEfF1FHXF7KPdmWUL0TNF3QxBBHep1LieZ9-KzRlE8HUj63M=s96-c",
         "job_title": "Analista de BI Sr",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "kevin.padilha@b4a.com.br",
         "phone": "11977304729"
       },
       {
@@ -2690,7 +2690,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocL_yMcy_G4yXXhwY-vSQJ6uZkADuL5V61rizdXD5RBrBy6c8Q=s96-c",
         "job_title": "Analista Mídias Sociais Sr",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "larissa.nascimento@b4a.com.br",
         "phone": "11964924549"
       },
       {
@@ -2700,7 +2700,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIprUTZi-n_1u3P7ZEocDJ9LBRDBLYapblKsZBE7KrOqdP4Dw=s96-c",
         "job_title": "Analista de Influencers Pl.",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "larissa.maruyama@b4a.com.br",
         "phone": "5514997833941"
       },
       {
@@ -2710,7 +2710,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKrpM1-8yNhrXjq9ktGEuzAi0LD1aP43oawPZIj3tDYnGUVb146=s96-c",
         "job_title": "Desenvolvedor Jr",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "leonardo.avanzi@b4a.com.br",
         "phone": "17997927022"
       },
       {
@@ -2720,7 +2720,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJCjm5v3TzXL_jfl8OoeTmqmqenq-n_DTmUbm8PPmLvMsuBfOuK=s96-c",
         "job_title": "Assistente de Atendimento",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "lilian.vieira@b4a.com.br",
         "phone": "11988047645"
       },
       {
@@ -2730,7 +2730,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIBPGXOV3aijNfBBtrbJC5kAfQkIAU5wIfTGWPdiobVff1lCaI=s96-c",
         "job_title": "Coordenadora Financeira",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "lorrany.dumont@b4a.com.br",
         "phone": "5531975578491"
       },
       {
@@ -2740,7 +2740,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIiCElWqJXTbblNuzsB_Hdn7KNcH7nT3iKp1PtZVjFQuIo9MQ=s96-c",
         "job_title": "Engenheiro de IA Agentic Jr.",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "luan.labrujo@b4a.com.br",
         "phone": "5521972402221"
       },
       {
@@ -2750,7 +2750,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKqJmqpa-NCTmlJkvhjhvvv7da15VHKUCE71416Lbw7jhbTlFM5=s96-c",
         "job_title": "Coordenador de CD",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "luan.antunes@b4a.com.br",
         "phone": "11968501678"
       },
       {
@@ -2760,7 +2760,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKKnWxpxHYpqSbZG-nv30njNzkuvvMdoUWHg491_SuCRkRiaQ=s96-c",
         "job_title": "Coordenador de Growth",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "lucas.mariano@b4a.com.br",
         "phone": "11999001132"
       },
       {
@@ -2770,7 +2770,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocL7Ik0QuDzBg4GMF9c8sTbb0YcRlmNQS7qa7RYT5rpdPaf3GQ=s96-c",
         "job_title": "Engenheiro de IA Agentic Pl.",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "lucas.janeiro@b4a.com.br",
         "phone": "21995313560"
       },
       {
@@ -2780,7 +2780,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJNGeU5WU_RZvBW8VCgcAHz8XniZrVL6yQQlJvfcQTDbmJh7SzM=s96-c",
         "job_title": "Analista de IT Operations JR.",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "lucas.manoel@b4a.com.br",
         "phone": "11942697489"
       },
       {
@@ -2790,7 +2790,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKDgVwyBCzAIzWJCpcxnTfxWE-4xYOu65koPs2g13lQHdzRBM4k=s96-c",
         "job_title": "Diretor de Product & Dev.",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "lucas@b4a.com.br",
         "phone": "11987496518"
       },
       {
@@ -2800,7 +2800,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK_oGlas9ITsUDzVQQl2TL80BAQpNZEXTXyIOYkfxxdFddRYW5s=s96-c",
         "job_title": "VP de Support (CFO)",
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "luciano@b4a.com.br",
         "phone": "11971164887"
       },
       {
@@ -2810,7 +2810,7 @@
         "avatar_url": null,
         "job_title": "Assistente de Delivery",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "maise.ferreira@b4a.com.br",
         "phone": "11970485354"
       },
       {
@@ -2820,7 +2820,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLVXXYqUO4CcJiXW8DzSYo3pN75fZCQ6StLu_TIUrqqk3KTqC7U=s96-c",
         "job_title": "VP de Operations (COO)",
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "manu@b4a.com.br",
         "phone": "11991771817"
       },
       {
@@ -2830,7 +2830,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJdj5VvPLAwxPJGMkNkMoQwqLmFLl-doOA2KG8Pcq4jc4aeFF4=s96-c",
         "job_title": "Assistente Administrativo",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "maria.araujo@b4a.com.br",
         "phone": "11959657692"
       },
       {
@@ -2840,7 +2840,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocK7IWg-HTca8siTgYxdbqMBoXbCVatDmX63DaRu1dj42flhKg=s96-c",
         "job_title": "Assistente de Atendimento",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "maria.nazario@b4a.com.br",
         "phone": "11983097586"
       },
       {
@@ -2850,7 +2850,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLAYwn7P5iYcu29R4elv-zRmPzOwRe2u8gKiDtUwI_rUijbO2k=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "maria.vitoria@b4a.com.br",
         "phone": null
       },
       {
@@ -2860,7 +2860,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJZe6JRNECSEYX3cAYj9j9tMyEHuzmey3RfwOZ-tdXi4JW_9Jk=s96-c",
         "job_title": "Videomaker Pleno",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "matheus.ramos@b4a.com.br",
         "phone": "11974388563"
       },
       {
@@ -2870,7 +2870,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJSpT4rPv2YwELZSUtMHB0YgWhKTfcgFRoNcU7N6poJw8hTb6c=s96-c",
         "job_title": "Designer Sr.",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "max.belo@b4a.com.br",
         "phone": "11977494940"
       },
       {
@@ -2880,7 +2880,7 @@
         "avatar_url": null,
         "job_title": "Produtora de Audiovisual Pleno",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "mayara.nagata@b4a.com.br",
         "phone": "11933290376"
       },
       {
@@ -2890,7 +2890,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKPLAZ9GMwYTgjplQOF-QeOgcAWK1Ec65twlpCv9rqY9R5xfa-K=s96-c",
         "job_title": "Coordenadora de Campanhas",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "nayara.moraes@b4a.com.br",
         "phone": "11958073913"
       },
       {
@@ -2900,7 +2900,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocINr64N3K1SRQJRvtxUReIDKy5Nj8iiHFjiZoT3ygNg-MUqB-8=s96-c",
         "job_title": "Analista bfluence Pl.",
         "business_unit": "bfluence",
-        "email": "[REDACTED_EMAIL]",
+        "email": "nayara.roberta@b4a.com.br",
         "phone": "5511952949354"
       },
       {
@@ -2910,7 +2910,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIKg58VtCdZm6iG5tCXGUJ0794h6-u3RZPKEPcA0b1STc3tTK0=s96-c",
         "job_title": "Diretor de Logística",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "neder@b4a.com.br",
         "phone": "5521997129085"
       },
       {
@@ -2920,7 +2920,7 @@
         "avatar_url": null,
         "job_title": "Estagiária de Marketing",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "nikole.kfouri@b4a.com.br",
         "phone": "11993767111"
       },
       {
@@ -2930,7 +2930,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJwbZqJe8EvGyImClTJaur5KM1bMuNhFMHbBnQSetWxBxmrlZBG=s96-c",
         "job_title": "Analista de Marca Pessoal & Mídias Sociais",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "nycolle.depaula@b4a.com.br",
         "phone": "5511911487274"
       },
       {
@@ -2940,7 +2940,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIVjbxyOi1BBZTGZtZQXKkkhqzNvTSJAIFrGlsv6gMLMqMaowDd_Q=s96-c",
         "job_title": "Gerente de Marcas Próprias",
         "business_unit": "own_brands",
-        "email": "[REDACTED_EMAIL]",
+        "email": "patricia.delcistia@b4a.com.br",
         "phone": "11941576679"
       },
       {
@@ -2950,7 +2950,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKFjEU1_1oiQ2eOJzK3fUMOX2BegTpPeaMUCPWPPAiC9TMRRQ=s96-c",
         "job_title": "Assistente de Atendimento",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "raquel.santos@b4a.com.br",
         "phone": "11964584355"
       },
       {
@@ -2960,7 +2960,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLI3Znbc6OJUtvpijzpakZLuPlTi9O6oug2KOjxhuLMgul7XYmF=s96-c",
         "job_title": "Tech Lead",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "renan.costa@b4a.com.br",
         "phone": "11948868757"
       },
       {
@@ -2970,7 +2970,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKfofmqbUnXnMruJGm4DpKCwdCbUDnoSdPXLBrWPpQ_Z0jMrSs=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "robert.avila@b4a.com.br",
         "phone": null
       },
       {
@@ -2980,7 +2980,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIHi35gD3IypLpKg1T6iMqT14rHfK31FO8atKYAXpP_MSfooPU=s96-c",
         "job_title": "Desenvolvedor Sr",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "saulo.guedes@b4a.com.br",
         "phone": "98987898368"
       },
       {
@@ -2990,7 +2990,7 @@
         "avatar_url": null,
         "job_title": "Auxiliar de produção III",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "tais.donata@b4a.com.br",
         "phone": "11987656749"
       },
       {
@@ -3000,7 +3000,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKdR4Dys2kYg3dsnn_dy-gp8UrrEaoDAEPrmLdBJng4tq_xOL7o=s96-c",
         "job_title": "Analista Administrativo Jr",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "tania.mendonca@b4a.com.br",
         "phone": "11962512373"
       },
       {
@@ -3010,7 +3010,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJ0LrxelOTmcYWmxX-NUjWcK5O0fRJY6TenZFKUwLKLGW6Dpw=s96-c",
         "job_title": null,
         "business_unit": null,
-        "email": "[REDACTED_EMAIL]",
+        "email": "thainara.alberico@b4a.com.br",
         "phone": null
       },
       {
@@ -3020,7 +3020,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKBqdjqRZ_VV4J88_fcz9JlCmBsQXA7VUbiuyamp1Psgf1ZLpUP=s96-c",
         "job_title": "Coordenador de Integrações",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "tiago.carneiro@b4a.com.br",
         "phone": "17988151828"
       },
       {
@@ -3030,7 +3030,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocKumhbdOAeux6HbvtKg06V6PBGyRmyTKKRzEBuxRoJTccGDxg=s96-c",
         "job_title": "Trainee Financeiro",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "tobias.fonseca@b4a.com.br",
         "phone": "11953199872"
       },
       {
@@ -3040,7 +3040,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocJdoglH_yuvTInQMTIF61_oloAsv8-hbigZ7GHQV3BeOKVOUc8=s96-c",
         "job_title": "Head of Finance",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "vanessa.barajas@b4a.com.br",
         "phone": "11951437019"
       },
       {
@@ -3050,7 +3050,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocLOOnXlMEm-wFagVAiUm4Yg8ScL2jcZdkVSmTKWZuRkAj8avkg=s96-c",
         "job_title": "Executiva de Contas",
         "business_unit": "bfluence",
-        "email": "[REDACTED_EMAIL]",
+        "email": "vanessa.maia@b4a.com.br",
         "phone": "83996893796"
       },
       {
@@ -3060,7 +3060,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIigMOvl8vlvLlD5qZSSKVHU5J3RqNBicRuQ82gx_C2KovsyQ=s96-c",
         "job_title": "Analista de Influencers Pl.",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "vinicius.cavano@b4a.com.br",
         "phone": "11995995353"
       },
       {
@@ -3070,7 +3070,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocIW8wvT7zMznvjSrDzSDsEnFdU0q03gLs8FTom7RUyoqV8i_uI=s96-c",
         "job_title": "Coordenadora de Atendimento",
         "business_unit": "shared",
-        "email": "[REDACTED_EMAIL]",
+        "email": "walquiria.marquart@b4a.com.br",
         "phone": "11964395639"
       },
       {
@@ -3080,7 +3080,7 @@
         "avatar_url": "https://lh3.googleusercontent.com/a/ACg8ocI0I9qKptOt7vJ7InaHNS-uH2abex5c5s_gj1rLTAOd0xxVnA=s96-c",
         "job_title": "Analista de Compras Jr",
         "business_unit": "b2c",
-        "email": "[REDACTED_EMAIL]",
+        "email": "washington.silva@b4a.com.br",
         "phone": "11988763819"
       }
     ]

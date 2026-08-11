@@ -37,6 +37,15 @@ RELATION_BOARD_NAME = "SANDBOX - API SUNDAY - RELATION"
 WORKSPACE_ID = "22"
 FICT = "TESTE-FICTICIO"
 WEBHOOK_SITE = "https://webhook.site"
+SENSITIVE_FIELD_NAMES = {
+    "authorization",
+    "cookie",
+    "proxy-authorization",
+    "set-cookie",
+    "x-api-key",
+    "x-auth-token",
+    "x-sunday-token",
+}
 
 REPORT: list[dict] = []
 OWNED: dict[str, set[str]] = {
@@ -66,16 +75,58 @@ def _base() -> str:
     return os.environ.get("SUNDAY_API_URL", DEFAULT_API).strip().rstrip("/") or DEFAULT_API
 
 
-def _assert_write_allowed(method: str, path: str) -> None:
+def _sanitize(value: object) -> object:
+    """Remove credenciais de qualquer dado antes de adicioná-lo ao relatório."""
+    token = os.environ.get("SUNDAY_API_TOKEN", "")
+    if isinstance(value, dict):
+        return {
+            str(key): (
+                "[REDACTED]"
+                if str(key).lower() in SENSITIVE_FIELD_NAMES
+                else _sanitize(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize(item) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize(item) for item in value]
+    if isinstance(value, str) and token:
+        return value.replace(token, "[REDACTED]")
+    return value
+
+
+def _record(entry: dict) -> None:
+    REPORT.append(_sanitize(entry))
+
+
+def _assert_write_allowed(method: str, path: str, body: dict | None = None) -> None:
     """Bloqueia mutações fora dos sandboxes e de recursos criados pelo script."""
     if method == "GET":
         return
     parts = [p for p in path.split("?")[0].split("/") if p]
     if parts and parts[0] == "boards":
         if len(parts) == 1:  # POST /boards (criação do board RELATION)
-            return
+            if method == "POST" and body == {
+                "name": RELATION_BOARD_NAME,
+                "description": "Sandbox de teste de board_relation. Pode apagar.",
+                "template_key": "board",
+                "workspace_id": WORKSPACE_ID,
+            }:
+                return
+            raise GuardrailError("Criação de board fora do sandbox RELATION bloqueada.")
         second = parts[1]
         if second in OWNED["boards"]:
+            if len(parts) == 2:
+                if (
+                    method == "PATCH"
+                    and second == SANDBOX_BOARD_ID
+                    and body == {"hierarchy_depth": 2}
+                ):
+                    return
+                raise GuardrailError(
+                    f"Mutação direta do board bloqueada pelo guard-rail: {method} {path}",
+                )
             return
         resource_map = {
             "groups": "groups",
@@ -106,7 +157,7 @@ def api(
     timeout: int = 60,
 ) -> tuple[int, object]:
     """Chamada à API do Sunday com registro no relatório (token redigido)."""
-    _assert_write_allowed(method, path)
+    _assert_write_allowed(method, path, body)
     url = f"{_base()}{path}"
     data = raw_body
     headers = {"X-Sunday-Token": _token()}
@@ -130,7 +181,7 @@ def api(
         payload = json.loads(text) if text else None
     except json.JSONDecodeError:
         payload = text[:400]
-    REPORT.append(
+    _record(
         {
             "note": note,
             "method": method,
@@ -165,6 +216,21 @@ def preflight() -> None:
         print(
             f"ABORTADO: board {SANDBOX_BOARD_ID} não é o sandbox esperado "
             f"(nome retornado: {name!r}).",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    status, workspace = api("GET", f"/workspaces/{WORKSPACE_ID}", note="preflight workspace")
+    workspace_boards = workspace.get("boards", []) if isinstance(workspace, dict) else []
+    sandbox_in_workspace = any(
+        isinstance(candidate, dict)
+        and str(candidate.get("board_id")) == SANDBOX_BOARD_ID
+        and candidate.get("name") == SANDBOX_BOARD_NAME
+        for candidate in workspace_boards
+    )
+    if status != 200 or not sandbox_in_workspace:
+        print(
+            f"ABORTADO: board {SANDBOX_BOARD_ID} não pertence ao workspace "
+            f"{WORKSPACE_ID}.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -313,12 +379,17 @@ def teste2_tipos(item_id: str, second_item_id: str, me_id: str) -> None:
 
 def teste3_relation(item_80: str) -> tuple[str, str, str]:
     """board_relation entre sandbox 80 e o board RELATION (criado aqui)."""
-    _, boards = api("GET", "/boards", note="T3 boards visíveis (dedup do RELATION)")
+    _, workspace = api(
+        "GET",
+        f"/workspaces/{WORKSPACE_ID}",
+        note="T3 boards do workspace (dedup do RELATION)",
+    )
+    boards = workspace.get("boards", []) if isinstance(workspace, dict) else []
     relation_board_id = ""
     if isinstance(boards, list):
         for board in boards:
             if isinstance(board, dict) and board.get("name") == RELATION_BOARD_NAME:
-                relation_board_id = str(board["id"])
+                relation_board_id = str(board["board_id"])
     if not relation_board_id:
         _, payload = api(
             "POST",
@@ -333,6 +404,17 @@ def teste3_relation(item_80: str) -> tuple[str, str, str]:
         )
         relation_board_id = _own("boards", payload) or ""
     else:
+        status, relation_board = api(
+            "GET",
+            f"/boards/{relation_board_id}",
+            note="T3 valida board RELATION existente",
+        )
+        if (
+            status != 200
+            or not isinstance(relation_board, dict)
+            or relation_board.get("name") != RELATION_BOARD_NAME
+        ):
+            raise GuardrailError("Board RELATION existente não passou na validação.")
         OWNED["boards"].add(relation_board_id)
     if not relation_board_id:
         return "", "", ""
@@ -506,7 +588,7 @@ def teste8_webhook() -> None:
     try:
         token_info = _webhook_site("POST", "/token", {"default_status": 200})
     except Exception as exc:  # noqa: BLE001 — rede externa opcional
-        REPORT.append({"note": "T8 webhook.site indisponível", "error": str(exc)})
+        _record({"note": "T8 webhook.site indisponível", "error": str(exc)})
         print(f"T8 pulado: webhook.site indisponível ({exc})")
         return
     hook_id = token_info["uuid"]
@@ -537,7 +619,7 @@ def teste8_webhook() -> None:
         deliveries = result.get("data", []) if isinstance(result, dict) else []
         if deliveries:
             break
-    REPORT.append(
+    _record(
         {
             "note": "T8 entregas com endpoint 200",
             "count": len(deliveries),
@@ -557,7 +639,7 @@ def teste8_webhook() -> None:
     try:
         _webhook_site("PUT", f"/token/{hook_id}", {"default_status": 500})
     except Exception as exc:  # noqa: BLE001
-        REPORT.append({"note": "T8 não conseguiu configurar 500", "error": str(exc)})
+        _record({"note": "T8 não conseguiu configurar 500", "error": str(exc)})
     api(
         "POST",
         f"/boards/{SANDBOX_BOARD_ID}/items",
@@ -567,7 +649,7 @@ def teste8_webhook() -> None:
     time.sleep(180)
     result = _webhook_site("GET", f"/token/{hook_id}/requests?sorting=newest")
     error_phase = result.get("data", []) if isinstance(result, dict) else []
-    REPORT.append(
+    _record(
         {
             "note": "T8 entregas na fase 500 (retries em ~3min)",
             "total_requests_no_endpoint": len(error_phase),
