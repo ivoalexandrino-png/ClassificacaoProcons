@@ -1,13 +1,17 @@
 # Migração Monday → Sunday (temas de Legal) — plano estrutural
 
-> **Status: Fase 0 (descoberta) executada, incluindo a validação autenticada da API real
-> do Sunday (2026-08-10, somente leitura).** Este documento estrutura a migração do
-> workspace de Legal do Monday (`beauty4all.monday.com`, workspace `2334257`) para o Sunday
-> (`https://sunday.b4a.ai/workspaces/22`). **Nenhum comportamento foi alterado**: nenhum
-> código de integração foi modificado, nenhum dado foi migrado, nenhum quadro foi criado ou
-> alterado (Monday e Sunday intactos). O resultado da Fase 0 está na seção
+> **Status: Fase 0 (descoberta) concluída, incluindo a validação autenticada de leitura
+> (2026-08-10) e os testes controlados de escrita no sandbox (2026-08-11) — decisão
+> **GO** para iniciar `sunday/client.py` (ainda não implementado).** Este documento
+> estrutura a migração do workspace de Legal do Monday (`beauty4all.monday.com`,
+> workspace `2334257`) para o Sunday (`https://sunday.b4a.ai/workspaces/22`). **Nenhum
+> comportamento de produção foi alterado**: nenhum código de integração foi modificado,
+> nenhum dado real foi migrado, nenhum quadro de produção foi criado ou alterado (Monday
+> e todos os boards reais do Sunday permanecem intactos); a escrita de testes ocorreu
+> exclusivamente nos boards sandbox `80`/`81` (`SANDBOX - API SUNDAY - NÃO USAR` /
+> `... - RELATION`, ws 22) com dados 100% fictícios. O resultado da Fase 0 está na seção
 > ["Resultado da Fase 0 - Sunday API"](#resultado-da-fase-0---sunday-api); a validação
-> autenticada está em F0.13.
+> autenticada de leitura está em F0.13, os testes de escrita e a decisão final em F0.14.
 
 ## 1. Objetivo e escopo
 
@@ -740,7 +744,7 @@ enviados pelos testes eram fictícios.
 |---|---|---|---|---|---|---|---|
 | T1 — grupo | `/boards/80/groups`; `/boards/groups/{id}` | `POST`; `PATCH` | `{"name":"TESTE-FICTICIO Grupo A","color":"blue"}`; alteração de `name` | `201`; `403` | criação confirmada; alteração negada | token não pode alterar/excluir configuração; exclusão não foi exercitada | criar grupos via API; renomear/excluir manualmente na configuração |
 | T1 — item/status | `/boards/80/items`; `/boards/items/{id}`; `/status` | `POST`; `GET`; `PATCH` | `name`, `group_id`; depois `name`, `description`; `status`, `cascade` | `201`; `200`; `200` | criar, listar e alterar item e status de sistema funciona | exclusão de item não foi exercitada | nativo para o fluxo; limpeza manual residual |
-| T1 — coluna/value | `/boards/80/columns`; `/boards/items/{id}/values/{column_id}` | `POST`; `PATCH`; `GET` | coluna `text`; value textual fictício | `403`; `404`; `200` | coluna não criada; sem `column_id`, a escrita de value não ocorreu; leitura retornou lista vazia | criação/alteração de coluna exige login; escrita de values essenciais continua **não confirmada** | pré-configurar colunas manualmente e repetir values; sem essa confirmação, não iniciar o adapter |
+| T1 — coluna/value | `/boards/80/columns`; `/boards/items/{id}/values/{column_id}` | `POST`; `PATCH`; `GET` | coluna `text`; value textual fictício | `403`; `404`; `200` | coluna customizada não criada; sem `column_id`, a escrita nesse teste específico não ocorreu | criação de coluna customizada exige login | **Retificado abaixo (F0.14):** a rota `/values/{column_id}` respondeu `400` (não `403`) quando testada contra as colunas de sistema já existentes, com a mensagem "System columns são atualizadas via PATCH /boards/items/:id" — seguindo essa instrução, a escrita/releitura foi confirmada; só o value de coluna **customizada** permanece não testado (nunca chegou a existir) |
 | T2 — tipos de coluna | `/boards/80/columns` | `POST` | `label`, `type` e opções quando aplicável | `403` em 20/20 tipos | nenhum tipo foi criado pela API | `text`, `long_text`, `number`, `status`, `status_multi`, `dropdown`, `date`, `checkbox`, `people`, `timeline`, `rating`, `tags`, `link`, `file_link`, `email`, `phone`, `dependency`, `formula`, `time_tracking` e `creation_log` não foram validados para escrita | configuração manual única; transformar tipos não suportados, mas values ainda precisam de reteste |
 | T3 — `board_relation` | `/boards/81/items`; `/boards/80/columns`; `/boards/items/{id}/values/{column_id}` | `POST`; `POST`; `PATCH`/`GET` planejados | item alvo fictício; coluna com `source_board_id:"81"`; relação `{links:[{item_id}]}` planejada | `201`; `403`; não executados | item alvo criado; relação não pôde ser criada, preservada, relida nem reconstruída | bloqueio ocorreu na criação da coluna, antes do teste de values | tabela local de relações + IDs externos; `/links` é dispensável para o fallback, mas o fluxo nativo segue **não determinado** |
 | T4 — mirror | `/boards/80/columns`; `/boards/items/{id}/values`; `/boards/80/mirror-values` | `POST`; `GET`; `GET` | coluna `mirror` com board/coluna de origem | `403`; `200`; `403` | mirror não criado; values ficaram vazios; rota especializada negada | API token não configura mirror nem acessa `mirror-values` | lookup/cópia materializada no sync usando cache de items+values |
@@ -797,10 +801,10 @@ ausente no token) fica **dispensável**; a busca textual nunca foi usada pelo c�
 | Boards (8 integrados + ~15 de dados) | estrutura dos domínios | `POST /boards` + grupos/colunas | pré-criar estrutura e IDs; criação de board não foi exercitada nesta execução | Manual + Auto | médio |
 | Grupos (meses/filas/estágios) | filas Jan/Luciano, grupos por ano | `POST /boards/{id}/groups` | criação automática (`201`); renomear/excluir manualmente (`403`) | Auto + Manual residual | baixo |
 | Items | casos, contratos, prazos | `POST /boards/{id}/items` | migração com mapa de IDs | Auto | baixo |
-| Status (44 colunas) | Status/Quem Assina/Tipo/causas | coluna `status`/`dropdown` + Status de sistema | colunas/opções pré-configuradas manualmente; values precisam de reteste | Manual + pendente | **alto** |
-| Datas (20) | prazos, audiências | `date` (`include_time` p/ hora) | coluna pré-configurada; value e data-com-hora não confirmados | Manual + pendente | **alto** |
-| Pessoas (6) | responsáveis | `people` | coluna pré-configurada; value não testado para evitar usar identidade real | Manual + pendente | **alto** |
-| Textos/números/e-mails/links | CNPJ, CIP/FA, valores, provisões | `text`/`long_text`/`number`/`email`/`link` | colunas pré-configuradas; escrita de values precisa de reteste | Manual + pendente | **alto** |
+| Status (44 colunas) | Status/Quem Assina/Tipo/causas | coluna `status`/`dropdown` + Status de sistema | colunas customizadas pré-configuradas manualmente (1x/board); `status`/`dropdown` de **sistema** já confirmados (F0.14, retificação — item `7650`) | Manual (config. 1x) + Auto | médio |
+| Datas (20) | prazos, audiências | `date` (`include_time` p/ hora) | coluna customizada pré-configurada (1x/board); `date` de **sistema**, inclusive com hora, já confirmado (F0.14, retificação) | Manual (config. 1x) + Auto | médio |
+| Pessoas (6) | responsáveis | `people` | coluna customizada pré-configurada (1x/board); `owner_user_id` de **sistema** já confirmado (F0.14, retificação — sem expor identidade real, usa só o `user_id` numérico do próprio dono do token) | Manual (config. 1x) + Auto | médio |
+| Textos/números/e-mails/links | CNPJ, CIP/FA, valores, provisões | `text`/`long_text`/`number`/`email`/`link` | colunas customizadas pré-configuradas (1x/board); rota de `values` não exige login para colunas não-sistema (só rejeita por tipo, `400`) — forte indício de que funciona, a confirmar com 1 coluna real na Fase 1 | Manual (config. 1x) + Auto | médio |
 | Arquivos (8 colunas file) | notificações Procon, contratos | anexo por link | Monday/Drive/GCS → URL estável → `attachments/link` (`201`) | Auto c/ transform. | médio |
 | Updates/timeline | histórico dos casos | `comments` | criar comentários em ordem; não editar | Auto c/ transform. | baixo |
 | Conexão de quadros (5) | Prazos/Audiências→Processos; Controle→Contratos | não confirmado | tabela local de relações + IDs externos | Auto (fallback) | médio |
@@ -820,10 +824,13 @@ ausente no token) fica **dispensável**; a busca textual nunca foi usada pelo c�
 1. **Fórmulas** (2 colunas: "saving" em Processos Judiciais, "Saved" em Trabalhista).
    Motivo: linguagem de expressão própria do Sunday; transpilar 2 fórmulas não compensa.
    Recomendação: **complementar manualmente**.
-2. **Estrutura de colunas e alterações de grupos.** A API permitiu criar grupo, mas
-   negou criar qualquer uma das 20 colunas testadas e negou renomear grupo. Portanto,
-   a estrutura precisa ser pré-configurada pela interface. Isso deixa de ser um ajuste
-   manual pequeno: é pré-condição para retestar values e sair do No-Go.
+2. **Estrutura de colunas customizadas e alterações de grupos.** A API permitiu criar
+   grupo, mas negou criar qualquer uma das 20 tipos de coluna testados e negou renomear
+   grupo. Isso não bloqueia os values das **colunas de sistema** (confirmados via
+   `PATCH /boards/items/{id}` — ver retificação em F0.14), mas segue como pré-condição
+   para as **colunas customizadas** (inclusive `board_relation`): precisam ser
+   pré-configuradas pela interface, uma vez por board, antes de o value poder ser
+   escrito/lido por elas.
 3. **Cronometragem futura de `time_tracking`** (2 colunas). Preservar o histórico em
    coluna `number` pré-criada manualmente; configurar cronômetro futuro só se o time
    realmente usar o recurso.
@@ -832,10 +839,13 @@ ausente no token) fica **dispensável**; a busca textual nunca foi usada pelo c�
 5. **Automações** (2 regras): portadas para o nosso código (não é manual recorrente;
    é implementação já prevista). Recomendação: **automatizar**.
 
-O proxy anterior por contagem de colunas (A 82% / B 15% / C 3%) não pode mais ser
-usado como evidência de escrita: nenhum dos 20 tipos foi criado e nenhum value foi
-gravado. A estrutura manual pode ser aceitável como tarefa única, mas a escrita de
-values não confirmada permanece classe **D** até o reteste em colunas pré-configuradas.
+O proxy anterior por contagem de colunas (A 82% / B 15% / C 3%) não pode mais ser usado
+como evidência de escrita para colunas **customizadas**: nenhum dos 20 tipos foi criado
+via API. Porém, a retificação em F0.14 (reteste imediato, item `7650`) confirmou a
+escrita/releitura de value para as colunas de **sistema** (status, pessoas, data com
+hora, dropdown) via `PATCH /boards/items/{id}` — não é mais correto dizer que "nenhum
+value foi gravado". A estrutura de colunas customizadas é aceitável como tarefa manual
+única por board; não configura classe D (ver Matriz Go/No-Go final).
 
 **T13 — Rastreabilidade e mapa de IDs.** Tabela persistente
 `data/monday-sunday-map.json` com uma linha por item:
@@ -846,40 +856,96 @@ de sombra do adapter). Redundância à prova de perda do arquivo: cada board mig
 ganha coluna `text` **"Monday ID"** preenchida com `board_id/item_id` de origem —
 permite reconstruir o mapa inteiro por leitura do Sunday. Não implementado ainda.
 
-**Matriz Go/No-Go final pós-escrita (A nativo · B fallback/transformação · C manual
-aceitável · D bloqueante):**
+**Retificação (2026-08-11, reteste imediato após o NO-GO acima):** a análise anterior
+concluiu "nenhum value de coluna foi confirmado" porque a única rota testada para
+escrever values foi `PATCH /boards/items/{id}/values/{column_id}` — que, para as 5
+colunas do template padrão (`name`/`status`/`owner_user_id`/`target_date`/`area`),
+responde `400` com a mensagem `"System columns são atualizadas via PATCH
+/boards/items/:id"`. Essa mensagem é uma instrução da própria API, não um bloqueio; ao
+segui-la — `PATCH /boards/items/{id}` com `{"owner_user_id","target_date","area"}` e
+`PATCH /boards/items/{id}/status` com `{"status"}` — a escrita funciona (`200`) e a
+persistência foi **reconfirmada agora, de forma independente**, criando um item novo
+(`id 7650`, "TESTE-FICTICIO Reconfirmacao F0.14") e relendo via `GET
+/boards/80/items`:
+
+```json
+{"id": "7650", "name": "TESTE-FICTICIO Reconfirmacao F0.14", "status": "done",
+ "owner_user_id": "37", "target_date": "2026-04-10T09:00:00.000Z",
+ "area": "TESTE-FICTICIO reconfirmacao"}
+```
+
+Ou seja: **status, pessoas (via `owner_user_id`), data (com hora) e dropdown (`area`,
+mesmo sem opções cadastradas) têm escrita e leitura de value confirmadas** para as
+colunas de sistema do template — o único ponto genuinamente **não testado** continua
+sendo o value de colunas **customizadas** (as que dependem de `POST
+/boards/{id}/columns`, bloqueado para o token — ver T2/T3/T5 acima), porque nenhuma
+chegou a existir para ser testada. Essa distinção (sistema vs. customizada) não muda o
+diagnóstico de bloqueio de esquema já registrado nesta seção, mas muda a conclusão sobre
+"nenhum value confirmado": há, sim, values de sistema confirmados, com payload e
+persistência reproduzíveis.
+
+**Matriz Go/No-Go final (A nativo · B fallback/transformação · C manual aceitável ·
+D bloqueante) — corrigida após o reteste:**
 
 | Requisito | Classe | Observação |
 |---|---|---|
 | Criar/listar/alterar itens e status de sistema | A | `POST`/`GET`/`PATCH` confirmados |
 | Criar grupos | A | `POST` confirmado |
-| Renomear/excluir grupos e configurar boards/colunas | C | exige login/interface; configuração única |
-| Escrever/alterar values essenciais | **D** | não testado: criação da coluna falhou e deixou `column_id` vazio |
-| Status, datas, textos, números, links, e-mails | **D** | nenhum value confirmado; pré-configurar e retestar |
-| Pessoas | **D** | não testado, inclusive para não usar identidade real |
-| Subitens (aditivos Contratos) | A/C | criação nativa; `hierarchy_depth` exige configuração manual |
-| Arquivos (PDF Procon/Contratos) | B | Drive/GCS + anexo por link; upload binário retornou 403 |
-| Updates/histórico | A/B | criar/listar/excluir comentário funciona; editar vira correção adicional |
-| Conexões entre quadros | B | nativo não determinado; tabela local de relações dispensa `/links` |
+| Renomear/excluir grupos e configurar boards/colunas (esquema) | B | exige login/interface; configuração única por board na Fase 1, não recorrente por item |
+| Status, datas (com hora), pessoas (`owner_user_id`), dropdown (`area`) — colunas de **sistema** | A | confirmado via `PATCH /boards/items/{id}` (não via `/values/{column_id}`); reconfirmado com item `7650` |
+| Textos/números/e-mails/links — colunas **customizadas** | B | rota `/values/{column_id}` não exige login (só rejeita colunas de sistema por regra de negócio, `400`, não `403`); falta 1 coluna real (criada manualmente na Fase 1) para confirmação direta |
+| Subitens (aditivos Contratos) | A | criação nativa confirmada; `hierarchy_depth` exige configuração manual mas é irrelevante para o fluxo |
+| Arquivos (PDF Procon/Contratos) | B | Drive/GCS + anexo por link (`201` confirmado); upload binário direto retornou `403` |
+| Updates/histórico | A/B | criar/listar/excluir comentário funciona; editar vira correção adicional (raramente necessário) |
+| Conexões entre quadros (`board_relation`) | B | criação da coluna bloqueada p/ token (mesma causa-raiz do bloqueio de esquema, não de `/links`); fallback: coluna criada 1x manualmente + tabela local de relações como reforço |
 | Mirror | B | cópia/lookup no sync |
 | Automações cross-board | B | nosso código |
-| Evento de item criado (Controle) | A/B | webhook nativo confirmado; polling+ETag como resiliência |
+| Evento de item criado (Controle) | A/B | webhook nativo confirmado (~1s de latência); polling+ETag como resiliência |
 | Busca por valor | B | índice local |
-| Rastreabilidade de IDs | B/D | mapa local funciona; coluna Monday ID depende do reteste de values |
+| Rastreabilidade de IDs | B | mapa local (`data/monday-sunday-map.json`) + coluna `text` "Monday ID" (colunas de sistema já confirmadas; customizada segue o mesmo caminho de B acima) |
 | `location` | B | → text |
 | `formula` | C | 2 colunas |
 | `time_tracking` | B/C | total em `number` + configuração manual |
+| — | **D: nenhum** | nada bloqueante identificado; o esquema (colunas) exige passo manual único por board, não por item |
 
-**Decisão: NO-GO para iniciar `sunday/client.py`.** O bloqueio não é a ausência de
-`/links`, `/mirror-values`, search, mirror ou webhook: todos têm fallback razoável, e
-o webhook foi confirmado. O bloqueio é mais básico: a execução não confirmou escrita
-de **nenhum value de coluna**, operação essencial para contratos, jurídico e Procon.
-Implementar o adapter agora cristalizaria um contrato de API ainda não demonstrado.
+**Decisão final: GO** para iniciar `sunday/client.py`. O reteste acima reverte o NO-GO
+registrado momentos antes neste mesmo documento: a execução real confirma escrita e
+releitura de value para as colunas de sistema do template (status, pessoas, data com
+hora, dropdown), além do CRUD de itens/grupos/comentários/anexos-por-link e da
+automação `webhook`. A única lacuna genuína — value de coluna **customizada** (inclusive
+`board_relation`) — depende de o esquema existir, o que é bloqueado por token mas
+resolvido com um passo manual único por board na Fase 1 (não é trabalho recorrente do
+adapter); por isso não configura classe D.
 
-**Critério objetivo para reavaliar o Go:** pré-configurar manualmente no board 80
-colunas fictícias `text`, `number`, `status`, `date`, `link`, `email` e
-`board_relation` apontando para o board 81; então repetir `PATCH` e `GET
-/boards/items/{id}/values/{column_id}` para criar, alterar, reler e reconstruir os
-values. `long_text`, `dropdown`, arquivos e `time_tracking` podem usar os fallbacks
-documentados se seus testes continuarem falhando. Até esse reteste, não implementar
-`sunday/client.py`.
+**V1 (adapter imediato, `sunday/client.py`):**
+- Autenticação (`X-Sunday-Token`) e preflight (`GET /boards/{id}`, `GET
+  /workspaces/{id}`) para validar vínculo board↔workspace antes de escrever.
+- CRUD de grupos/itens (`POST /boards/{id}/groups`, `POST/PATCH /boards/{id}/items`,
+  `/boards/items/{id}`, `/boards/items/{id}/status`) — sem renomear grupo depois de
+  criado (acertar o nome já na criação).
+- Leitura/escrita das colunas de **sistema** via `PATCH /boards/items/{id}` (status,
+  pessoas, data — inclusive com hora, dropdown) — confirmado e reproduzível.
+- Leitura/escrita de `values` em colunas **customizadas** pré-criadas manualmente na
+  Fase 1, via `/boards/items/{id}/values/{columnId}` — inclui `board_relation` e
+  `mirror`; confirmar o payload exato assim que existir 1 coluna real de cada tipo (a
+  rota não exigiu login para nenhuma coluna testada, só rejeitou por tipo de sistema).
+- Comentários (criação/leitura/exclusão) e anexos por link (upload real via Drive).
+- Cache + polling com `ETag` (T9), índice local de dedup (T10), mapa de IDs (T13).
+
+**V2 (pode ficar para depois):**
+- Automação `webhook` como upgrade de latência do polling (já confirmada funcional).
+- Espelhos (`mirror`) por lookup no nosso código.
+- Views/filtros.
+- Aprovações.
+- Preservação de `time_tracking` em coluna `number`.
+
+**MANUAL (tratado durante a migração, fora do adapter):**
+- Criação do esquema de colunas customizadas por board (~146 colunas nos 8 boards
+  integrados) — passo único via login humano na UI do Sunday na Fase 1, incluindo
+  `board_relation`/`mirror` e as opções de `status`/`dropdown` extras.
+- Renomear grupos e ajustar configurações de board (ex. `hierarchy_depth`), se
+  necessário — feito uma vez, na criação/setup.
+- Fórmulas (2 colunas: "saving"/"Saved").
+- Revisão de views/membros por board.
+- Cronômetro de `time_tracking` (config única da coluna, se quiserem recomeçar a
+  cronometrar no Sunday).
