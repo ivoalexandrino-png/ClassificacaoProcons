@@ -707,3 +707,136 @@ O `id` do vínculo retornado por `GET /workspaces/22` é, respectivamente, `57`,
    Fase 1 para não sinalizar que credenciais entrarão no Sunday.
 8. O board **Legal - Audiências** (`72`) já tem 9 itens reais de uso manual — a Fase 2
    precisa **reconciliar** com o conteúdo existente, não só importar do Monday.
+
+### F0.14 Testes controlados de escrita e decisão Go/No-Go
+
+> Autorização de 2026-08-11: escrita permitida **somente** no board sandbox `80`
+> ("SANDBOX - API SUNDAY - NÃO USAR", ws 22) e no board "SANDBOX - API SUNDAY - RELATION"
+> (a ser criado via API). Decisões de projeto: trabalhar com a API existente (sem depender
+> do time do Sunday); migração não precisa ser 100% automática, mas a complementação
+> manual deve ser minimizada seguindo a ordem nativo → transformação → fallback em código
+> → tabela local → outro tipo de coluna → comentário/anexo → manual.
+
+**Status de execução:** os Testes 1–8 (escrita real) estão implementados em
+`scripts/sunday_fase0_write_tests.py`, mas **ainda não executados** — o secret
+`SUNDAY_API_TOKEN` não existe na VM desta sessão (segredos só são injetados em VMs
+novas; verificado em ambiente e processos). O script é autossuficiente e com
+guard-rails: confere o nome do board 80 antes de qualquer escrita, só grava nos dois
+sandboxes e em recursos criados por ele mesmo, usa apenas dados fictícios
+(`TESTE-FICTICIO…`), nunca imprime o token e gera relatório JSON por passo (endpoint,
+método, payload, status, resposta). Cobre: CRUD completo (T1), os 21 tipos de coluna
+(T2), board_relation com o segundo sandbox (T3), mirror (T5), anexos com PDF fictício
+gerado localmente (T6), comentários com menção/edição/exclusão (T7), automação
+`item_created`→`webhook` com endpoint de eco público e fase de erro 500 para observar
+retries (T8), subitens via `hierarchy_depth` e `GET /users/directory` (mapeamento de
+pessoas). Execução: `python scripts/sunday_fase0_write_tests.py` numa VM nova com os
+secrets (usar `--skip-webhook` para pular o T8).
+
+Os Testes 9–13 são analíticos e foram **concluídos** com os dados reais já coletados
+(F0.7 e F0.13):
+
+**T9 — Polling (arquitetura principal de Contratos).** Volume real do Controle no
+Monday: 1.607 itens (506 criados em 12 meses); recorte migrado estimado em 500–700
+itens. No Sunday, `GET /boards/{id}/items` traz a coleção completa numa chamada (sem
+paginação) e values são por item (N+1). Ciclo proposto para o
+`contratos-sync-controle`: (1) `GET items` com `If-None-Match` (ETag confirmado —
+304 quando nada mudou: ciclo de **1 request**); (2) se 200, diff por `id` (novos) e
+`updated_at`/hash (alterados) contra o cache local persistido
+(`data/sunday-cache-<board>.json`); (3) `GET values` **só** dos itens novos/alterados;
+(4) processar e gravar checkpoint. Primeiro ciclo (cache frio): ~1 + N requests
+(~600 para o Controle; a leitura autenticada fez ~370 requests em rajada sem 429),
+estimado em 2–4 minutos sequencial. Ciclos estáveis: 1–10 requests, segundos. Risco de
+rate limit: não publicado pela API; mitigar com burst moderado e backoff exponencial em
+429/5xx. **Viável.**
+
+**T10 — Search dispensável.** Identificadores usados pelo código atual: protocolo
+Procon, CPF, CNPJ, número CNJ, Autentique ID (no texto do link do item), título
+normalizado de contrato. Todos passam a ser resolvidos por **índice local** construído
+sobre o cache de items+values do T9 (dicionários por coluna-chave, reconstruíveis a
+qualquer momento — o cache não é fonte de verdade). `/boards/search` (escopo `search`
+ausente no token) fica **dispensável**; a busca textual nunca foi usada pelo código.
+
+**T11 — Matriz de compatibilidade Monday → Sunday (uso real da B4A):**
+
+| Recurso Monday | Uso real | Equivalente Sunday | Estratégia | Auto/Manual | Risco |
+|---|---|---|---|---|---|
+| Boards (8 integrados + ~15 de dados) | estrutura dos domínios | `POST /boards` + grupos/colunas | script idempotente Fase 1 | Auto | baixo |
+| Grupos (meses/filas/estágios) | filas Jan/Luciano, grupos por ano | `POST /boards/{id}/groups` | criação + de-para `group_id` | Auto | baixo |
+| Items | casos, contratos, prazos | `POST /boards/{id}/items` | migração com mapa de IDs | Auto | baixo |
+| Status (44 colunas) | Status/Quem Assina/Tipo/causas | coluna `status`/`dropdown` + Status de sistema | opções geradas do `settings_str`; cores aproximadas | Auto | baixo |
+| Datas (20) | prazos, audiências | `date` (`include_time` p/ hora) | direto (`YYYY-MM-DD`); formato com hora pendente de teste | Auto | baixo |
+| Pessoas (6) | responsáveis | `people` | de-para e-mail→`user_id` via `/users/directory` | Auto c/ transform. | médio (usuários ausentes no Sunday) |
+| Textos/números/e-mails/links | CNPJ, CIP/FA, valores, provisões | `text`/`long_text`/`number`/`email`/`link` | direto | Auto | baixo |
+| Arquivos (8 colunas file) | notificações Procon, contratos | anexos do item (`attachments/file`) + `file_link` | download do asset Monday → upload | Auto c/ transform. | médio (volume/limites) |
+| Updates/timeline | histórico dos casos | `comments` | corpo prefixado `[Monday · autor · data]` (autoria real vira do robô) | Auto c/ transform. | baixo |
+| Conexão de quadros (5) | Prazos/Audiências→Processos; Controle→Contratos | `board_relation` | valor `{links:[{item_id}]}` remapeado pelo mapa de IDs | Auto (pendente T3) | médio |
+| Mirror | espelhos nos quadros de legal | leitura bloqueada p/ token | cópia do valor no sync (lookup no nosso código) | Auto (fallback) | baixo |
+| Automações (2 regras) | Assinado→Contratos; mestre→audiências | sem `create_item` cross-board | regra no nosso código (+ automação `webhook` opcional pós-T8) | Auto (código) | médio |
+| Busca por valor de coluna | dedup protocolo/CPF/CNJ | inexistente | índice local (T10) | Auto (fallback) | baixo |
+| IDs externos | Autentique ID, estado local | — | coluna `text` "Monday ID"/"Autentique ID" + tabela de mapeamento | Auto | baixo |
+| Subitems | aditivos em Contratos (`register_contrato_subitem`), subelementos | `parent_item_id` + `hierarchy_depth≥2` | migrar como filhos nativos | Auto (pendente teste) | baixo |
+| Histórico (12 meses + abertos) | ~1.279 itens recentes de ~4.391 | — | recorte na exportação | Auto | baixo |
+| `location` (3) | local de audiência/origem | inexistente | degradar para `text` | Auto c/ transform. | nenhum |
+| `formula` (2) | saving/saved | `formula` com expressão própria | recriar expressão à mão (2 colunas) | **Manual** | nenhum |
+| `time_tracking` (2) | controle de tempo | tipo existe; escrita de histórico desconhecida | preservar total em `number` "Horas (Monday)" | Auto c/ fallback + **manual** se quiserem cronometrar | baixo |
+| Views/filtros | visões de trabalho | `POST /boards/{id}/views` | recriar principais; refinamento manual | Semi | nenhum |
+
+**T12 — Complementação manual (mínima, com fallback avaliado antes):**
+
+1. **Fórmulas** (2 colunas: "saving" em Processos Judiciais, "Saved" em Trabalhista).
+   Motivo: linguagem de expressão própria do Sunday; transpilar 2 fórmulas não compensa.
+   Impacto: 2 colunas, ~15 min. Recomendação: **complementar manualmente**.
+2. **Cronometragem futura de time_tracking** (2 colunas). O histórico é preservado
+   automaticamente em coluna `number`; recriar a coluna cronômetro (se o tipo não for
+   criável via API) é config única. Impacto: 2 boards, ~10 min. Recomendação:
+   **automatizar a preservação; config manual da coluna nova**.
+3. **Views/filtros e revisão de membros por board** (~8 boards). Motivo: preferência
+   visual do time; membros mapeáveis por API mas exigem conferência. Impacto: ~2h de
+   revisão única. Recomendação: **complementar manualmente** (baixa relevância técnica).
+4. **Automações** (2 regras): portadas para o nosso código (não é manual recorrente;
+   é implementação já prevista). Recomendação: **automatizar**.
+
+Proxy mensurável hoje (por colunas dos 8 boards integrados — 146 colunas; percentuais
+por item exigem o dry-run da Fase 2): **A — nativo direto: 120 colunas (~82%)**;
+**B — com transformação/fallback: 22 colunas (~15%)** (file 8, subtasks 6,
+board_relation 5, location 3); **C — manual: 4 colunas (~3%)** (formula 2,
+time_tracking 2). Nenhum D.
+
+**T13 — Rastreabilidade e mapa de IDs.** Tabela persistente
+`data/monday-sunday-map.json` com uma linha por item:
+`{monday_board_id, monday_item_id, sunday_board_id, sunday_item_id, domain,
+migration_status, migrated_at, error}` + seções de de-para de boards, grupos e colunas
+(`monday_column_id → sunday_column_id`, necessário para migrar values e para o período
+de sombra do adapter). Redundância à prova de perda do arquivo: cada board migrado
+ganha coluna `text` **"Monday ID"** preenchida com `board_id/item_id` de origem —
+permite reconstruir o mapa inteiro por leitura do Sunday. Não implementado ainda.
+
+**Matriz Go/No-Go (A funciona nativo · B fallback/transformação · C manual aceitável ·
+D bloqueante):**
+
+| Requisito | Classe | Observação |
+|---|---|---|
+| CRUD boards/grupos/itens/values/comentários | A* | *pendente confirmação de escrita (script pronto) |
+| Status, datas, textos, números, links, e-mails | A* | idem; data-com-hora pendente |
+| Pessoas | B | de-para de usuários |
+| Subitens (aditivos Contratos) | A* | `hierarchy_depth` no teste |
+| Arquivos (PDF Procon/Contratos) | B | anexos do item |
+| Updates/histórico | B | comments com autoria em texto |
+| Conexões entre quadros | A*/B | T3 decide; fallback: tabela local de relações |
+| Mirror | B | cópia/lookup no sync |
+| Automações cross-board | B | nosso código |
+| Evento de item criado (Controle) | B | polling (T9); `webhook` de automação como upgrade pós-T8 |
+| Busca por valor | B | índice local |
+| Rastreabilidade de IDs | B | mapa + coluna Monday ID |
+| `location` | B | → text |
+| `formula` | C | 2 colunas |
+| `time_tracking` | C | preservação automática + config manual |
+| — | **D: nenhum** | nada bloqueante identificado |
+
+**Decisão: GO condicional** para `sunday/client.py` — nenhuma classe D; a condição é
+executar `scripts/sunday_fase0_write_tests.py` (VM com os secrets) e confirmar os
+payloads de escrita, em especial T3 (reconstrução de `board_relation` pelos values) e
+T8 (semântica do webhook). Escopo V1 do adapter: auth, CRUD de itens/values,
+comentários, anexos, cache+polling com ETag, índice local de dedup, mapa de IDs.
+V2: automação `webhook`, espelhos por lookup, views, aprovações. Manual na migração:
+fórmulas, revisão de views/membros.
