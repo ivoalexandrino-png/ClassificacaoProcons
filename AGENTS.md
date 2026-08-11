@@ -81,6 +81,8 @@ gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" -f dry_run=fa
 
 **Pausa de criação no Controle:** por padrão **não** criamos novos itens no quadro (`CONTROLE_PAUSE_CREATE=true` ou variável ausente). Sync, webhooks `document.created` e `register-controle` continuam com vínculo legado, reparo de filas Jan/Luciano e atualização de status. Para criar faltantes de propósito: `CONTROLE_PAUSE_CREATE=false` ou `contratos-webhook sync-controle --allow-create`.
 
+**Kill switch de escrita (Controle Assinaturas):** por padrão **nenhuma** mutation Monday desta integração (`CONTROLE_WRITE_ENABLED=false` ou ausente). Compare/diagnósticos e `dry_run` continuam. Para reativar writes em produção: `CONTROLE_WRITE_ENABLED=true` (junto com política de criação acima).
+
 ### Questor (certidões negativas + caixa postal fiscal)
 
 Agente que lê o retrato do Questor Zen (`https://<conta>.zen.questor.com.br`) — situação das certidões (Federal/PGFN, Estadual, Municipal, FGTS, etc.) e mensagens da caixa postal (DTE/e-CAC) — detecta pendências e, havendo problema **novo**, envia e-mail ao time fiscal e de contabilidade.
