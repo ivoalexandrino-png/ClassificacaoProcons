@@ -212,6 +212,7 @@ class ExecutionPlan:
     relations_to_create: list[RelationWrite] = field(default_factory=list)
     relations_unresolved: list[RelationWrite] = field(default_factory=list)
     gate: list[GateCheck] = field(default_factory=list)
+    monday_item_id: str | None = None
 
     @property
     def gate_ok(self) -> bool:
@@ -223,14 +224,19 @@ class ExecutionPlan:
             result[operation.action] = result.get(operation.action, 0) + 1
         return result
 
+    @property
+    def source_scope(self) -> int:
+        return len(self.operations)
+
     def to_payload(self) -> dict:
         """Relatório sanitizado (ids técnicos e contagens; sem PII/conteúdo)."""
-        return {
+        payload = {
             "monday_board_id": self.monday_board_id,
             "sunday_board_id": self.sunday_board_id,
             "wave": self.wave,
             "mode": self.mode,
             "max_items": self.max_items,
+            "source_scope": self.source_scope,
             "snapshot": {
                 "fingerprint": self.snapshot_fingerprint,
                 "total": self.snapshot_total,
@@ -247,7 +253,10 @@ class ExecutionPlan:
                 for check in self.gate
             ],
             "gate_ok": self.gate_ok,
-            "operations": [
+        }
+        if self.monday_item_id is not None:
+            payload["monday_item_id"] = self.monday_item_id
+        payload["operations"] = [
                 {
                     "monday_item_id": op.monday_item_id,
                     "disposition": op.disposition,
@@ -265,8 +274,8 @@ class ExecutionPlan:
                     "blocked_reason": op.blocked_reason,
                 }
                 for op in self.operations
-            ],
-        }
+            ]
+        return payload
 
 
 def _owner_resolution(item: MondayItemDigest, policy: UserMappingPolicy | None) -> str:
@@ -288,6 +297,55 @@ def _wave_label(wave: int) -> str:
     return f"WAVE_{wave}"
 
 
+def validate_monday_item_allowlist(
+    monday_item_id: str,
+    *,
+    board_id: str,
+    inventory: MondayBoardInventory,
+    report: DryRunReport,
+    wave: int,
+) -> str:
+    """Garante que o item existe no board e pertence à onda informada (fail-closed)."""
+    item_ids = {item.item_id for item in inventory.items}
+    if monday_item_id not in item_ids:
+        raise ExecutorAbort(
+            f"Item {monday_item_id} não encontrado no board Monday {board_id}.",
+        )
+    wave_label = _wave_label(wave)
+    wave_items = {
+        result.monday_item_id
+        for result in report.items
+        if result.monday_board_id == board_id and result.wave == wave_label
+    }
+    if monday_item_id not in wave_items:
+        raise ExecutorAbort(
+            f"Item {monday_item_id} não pertence à {wave_label} do board {board_id}.",
+        )
+    return monday_item_id
+
+
+def _apply_item_allowlist(
+    *,
+    monday_item_id: str,
+    operations: list[PlannedOperation],
+    relations: list[RelationWrite],
+) -> tuple[list[PlannedOperation], list[RelationWrite]]:
+    """Restringe o plano a um único Monday item; aborta se ambíguo ou ausente."""
+    matched = [op for op in operations if op.monday_item_id == monday_item_id]
+    if not matched:
+        raise ExecutorAbort(
+            f"Filtro --item-id {monday_item_id}: nenhuma operação no escopo da onda.",
+        )
+    if len(matched) > 1:
+        raise ExecutorAbort(
+            f"Filtro --item-id {monday_item_id}: {len(matched)} operações (esperado 1).",
+        )
+    filtered_relations = [
+        relation for relation in relations if relation.source_monday_item_id == monday_item_id
+    ]
+    return matched, filtered_relations
+
+
 def build_execution_plan(
     *,
     inventory: MondayBoardInventory,
@@ -299,6 +357,7 @@ def build_execution_plan(
     persistent_ledger: dict[str, dict] | None = None,
     sunday_monday_id_index: dict[str, str] | None = None,
     sunday_schema_checks: list[GateCheck] | None = None,
+    monday_item_id: str | None = None,
 ) -> ExecutionPlan:
     """Monta o plano executável a partir do dry-run canônico (zero escrita)."""
     board_id = inventory.board_id
@@ -414,6 +473,20 @@ def build_execution_plan(
             )
             relations.append(write)
 
+    if monday_item_id is not None:
+        validate_monday_item_allowlist(
+            monday_item_id,
+            board_id=board_id,
+            inventory=inventory,
+            report=report,
+            wave=wave,
+        )
+        operations, relations = _apply_item_allowlist(
+            monday_item_id=monday_item_id,
+            operations=operations,
+            relations=relations,
+        )
+
     plan = ExecutionPlan(
         monday_board_id=board_id,
         sunday_board_id=sunday_board_id,
@@ -426,6 +499,7 @@ def build_execution_plan(
         operations=operations,
         relations_to_create=[write for write in relations if not write.unresolved],
         relations_unresolved=[write for write in relations if write.unresolved],
+        monday_item_id=monday_item_id,
     )
     plan.gate = _build_gate(plan, sunday_schema_checks or [])
     return plan

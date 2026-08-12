@@ -23,6 +23,7 @@ from classificacao_procons.migration.executor import (
     persist_ledger_record,
     snapshot_fingerprint,
     sunday_config_from_test_env,
+    validate_monday_item_allowlist,
 )
 from classificacao_procons.migration.models import (
     MondayBoardInventory,
@@ -60,7 +61,8 @@ def _kpi_inventory(items=None) -> MondayBoardInventory:
 
 
 def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
-              monday_id_index=None, policy=POLICY, schema_checks=None):
+              monday_id_index=None, policy=POLICY, schema_checks=None,
+              monday_item_id=None):
     report, _plans, _pulled = run_dry_run(
         {inventory.board_id: inventory},
         {},
@@ -77,6 +79,7 @@ def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
         persistent_ledger=ledger,
         sunday_monday_id_index=monday_id_index,
         sunday_schema_checks=schema_checks,
+        monday_item_id=monday_item_id,
     )
 
 
@@ -538,3 +541,70 @@ def test_snapshot_fingerprint_is_stable_and_sensitive():
         ),
     )
     assert snapshot_fingerprint(inventory) != snapshot_fingerprint(changed)
+
+
+def test_item_allowlist_scopes_plan_to_single_item():
+    inventory = _kpi_inventory(
+        tuple(
+            MondayItemDigest(item_id=str(i), group_id="g2023", created_at=RECENT,
+                             updated_at=RECENT, has_updates=(i == 2))
+            for i in range(1, 4)
+        ),
+    )
+    plan = _plan_for(inventory, max_items=1, monday_item_id="2")
+    assert plan.monday_item_id == "2"
+    assert plan.source_scope == 1
+    assert len(plan.operations) == 1
+    assert plan.operations[0].monday_item_id == "2"
+    assert plan.operations[0].action == "create"
+    assert plan.operations[0].comments_to_create == 1
+    payload = plan.to_payload()
+    assert payload["source_scope"] == 1
+    assert payload["monday_item_id"] == "2"
+
+
+def test_item_allowlist_aborts_when_item_missing_from_board():
+    inventory = _kpi_inventory()
+    report, _, _ = run_dry_run(
+        {inventory.board_id: inventory},
+        {},
+        user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        validate_monday_item_allowlist(
+            "99999",
+            board_id=inventory.board_id,
+            inventory=inventory,
+            report=report,
+            wave=1,
+        )
+
+
+def test_item_allowlist_aborts_when_item_not_in_wave():
+    inventory = MondayBoardInventory(
+        board_id=KPI_BOARD,
+        name="KPI",
+        groups={"g2023": "2023"},
+        columns=(MondayColumnInfo(id="name", title="Name", type="name"),),
+        items=(
+            MondayItemDigest(
+                item_id="1", group_id="g2023", created_at=RECENT,
+                updated_at=RECENT,
+            ),
+        ),
+    )
+    report, _, _ = run_dry_run(
+        {inventory.board_id: inventory},
+        {},
+        user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    with pytest.raises(ExecutorAbort, match="WAVE_2"):
+        validate_monday_item_allowlist(
+            "1",
+            board_id=inventory.board_id,
+            inventory=inventory,
+            report=report,
+            wave=2,
+        )

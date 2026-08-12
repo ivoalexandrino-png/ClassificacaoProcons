@@ -34,6 +34,7 @@ from classificacao_procons.migration.executor import (
     load_persistent_ledger,
     snapshot_fingerprint,
     sunday_config_from_test_env,
+    validate_monday_item_allowlist,
 )
 from classificacao_procons.migration.mappings import build_board_plan, sunday_board_by_monday_map
 from classificacao_procons.migration.monday_inventory import (
@@ -85,6 +86,10 @@ def main() -> int:
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
     parser.add_argument("--mode", default="plan", choices=("plan", "apply"))
     parser.add_argument("--max-items", required=True, type=int)
+    parser.add_argument(
+        "--item-id",
+        help="allowlist explícita: PLAN/APPLY somente para este monday_item_id",
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -179,27 +184,48 @@ def main() -> int:
         sunday_snapshots = load_snapshot_file(args.sunday_snapshot)
 
     if args.mode == "apply" and client is not None:
-        sunday_items = client.list_items(KPI_SUNDAY_BOARD).items
-        if len(sunday_items) != 0:
-            print(f"ABORT: Sunday board {KPI_SUNDAY_BOARD} items={len(sunday_items)} (esperado 0).")
-            return 3
-        monday_id_column_id = _find_monday_id_column(sunday_snapshots[KPI_SUNDAY_BOARD])
-        live_index = build_sunday_monday_id_index(
-            client,
-            board_id=KPI_SUNDAY_BOARD,
-            monday_id_column_id=monday_id_column_id,
-        )
-        if live_index:
-            print(f"ABORT: Monday IDs já existentes no Sunday: {len(live_index)}.")
-            return 3
-        ledger = load_persistent_ledger(args.ledger)
-        ledger_hits = sum(
-            1 for item in inventory.items
-            if ledger.get(f"{args.board}:{item.item_id}", {}).get("migration_status") == "migrated"
-        )
-        if ledger_hits:
-            print(f"ABORT: ledger entries existentes para KPI: {ledger_hits}.")
-            return 3
+        sunday_board = BOARD_ALLOWLIST[args.board]
+        if args.item_id:
+            monday_id_column_id = _find_monday_id_column(sunday_snapshots[sunday_board])
+            live_index = build_sunday_monday_id_index(
+                client,
+                board_id=sunday_board,
+                monday_id_column_id=monday_id_column_id,
+            )
+            if args.item_id in live_index:
+                print(f"ABORT: Monday ID {args.item_id} já presente no Sunday.")
+                return 3
+            ledger = load_persistent_ledger(args.ledger)
+            ledger_key = f"{args.board}:{args.item_id}"
+            if ledger.get(ledger_key, {}).get("migration_status") == "migrated":
+                print(f"ABORT: item {args.item_id} já migrado no ledger.")
+                return 3
+        elif args.board == KPI_MONDAY_BOARD:
+            sunday_items = client.list_items(KPI_SUNDAY_BOARD).items
+            if len(sunday_items) != 0:
+                print(
+                    f"ABORT: Sunday board {KPI_SUNDAY_BOARD} items={len(sunday_items)} "
+                    "(esperado 0).",
+                )
+                return 3
+            monday_id_column_id = _find_monday_id_column(sunday_snapshots[KPI_SUNDAY_BOARD])
+            live_index = build_sunday_monday_id_index(
+                client,
+                board_id=KPI_SUNDAY_BOARD,
+                monday_id_column_id=monday_id_column_id,
+            )
+            if live_index:
+                print(f"ABORT: Monday IDs já existentes no Sunday: {len(live_index)}.")
+                return 3
+            ledger = load_persistent_ledger(args.ledger)
+            ledger_hits = sum(
+                1 for item in inventory.items
+                if ledger.get(f"{args.board}:{item.item_id}", {}).get("migration_status")
+                == "migrated"
+            )
+            if ledger_hits:
+                print(f"ABORT: ledger entries existentes para KPI: {ledger_hits}.")
+                return 3
 
     monday_id_index = {}
     if client is not None and sunday_snapshots:
@@ -219,6 +245,18 @@ def main() -> int:
         user_policy=policy,
         users_mapped=set(policy.exact_match_ids),
     )
+    if args.item_id:
+        try:
+            validate_monday_item_allowlist(
+                args.item_id,
+                board_id=args.board,
+                inventory=inventory,
+                report=report,
+                wave=args.wave,
+            )
+        except ExecutorAbort as exc:
+            print(f"ABORT: {exc}")
+            return 3
     plan = build_execution_plan(
         inventory=inventory,
         report=report,
@@ -229,6 +267,7 @@ def main() -> int:
         persistent_ledger=load_persistent_ledger(args.ledger),
         sunday_monday_id_index=monday_id_index or None,
         sunday_schema_checks=schema_checks,
+        monday_item_id=args.item_id,
     )
 
     Path(args.out).write_text(
@@ -237,10 +276,11 @@ def main() -> int:
     payload = plan.to_payload()
     print(f"\nPLAN gravado em {args.out}")
     print(json.dumps({k: payload[k] for k in (
-        "monday_board_id", "sunday_board_id", "wave", "mode", "snapshot", "counts",
+        "monday_board_id", "sunday_board_id", "wave", "mode", "source_scope",
+        "monday_item_id", "snapshot", "counts",
         "comments_to_create", "attachments_to_link", "relations_to_create",
         "relations_unresolved", "gate_ok",
-    )}, ensure_ascii=False, indent=2))
+    ) if k in payload}, ensure_ascii=False, indent=2))
     for check in payload["gate"]:
         print(f"  gate[{'OK ' if check['ok'] else 'FAIL'}] {check['check']}: {check['detail']}")
 
@@ -268,7 +308,12 @@ def main() -> int:
         print("ABORT: MONDAY_API_TOKEN ausente para APPLY.")
         return 2
     apply_sources = fetch_monday_apply_sources(monday_token, args.board)
-    if len(apply_sources) != len(inventory.items):
+    if args.item_id:
+        if args.item_id not in apply_sources:
+            print(f"ABORT: apply source ausente para item {args.item_id}.")
+            return 3
+        apply_sources = {args.item_id: apply_sources[args.item_id]}
+    elif len(apply_sources) != len(inventory.items):
         print(
             f"ABORT: apply_sources={len(apply_sources)} != "
             f"inventory={len(inventory.items)}.",
@@ -323,6 +368,7 @@ def main() -> int:
             monday_id_column_id=migration_context.monday_id_column_id,
         ),
         sunday_schema_checks=schema_checks,
+        monday_item_id=args.item_id,
     )
     post_payload = post_plan.to_payload()
 
