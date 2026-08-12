@@ -687,7 +687,9 @@ def apply_plan(
 
     pending = list(plan.operations)
     for index, operation in enumerate(pending):
-        if operation.action in ("already_migrated", "exclude_test", "absorb"):
+        if operation.action == "already_migrated":
+            continue
+        if operation.action in ("exclude_test", "absorb"):
             # absorb/exclude registram ledger sem criar item Sunday.
             _record_ledger(plan, operation, sunday_item_id=None, ledger_path=ledger_path,
                            now=now)
