@@ -404,8 +404,22 @@
       "migration_status": "migrated",
       "migrated_at": "2026-08-12T15:52:56.644025+00:00",
       "source_snapshot_timestamp": "2026-08-12T15:49:36.249094+00:00"
+    },
+    "4443297481:4443498618": {
+      "monday_board_id": "4443297481",
+      "monday_item_id": "4443498618",
+      "sunday_board_id": "85",
+      "sunday_item_id": "7747",
+      "wave": "WAVE_1",
+      "disposition": "CREATE",
+      "canonical_monday_item_id": null,
+      "reason": null,
+      "migration_status": "migrated",
+      "migrated_at": "2026-08-12T17:14:55.085596+00:00",
+      "source_snapshot_timestamp": "2026-08-12T17:14:45.705958+00:00"
     }
   },
   "imported_from": "data/monday-sunday-map.json",
-  "imported_at": "2026-08-12T16:16:34.596609+00:00"
+  "imported_at": "2026-08-12T16:16:34.596609+00:00",
+  "updated_at": "2026-08-12T17:14:55.085849+00:00"
 }
