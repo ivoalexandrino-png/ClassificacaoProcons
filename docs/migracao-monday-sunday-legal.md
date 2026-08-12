@@ -2009,3 +2009,36 @@ agregado passa a reportar `onda1_total`, `onda2_backfill_obrigatorio` e
 (saída por onda) e testes (33 no módulo, incluindo conservação do total —
 `sum(counts) == total analisado`). Nenhuma migração executada; Monday e Sunday
 intocados.
+
+---
+
+## Fase 3 — Infraestrutura do executor (2026-08-12; sem nenhuma escrita)
+
+> Implementação autorizada; APPLY **não** executado. O executor consome
+> exclusivamente a engine canônica (`migration.dry_run` + disposições) — sem
+> segunda engine. Zero POST/PATCH/DELETE contra o Sunday nesta fase.
+
+- `migration/executor.py`: modos **PLAN (default)** e **APPLY fail-closed**
+  (exige `mode=apply` + `confirm_writes` + `SUNDAY_MIGRATION_ALLOW_APPLY=1` +
+  gate 100% OK + snapshot revalidado; aborta antes da 1ª escrita). Allowlist
+  fixa dos 8 boards; `--max-items` aborta plano maior; dispositions
+  CREATE/ADOPT/ABSORB/EXCLUDE_TEST respeitadas sem fallback para CREATE;
+  idempotência dupla (ledger `monday:item` + índice Monday ID no Sunday);
+  ledger persistido só após operação confirmada (atômico), nunca no PLAN;
+  relações em 2ª passada global resolvidas via ledger (unresolved bloqueia
+  APPLY); secrets somente pelos aliases `SUNDAY_API_URL_TEST`/`SUNDAY_API_TOKEN_TEST`
+  (sem fallback; sem impressão); marcadores de idempotência para comments
+  (`[monday-migracao:item:update]`) e anexos (`monday-asset-<id>`).
+- CLI: `scripts/sunday_migration_execute.py --board … --wave … --mode plan
+  --max-items … [--refresh-sunday]`.
+- Testes: `tests/test_sunday_migration_executor.py` (23 casos: plan-never-writes,
+  flags do APPLY, allowlist, max-items, snapshot guard, dispositions, many→one,
+  usuários 25/3/30 + novo bloqueia, idempotências, falha parcial + reexecução
+  sem duplicar, relações 2ª passada, subitens 87, schema checks, vazamento de
+  secrets). Suíte completa: 1133 passed / 1 skipped; ruff limpo.
+- **PLAN real do KPI (Monday 5563754463 → Sunday 86, WAVE_1)**: snapshot live
+  fingerprint `a4de634dbe6b545ade7a0442`, **31 source rows = 31 CREATE**, 0
+  bloqueados, 0 comments, 0 anexos, 0 relações; gate 5/6 OK — reprova apenas
+  `schema_live_verificado` (secrets `*_TEST` ausentes nesta VM; fail-closed
+  funcionando). Pré-requisitos do piloto: secrets `*_TEST` numa sessão nova,
+  coluna **Monday ID** no board 86 e re-PLAN com `--refresh-sunday`.
