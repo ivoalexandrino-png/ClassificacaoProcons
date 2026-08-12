@@ -212,6 +212,7 @@ class ExecutionPlan:
     relations_to_create: list[RelationWrite] = field(default_factory=list)
     relations_unresolved: list[RelationWrite] = field(default_factory=list)
     gate: list[GateCheck] = field(default_factory=list)
+    item_id_filter: str | None = None
 
     @property
     def gate_ok(self) -> bool:
@@ -231,6 +232,7 @@ class ExecutionPlan:
             "wave": self.wave,
             "mode": self.mode,
             "max_items": self.max_items,
+            "item_id_filter": self.item_id_filter,
             "snapshot": {
                 "fingerprint": self.snapshot_fingerprint,
                 "total": self.snapshot_total,
@@ -288,6 +290,36 @@ def _wave_label(wave: int) -> str:
     return f"WAVE_{wave}"
 
 
+def _resolve_item_id_filter_scope(
+    report: DryRunReport,
+    *,
+    board_id: str,
+    wave_label: str,
+    item_id_filter: str,
+) -> None:
+    """Valida que o filtro casa com EXATAMENTE 1 item no escopo board/wave.
+
+    Fail-closed: nenhum item (typo/wave errada) e mais de um item (ids
+    duplicados/ambíguos) abortam. Nunca escolhe "o primeiro" silenciosamente.
+    """
+    matches = [
+        result
+        for result in report.items
+        if result.monday_board_id == board_id
+        and result.wave == wave_label
+        and result.monday_item_id == item_id_filter
+    ]
+    if not matches:
+        raise ExecutorAbort(
+            f"--item-id {item_id_filter} não encontrado no board {board_id}/{wave_label}.",
+        )
+    if len(matches) > 1:
+        raise ExecutorAbort(
+            f"--item-id {item_id_filter} ambíguo: {len(matches)} ocorrências no board "
+            f"{board_id}/{wave_label} (abort; nunca escolher a primeira silenciosamente).",
+        )
+
+
 def build_execution_plan(
     *,
     inventory: MondayBoardInventory,
@@ -299,8 +331,15 @@ def build_execution_plan(
     persistent_ledger: dict[str, dict] | None = None,
     sunday_monday_id_index: dict[str, str] | None = None,
     sunday_schema_checks: list[GateCheck] | None = None,
+    item_id_filter: str | None = None,
 ) -> ExecutionPlan:
-    """Monta o plano executável a partir do dry-run canônico (zero escrita)."""
+    """Monta o plano executável a partir do dry-run canônico (zero escrita).
+
+    `item_id_filter` restringe o escopo a UM único monday_item_id (allowlist
+    item-level; usada tanto no PLAN quanto no APPLY para garantir o MESMO
+    escopo). O item precisa pertencer ao board/wave informados; ausência ou
+    ambiguidade (>1 ocorrência) sempre aborta — nunca "primeiro item".
+    """
     board_id = inventory.board_id
     if board_id not in BOARD_ALLOWLIST:
         raise ExecutorAbort(f"Board {board_id} fora da allowlist aprovada.")
@@ -313,6 +352,10 @@ def build_execution_plan(
         )
 
     wave_label = _wave_label(wave)
+    if item_id_filter is not None:
+        _resolve_item_id_filter_scope(
+            report, board_id=board_id, wave_label=wave_label, item_id_filter=item_id_filter,
+        )
     ledger = persistent_ledger or {}
     monday_id_index = sunday_monday_id_index or {}
     items_by_id = {item.item_id: item for item in inventory.items}
@@ -326,6 +369,8 @@ def build_execution_plan(
     relations: list[RelationWrite] = []
     for result in report.items:
         if result.monday_board_id != board_id or result.wave != wave_label:
+            continue
+        if item_id_filter is not None and result.monday_item_id != item_id_filter:
             continue
         item = items_by_id.get(result.monday_item_id)
         if item is None:
@@ -426,6 +471,7 @@ def build_execution_plan(
         operations=operations,
         relations_to_create=[write for write in relations if not write.unresolved],
         relations_unresolved=[write for write in relations if write.unresolved],
+        item_id_filter=item_id_filter,
     )
     plan.gate = _build_gate(plan, sunday_schema_checks or [])
     return plan
@@ -449,6 +495,17 @@ def _build_gate(plan: ExecutionPlan, schema_checks: list[GateCheck]) -> list[Gat
             writable <= plan.max_items,
             f"{writable} operações ≤ limite {plan.max_items}",
         ),
+    ]
+    if plan.item_id_filter is not None:
+        filtered_ids = {op.monday_item_id for op in plan.operations}
+        checks.append(
+            GateCheck(
+                "item_id_filter_escopo",
+                filtered_ids == {plan.item_id_filter},
+                f"escopo={sorted(filtered_ids)} filtro={plan.item_id_filter}",
+            ),
+        )
+    checks.extend([
         GateCheck("sem_bloqueios", blocked == 0, f"{blocked} itens bloqueados"),
         GateCheck(
             "relations_resolvidas",
@@ -460,7 +517,7 @@ def _build_gate(plan: ExecutionPlan, schema_checks: list[GateCheck]) -> list[Gat
             bool(plan.snapshot_fingerprint) and plan.snapshot_total > 0,
             f"fingerprint {plan.snapshot_fingerprint} / {plan.snapshot_total} rows",
         ),
-    ]
+    ])
     if schema_checks:
         checks.extend(schema_checks)
     else:

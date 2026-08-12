@@ -85,6 +85,14 @@ def main() -> int:
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
     parser.add_argument("--mode", default="plan", choices=("plan", "apply"))
     parser.add_argument("--max-items", required=True, type=int)
+    parser.add_argument(
+        "--item-id",
+        default=None,
+        help=(
+            "allowlist item-level: restringe PLAN/APPLY a UM monday_item_id (precisa "
+            "pertencer ao --board/--wave informados; ausência ou ambiguidade aborta)"
+        ),
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -229,6 +237,7 @@ def main() -> int:
         persistent_ledger=load_persistent_ledger(args.ledger),
         sunday_monday_id_index=monday_id_index or None,
         sunday_schema_checks=schema_checks,
+        item_id_filter=args.item_id,
     )
 
     Path(args.out).write_text(
@@ -323,6 +332,7 @@ def main() -> int:
             monday_id_column_id=migration_context.monday_id_column_id,
         ),
         sunday_schema_checks=schema_checks,
+        item_id_filter=args.item_id,
     )
     post_payload = post_plan.to_payload()
 

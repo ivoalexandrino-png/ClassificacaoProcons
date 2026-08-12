@@ -60,7 +60,8 @@ def _kpi_inventory(items=None) -> MondayBoardInventory:
 
 
 def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
-              monday_id_index=None, policy=POLICY, schema_checks=None):
+              monday_id_index=None, policy=POLICY, schema_checks=None,
+              item_id_filter=None):
     report, _plans, _pulled = run_dry_run(
         {inventory.board_id: inventory},
         {},
@@ -77,6 +78,7 @@ def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
         persistent_ledger=ledger,
         sunday_monday_id_index=monday_id_index,
         sunday_schema_checks=schema_checks,
+        item_id_filter=item_id_filter,
     )
 
 
@@ -525,6 +527,104 @@ def test_no_secret_leakage_in_plan_payload(monkeypatch):
     assert secret not in repr(config)
     plan = _plan_for(_kpi_inventory())
     assert secret not in json.dumps(plan.to_payload())
+
+
+# ------------------------------------------------------- item-level allowlist
+
+
+def test_item_id_filter_restricts_plan_to_single_item():
+    plan = _plan_for(_kpi_inventory(), item_id_filter="2")
+    assert [op.monday_item_id for op in plan.operations] == ["2"]
+    assert plan.counts() == {"create": 1}
+    assert plan.item_id_filter == "2"
+    gate = {check.name: check.ok for check in plan.gate}
+    assert gate["item_id_filter_escopo"] is True
+
+
+def test_item_id_filter_not_found_aborts():
+    report, _plans, _pulled = run_dry_run(
+        {KPI_BOARD: _kpi_inventory()}, {}, user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        build_execution_plan(
+            inventory=_kpi_inventory(), report=report, wave=1, max_items=50,
+            user_policy=POLICY, item_id_filter="999999",
+        )
+
+
+def test_item_id_filter_wrong_wave_aborts_as_not_found():
+    # Item existe no board mas em WAVE_2 (fora do recorte) quando filtrado por WAVE_1.
+    items = (
+        MondayItemDigest(item_id="1", group_id="g2023", created_at=RECENT,
+                         updated_at=RECENT),
+    )
+    inventory = _kpi_inventory(items)
+    report, _plans, _pulled = run_dry_run(
+        {KPI_BOARD: inventory}, {}, user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        build_execution_plan(
+            inventory=inventory, report=report, wave=2, max_items=50,
+            user_policy=POLICY, item_id_filter="1",
+        )
+
+
+def test_item_id_filter_ambiguous_never_picks_first_silently():
+    # Duplica um resultado no report para simular ambiguidade (defesa em
+    # profundidade); build_execution_plan precisa abortar, nunca escolher "1".
+    report, _plans, _pulled = run_dry_run(
+        {KPI_BOARD: _kpi_inventory()}, {}, user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    report.items.append(report.items[0])  # item "1" duplicado no relatório
+    with pytest.raises(ExecutorAbort, match="ambíguo"):
+        build_execution_plan(
+            inventory=_kpi_inventory(), report=report, wave=1, max_items=50,
+            user_policy=POLICY, item_id_filter="1",
+        )
+
+
+def test_item_id_filter_max_items_still_required_and_enforced():
+    plan = _plan_for(_kpi_inventory(), item_id_filter="2", max_items=0)
+    gate = {check.name: check.ok for check in plan.gate}
+    assert gate["max_items"] is False  # 1 operação > limite 0: continua obrigatório
+
+
+def test_item_id_filter_plan_and_apply_use_same_scope(monkeypatch, tmp_path):
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    plan = _plan_for(
+        _kpi_inventory(), item_id_filter="2", mode="apply",
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert [op.monday_item_id for op in plan.operations] == ["2"]
+    spy = SpyClient()
+    ledger_path = tmp_path / "ledger.json"
+    result = apply_plan(
+        plan, client=spy, confirm_writes=True,
+        snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        ledger_path=ledger_path,
+    )
+    # APPLY só toca o item filtrado: nenhum outro item do board é criado.
+    assert spy.created == ["2"]
+    assert result.succeeded == ["2"]
+    records = load_persistent_ledger(ledger_path)
+    assert set(records) == {f"{KPI_BOARD}:2"}
+
+
+def test_item_id_filter_belongs_to_board_and_wave_informed():
+    # Item pertence ao board KPI mas board/wave informados (WAVE_2) não batem
+    # com o recorte real do item (que entra em WAVE_1 por padrão no fixture).
+    report, _plans, _pulled = run_dry_run(
+        {KPI_BOARD: _kpi_inventory()}, {}, user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        build_execution_plan(
+            inventory=_kpi_inventory(), report=report, wave=2, max_items=50,
+            user_policy=POLICY, item_id_filter="2",
+        )
 
 
 def test_snapshot_fingerprint_is_stable_and_sensitive():
