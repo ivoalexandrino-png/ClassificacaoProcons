@@ -936,6 +936,23 @@ em classe D.
 - Cronômetro de `time_tracking` (config única da coluna, se quiserem recomeçar a
   cronometrar no Sunday).
 
+**Complemento (nova VM, 2026-08-11) — roundtrip coluna custom `TESTE - TEXTO CUSTOM`
+(`python scripts/sunday_fase0_write_tests.py --minimal`, a partir do PR #158):**
+
+| Etapa | Resultado |
+|---|---|
+| `SUNDAY_API_TOKEN` / `SUNDAY_API_URL` no ambiente | definidos |
+| `GET /auth/me` (preflight do script) | `401` — `{"message":"Token inválido ou revogado.","error":"Unauthorized"}` |
+| Validação da coluna `TESTE - TEXTO CUSTOM` no board 80 | **não executada** (aborto antes de `GET /boards/80/columns`) |
+| Execução `--minimal` | abortada no preflight — script encerrou com `ERRO: token inválido ou API indisponível` |
+| **ROUNDTRIP** | **FAIL** — falha de **autenticação** (token revogado/inválido nesta VM), não de payload nem de permissão de escrita |
+
+**Decisão nesta execução:** não eleva a GO incondicional para `sunday/client.py` — o gap
+da linha 764 (coluna `text` customizada real, label `TESTE - TEXTO CUSTOM`) permanece
+**sem demonstração empírica nesta VM**. Reexecutar com token Sunday válido injetado no
+ambiente do Cloud Agent. A GO da F0.15 (outros tipos customizados via `/values`) mantém-se;
+este complemento não a revoga, mas também não fecha o roundtrip de `text` custom até PASS.
+
 ### F0.15 Reteste de values e board_relation em colunas pré-configuradas (2026-08-11)
 
 > Fecha o único ponto sem demonstração empírica do F0.14: escrita/leitura de `values`
