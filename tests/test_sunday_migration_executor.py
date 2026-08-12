@@ -36,6 +36,7 @@ KPI_BOARD = "5563754463"
 CONTROLE = "5301515799"
 CONTRATOS = "5385471914"
 AUDIENCIAS = "4443295406"
+TRABALHISTA = "4443297481"
 
 POLICY = UserMappingPolicy(
     exact_match_ids=frozenset({"100"}),
@@ -59,7 +60,7 @@ def _kpi_inventory(items=None) -> MondayBoardInventory:
     )
 
 
-def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
+def _plan_for(inventory, *, wave=1, max_items=50, item_id=None, mode="plan", ledger=None,
               monday_id_index=None, policy=POLICY, schema_checks=None):
     report, _plans, _pulled = run_dry_run(
         {inventory.board_id: inventory},
@@ -72,6 +73,7 @@ def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
         report=report,
         wave=wave,
         max_items=max_items,
+        item_id=item_id,
         mode=mode,
         user_policy=policy,
         persistent_ledger=ledger,
@@ -154,6 +156,70 @@ def test_max_items_gate_blocks_oversized_plan(monkeypatch):
             plan, client=SpyClient(), confirm_writes=True,
             snapshot_revalidator=lambda: plan.snapshot_fingerprint,
         )
+
+
+def test_item_allowlist_is_identical_in_plan_and_apply(monkeypatch, tmp_path):
+    inventory = _kpi_inventory()
+    plan = _plan_for(inventory, item_id="2")
+    apply = _plan_for(
+        inventory,
+        item_id="2",
+        mode="apply",
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+
+    assert plan.requested_item_id == "2"
+    assert plan.to_payload()["source_scope"] == 1
+    assert [operation.monday_item_id for operation in plan.operations] == ["2"]
+    assert [operation.monday_item_id for operation in apply.operations] == ["2"]
+
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    spy = SpyClient()
+    result = apply_plan(
+        apply,
+        client=spy,
+        confirm_writes=True,
+        snapshot_revalidator=lambda: apply.snapshot_fingerprint,
+        ledger_path=tmp_path / "ledger.json",
+    )
+    assert spy.created == ["2"]
+    assert result.succeeded == ["2"]
+
+
+def test_item_allowlist_aborts_when_item_is_absent():
+    with pytest.raises(ExecutorAbort, match="exatamente uma vez"):
+        _plan_for(_kpi_inventory(), item_id="404")
+
+
+def test_item_allowlist_aborts_when_item_is_duplicated():
+    duplicate = MondayItemDigest(
+        item_id="2",
+        group_id="g2023",
+        created_at=RECENT,
+        updated_at=RECENT,
+    )
+    inventory = _kpi_inventory(_kpi_inventory().items + (duplicate,))
+    with pytest.raises(ExecutorAbort, match="encontrados 2"):
+        _plan_for(inventory, item_id="2")
+
+
+def test_item_allowlist_aborts_when_item_is_outside_requested_wave():
+    historical = MondayBoardInventory(
+        board_id=TRABALHISTA,
+        name="Processos Trabalhista",
+        groups={"closed": "Trabalhista Encerrado"},
+        columns=(),
+        items=(
+            MondayItemDigest(
+                item_id="10",
+                group_id="closed",
+                created_at="2020-01-01T00:00:00Z",
+                updated_at="2020-01-01T00:00:00Z",
+            ),
+        ),
+    )
+    with pytest.raises(ExecutorAbort, match="WAVE_1"):
+        _plan_for(historical, wave=1, item_id="10")
 
 
 def test_snapshot_changed_aborts_before_first_write(monkeypatch, tmp_path):
