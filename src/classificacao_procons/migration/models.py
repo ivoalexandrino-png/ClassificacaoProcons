@@ -195,7 +195,14 @@ class LedgerRecord:
     source_updated_at: str | None = None
     error: str | None = None
     attempts: int = 0
+    disposition: Disposition | None = None
+    canonical_monday_item_id: str | None = None
+    disposition_reason: str | None = None
 
     @property
     def key(self) -> str:
         return f"{self.monday_board_id}:{self.monday_item_id}"
+
+    @property
+    def creates_sunday_item(self) -> bool:
+        return self.disposition is Disposition.CREATE
