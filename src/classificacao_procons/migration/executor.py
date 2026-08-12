@@ -25,6 +25,7 @@ from classificacao_procons.migration.mappings import (
 from classificacao_procons.migration.models import (
     MondayBoardInventory,
     MondayItemDigest,
+    MondayUpdateDigest,
 )
 from classificacao_procons.migration.user_mapping import (
     UserMappingPolicy,
@@ -74,8 +75,24 @@ def sunday_config_from_test_env() -> SundayConfig:
 
 
 def snapshot_fingerprint(inventory: MondayBoardInventory) -> str:
-    """Hash estável do snapshot (ids + updated_at) para o guard de concorrência."""
-    basis = sorted((item.item_id, item.updated_at or "") for item in inventory.items)
+    """Hash estável do item e dos updates aprovados para o guard de concorrência."""
+    basis = sorted(
+        (
+            item.item_id,
+            item.updated_at or "",
+            tuple(
+                (
+                    update.update_id,
+                    update.created_at or "",
+                    update.classification,
+                    update.is_migratable,
+                    update.exclusion_reason or "",
+                )
+                for update in item.update_diagnostics
+            ),
+        )
+        for item in inventory.items
+    )
     return hashlib.sha256(json.dumps(basis).encode()).hexdigest()[:24]
 
 
@@ -176,13 +193,18 @@ class PlannedOperation:
     monday_item_id: str
     disposition: str
     wave: str
-    action: str  # create | adopt | absorb | exclude_test | already_migrated | blocked
+    action: str  # create | resume | adopt | absorb | exclude_test | already_migrated | blocked
     target_group: str | None = None
     group_action: str | None = None
     system_fields: tuple[str, ...] = ()
     owner_resolution: str = "empty_sem_owner"
     custom_values_count: int = 0
+    source_updates: int = 0
+    updates_migratable: int = 0
     comments_to_create: int = 0
+    comments_already_present: int = 0
+    update_diagnostics: tuple[MondayUpdateDigest, ...] = ()
+    comments_count_exact: bool = True
     attachments_to_link: int = 0
     assets_bytes: int = 0
     subitem_count: int = 0
@@ -240,7 +262,20 @@ class ExecutionPlan:
                 "timestamp": self.source_snapshot_timestamp,
             },
             "counts": self.counts(),
+            "source_updates": sum(op.source_updates for op in self.operations),
+            "updates_migraveis": sum(op.updates_migratable for op in self.operations),
             "comments_to_create": sum(op.comments_to_create for op in self.operations),
+            "comments_already_present": sum(
+                op.comments_already_present for op in self.operations
+            ),
+            "comments_excluded": sum(
+                not update.is_migratable
+                for op in self.operations
+                for update in op.update_diagnostics
+            ),
+            "comments_count_exact": all(
+                op.comments_count_exact for op in self.operations
+            ),
             "attachments_to_link": sum(op.attachments_to_link for op in self.operations),
             "assets_bytes_estimated": sum(op.assets_bytes for op in self.operations),
             "relations_to_create": len(self.relations_to_create),
@@ -260,7 +295,22 @@ class ExecutionPlan:
                     "system_fields": list(op.system_fields),
                     "owner_resolution": op.owner_resolution,
                     "custom_values": op.custom_values_count,
+                    "source_updates": op.source_updates,
+                    "updates_migraveis": op.updates_migratable,
                     "comments": op.comments_to_create,
+                    "comments_already_present": op.comments_already_present,
+                    "updates": [
+                        {
+                            "update_id": update.update_id,
+                            "created_at": update.created_at,
+                            "has_author": update.has_author,
+                            "classification": update.classification,
+                            "migratable": update.is_migratable,
+                            "exclusion_reason": update.exclusion_reason,
+                        }
+                        for update in op.update_diagnostics
+                    ],
+                    "comments_count_exact": op.comments_count_exact,
                     "attachments": op.attachments_to_link,
                     "subitems": op.subitem_count,
                     "adopt_sunday_item_id": op.adopt_sunday_item_id,
@@ -302,6 +352,7 @@ def build_execution_plan(
     user_policy: UserMappingPolicy | None = None,
     persistent_ledger: dict[str, dict] | None = None,
     sunday_monday_id_index: dict[str, str] | None = None,
+    sunday_comment_markers: dict[str, set[str]] | None = None,
     sunday_schema_checks: list[GateCheck] | None = None,
 ) -> ExecutionPlan:
     """Monta o plano executável a partir do dry-run canônico (zero escrita)."""
@@ -343,6 +394,7 @@ def build_execution_plan(
             )
     ledger = persistent_ledger or {}
     monday_id_index = sunday_monday_id_index or {}
+    existing_markers = sunday_comment_markers or {}
     items_by_id = {item.item_id: item for item in inventory.items}
     dispositions = {
         (entry.monday_board_id, entry.monday_item_id): entry
@@ -379,15 +431,15 @@ def build_execution_plan(
             blocked = owner
 
         ledger_key = f"{board_id}:{result.monday_item_id}"
-        already = (
-            ledger.get(ledger_key, {}).get("migration_status") == "migrated"
-            or result.monday_item_id in monday_id_index
-        )
+        already = ledger.get(ledger_key, {}).get("migration_status") == "migrated"
+        existing_without_ledger = result.monday_item_id in monday_id_index
 
         if blocked:
             action = "blocked"
         elif already:
             action = "already_migrated"  # idempotência: nunca recriar
+        elif existing_without_ledger and disposition is Disposition.CREATE:
+            action = "resume"
         elif disposition is Disposition.ADOPT:
             action = "adopt"
         elif disposition is Disposition.ABSORB:
@@ -400,6 +452,18 @@ def build_execution_plan(
         system_fields = ["name", "monday_id"]
         if item.created_at:
             system_fields.append("status_sistema(derivado)")
+        update_diagnostics = (
+            item.update_diagnostics if action in ("create", "resume") else ()
+        )
+        migratable_updates = tuple(
+            update for update in update_diagnostics if update.is_migratable
+        )
+        item_markers = existing_markers.get(result.monday_item_id, set())
+        already_present = sum(
+            comment_idempotency_marker(result.monday_item_id, update.update_id)
+            in item_markers
+            for update in migratable_updates
+        )
         operations.append(
             PlannedOperation(
                 monday_item_id=result.monday_item_id,
@@ -415,7 +479,22 @@ def build_execution_plan(
                 system_fields=tuple(system_fields),
                 owner_resolution=owner,
                 custom_values_count=len(item.status_labels) + len(item.relation_targets),
-                comments_to_create=1 if item.has_updates else 0,
+                source_updates=len(update_diagnostics),
+                updates_migratable=len(migratable_updates),
+                comments_to_create=len(migratable_updates) - already_present,
+                comments_already_present=already_present,
+                update_diagnostics=update_diagnostics,
+                comments_count_exact=(
+                    (
+                        item.updates_count_is_exact
+                        and (
+                            not item.has_updates
+                            or bool(item.update_diagnostics)
+                        )
+                    )
+                    if action in ("create", "resume")
+                    else True
+                ),
                 attachments_to_link=item.file_count,
                 assets_bytes=item.file_bytes,
                 subitem_count=item.subitem_count,
@@ -488,8 +567,15 @@ def _build_gate(plan: ExecutionPlan, schema_checks: list[GateCheck]) -> list[Gat
         ),
         GateCheck(
             "snapshot_valido",
-            bool(plan.snapshot_fingerprint) and plan.snapshot_total > 0,
-            f"fingerprint {plan.snapshot_fingerprint} / {plan.snapshot_total} rows",
+            bool(plan.snapshot_fingerprint)
+            and plan.snapshot_total > 0
+            and all(operation.comments_count_exact for operation in plan.operations),
+            (
+                f"fingerprint {plan.snapshot_fingerprint} / {plan.snapshot_total} rows; "
+                "updates exatos"
+                if all(operation.comments_count_exact for operation in plan.operations)
+                else "snapshot legado sem IDs exatos de updates"
+            ),
         ),
     ]
     if schema_checks:
@@ -594,6 +680,7 @@ def apply_plan(
             ApplyWriteStats,
             apply_create_item,
             build_sunday_monday_id_index,
+            migrate_monday_updates,
         )
 
         write_stats = ApplyWriteStats()
@@ -615,20 +702,16 @@ def apply_plan(
                 break
             continue
         try:
-            if migration_context is not None and operation.action == "create":
+            if migration_context is not None and operation.action in ("create", "resume"):
                 live_index = build_sunday_monday_id_index(
                     client,
                     board_id=plan.sunday_board_id,
                     monday_id_column_id=migration_context.monday_id_column_id,
                 )
                 ledger_key = f"{plan.monday_board_id}:{operation.monday_item_id}"
-                if (
-                    load_persistent_ledger(ledger_path)
-                    .get(ledger_key, {})
-                    .get("migration_status")
-                    == "migrated"
-                    or operation.monday_item_id in live_index
-                ):
+                if load_persistent_ledger(ledger_path).get(ledger_key, {}).get(
+                    "migration_status",
+                ) == "migrated":
                     report.succeeded.append(operation.monday_item_id)
                     continue
                 apply_source = migration_context.apply_sources.get(operation.monday_item_id)
@@ -636,18 +719,38 @@ def apply_plan(
                     raise RuntimeError(
                         f"Source Monday ausente para item {operation.monday_item_id}.",
                     )
-                sunday_item_id = apply_create_item(
-                    client=client,
-                    plan=plan,
-                    operation=operation,
-                    inventory=migration_context.inventory,
-                    board_plan=migration_context.board_plan,
-                    sunday_snapshot=migration_context.sunday_snapshot,
-                    apply_source=apply_source,
-                    monday_id_column_id=migration_context.monday_id_column_id,
-                    target_group_id=migration_context.target_group_id,
-                    stats=write_stats,
-                )
+                sunday_item_id = live_index.get(operation.monday_item_id)
+                if sunday_item_id:
+                    migrate_monday_updates(
+                        client=client,
+                        sunday_item_id=sunday_item_id,
+                        monday_item_id=operation.monday_item_id,
+                        updates=apply_source.updates,
+                        expected_update_ids=tuple(
+                            update.update_id
+                            for update in operation.update_diagnostics
+                            if update.is_migratable
+                        ),
+                        stats=write_stats,
+                    )
+                else:
+                    if operation.action == "resume":
+                        raise RuntimeError(
+                            f"Item Sunday esperado para retomada de "
+                            f"{operation.monday_item_id} não foi encontrado.",
+                        )
+                    sunday_item_id = apply_create_item(
+                        client=client,
+                        plan=plan,
+                        operation=operation,
+                        inventory=migration_context.inventory,
+                        board_plan=migration_context.board_plan,
+                        sunday_snapshot=migration_context.sunday_snapshot,
+                        apply_source=apply_source,
+                        monday_id_column_id=migration_context.monday_id_column_id,
+                        target_group_id=migration_context.target_group_id,
+                        stats=write_stats,
+                    )
             elif operation.action == "adopt":
                 sunday_item_id = operation.adopt_sunday_item_id
                 if not sunday_item_id:
@@ -687,6 +790,7 @@ def apply_plan(
             "custom_values": write_stats.custom_values,
             "status": write_stats.status_writes,
             "comments": write_stats.comments,
+            "comments_skipped": write_stats.comments_skipped,
             "attachments": write_stats.attachments,
             "relations": write_stats.relations,
             "subitems": write_stats.subitems,

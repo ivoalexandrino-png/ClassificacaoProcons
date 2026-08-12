@@ -14,6 +14,7 @@ from classificacao_procons.migration.models import (
     MondayBoardInventory,
     MondayColumnInfo,
     MondayItemDigest,
+    MondayUpdateDigest,
 )
 from classificacao_procons.monday.client import _graphql_request
 
@@ -45,7 +46,6 @@ query ($ids: [ID!], $cursor: String, $limit: Int!) {
         parent_item { id }
         subitems { id }
         assets { id file_size }
-        updates(limit: 1) { id }
         column_values {
           id
           type
@@ -63,6 +63,21 @@ _BOARD_UPDATES_QUERY = """
 query ($ids: [ID!], $limit: Int!, $page: Int!) {
   boards(ids: $ids) {
     updates(limit: $limit, page: $page) { id }
+  }
+}
+"""
+
+_ITEM_UPDATES_PAGE_QUERY = """
+query ($ids: [ID!], $limit: Int!, $page: Int!) {
+  items(ids: $ids) {
+    id
+    updates(limit: $limit, page: $page) {
+      id
+      text_body
+      body
+      created_at
+      creator { id }
+    }
   }
 }
 """
@@ -119,7 +134,12 @@ def _people_ids(value_json: object) -> tuple[str, ...]:
     )
 
 
-def _digest_item(item: dict, columns_by_id: dict[str, MondayColumnInfo]) -> MondayItemDigest:
+def _digest_item(
+    item: dict,
+    columns_by_id: dict[str, MondayColumnInfo],
+    *,
+    update_diagnostics: tuple[MondayUpdateDigest, ...] = (),
+) -> MondayItemDigest:
     status_labels: dict[str, str] = {}
     people: list[str] = []
     relations: dict[str, tuple[str, ...]] = {}
@@ -153,10 +173,121 @@ def _digest_item(item: dict, columns_by_id: dict[str, MondayColumnInfo]) -> Mond
         people_ids=tuple(dict.fromkeys(people)),
         file_count=len(assets),
         file_bytes=sum(int(asset.get("file_size") or 0) for asset in assets),
-        has_updates=bool(item.get("updates")),
+        has_updates=bool(update_diagnostics),
+        source_updates_count=len(update_diagnostics),
+        updates_count=sum(update.is_migratable for update in update_diagnostics),
+        updates_count_is_exact=True,
+        update_diagnostics=update_diagnostics,
         subitem_count=len(item.get("subitems") or []),
         relation_targets=relations,
     )
+
+
+def _classify_update(update: object) -> MondayUpdateDigest:
+    if not isinstance(update, dict):
+        return MondayUpdateDigest(
+            update_id="",
+            created_at=None,
+            has_author=False,
+            classification="invalid_update_payload",
+            is_migratable=False,
+            exclusion_reason="payload_not_object",
+        )
+    update_id = str(update.get("id") or "").strip()
+    body = str(update.get("text_body") or update.get("body") or "").strip()
+    created_at = str(update.get("created_at") or "").strip() or None
+    creator = update.get("creator")
+    has_author = bool(
+        isinstance(creator, dict) and str(creator.get("id") or "").strip()
+    )
+    if not update_id:
+        return MondayUpdateDigest(
+            update_id="",
+            created_at=created_at,
+            has_author=has_author,
+            classification="update_without_id",
+            is_migratable=False,
+            exclusion_reason="missing_update_id",
+        )
+    if not body:
+        return MondayUpdateDigest(
+            update_id=update_id,
+            created_at=created_at,
+            has_author=has_author,
+            classification="empty_update",
+            is_migratable=False,
+            exclusion_reason="empty_body",
+        )
+    return MondayUpdateDigest(
+        update_id=update_id,
+        created_at=created_at,
+        has_author=has_author,
+        classification=(
+            "text_update_with_author" if has_author else "text_update_without_author"
+        ),
+        is_migratable=True,
+    )
+
+
+def _fetch_update_diagnostics(
+    api_token: str,
+    item_ids: list[str],
+) -> dict[str, tuple[MondayUpdateDigest, ...]]:
+    """Lê/classifica updates por item, sem reter conteúdo no inventário."""
+    diagnostics: dict[str, list[MondayUpdateDigest]] = {
+        item_id: [] for item_id in item_ids
+    }
+    seen: dict[str, set[str]] = {item_id: set() for item_id in item_ids}
+    for offset in range(0, len(item_ids), 100):
+        batch = item_ids[offset : offset + 100]
+        page_number = 1
+        while True:
+            rows = _graphql_request(
+                api_token=api_token,
+                query=_ITEM_UPDATES_PAGE_QUERY,
+                variables={
+                    "ids": batch,
+                    "limit": UPDATES_PAGE_SIZE,
+                    "page": page_number,
+                },
+            ).get("items", [])
+            by_id = {str(row.get("id")): row for row in rows}
+            missing = set(batch) - set(by_id)
+            if missing:
+                raise RuntimeError(
+                    f"Diagnóstico de updates incompleto para {len(missing)} item(ns).",
+                )
+            page_full = False
+            for item_id in batch:
+                updates = by_id[item_id].get("updates") or []
+                for update in updates:
+                    diagnostic = _classify_update(update)
+                    if diagnostic.update_id and diagnostic.update_id in seen[item_id]:
+                        continue
+                    if diagnostic.update_id:
+                        seen[item_id].add(diagnostic.update_id)
+                    diagnostics[item_id].append(diagnostic)
+                page_full = page_full or len(updates) == UPDATES_PAGE_SIZE
+            if not page_full:
+                break
+            page_number += 1
+    return {
+        item_id: tuple(
+            sorted(
+                values,
+                key=lambda update: (update.created_at or "", update.update_id),
+            ),
+        )
+        for item_id, values in diagnostics.items()
+    }
+
+
+def _fetch_exact_update_counts(api_token: str, item_ids: list[str]) -> dict[str, int]:
+    """Compatibilidade: contagem exata dos updates migráveis."""
+    return {
+        item_id: sum(update.is_migratable for update in updates)
+        for item_id, updates in _fetch_update_diagnostics(api_token, item_ids).items()
+    }
 
 
 def fetch_board_inventory(
@@ -183,7 +314,7 @@ def fetch_board_inventory(
         str(group["id"]): str(group.get("title", "")) for group in meta.get("groups", [])
     }
 
-    items: list[MondayItemDigest] = []
+    raw_items: list[dict] = []
     cursor: str | None = None
     while True:
         page = _graphql_request(
@@ -192,10 +323,23 @@ def fetch_board_inventory(
             variables={"ids": [board_id], "cursor": cursor, "limit": ITEMS_PAGE_SIZE},
         )["boards"][0]["items_page"]
         for item in page.get("items", []):
-            items.append(_digest_item(item, columns_by_id))
+            raw_items.append(item)
         cursor = page.get("cursor")
         if not cursor:
             break
+
+    update_diagnostics = _fetch_update_diagnostics(
+        api_token,
+        [str(item["id"]) for item in raw_items],
+    )
+    items = [
+        _digest_item(
+            item,
+            columns_by_id,
+            update_diagnostics=update_diagnostics[str(item["id"])],
+        )
+        for item in raw_items
+    ]
 
     updates_count = 0
     updates_lower_bound = False
@@ -249,6 +393,20 @@ def inventory_to_payload(inventory: MondayBoardInventory) -> dict:
                 "file_count": item.file_count,
                 "file_bytes": item.file_bytes,
                 "has_updates": item.has_updates,
+                "source_updates_count": item.source_updates_count,
+                "updates_count": item.updates_count,
+                "updates_count_is_exact": item.updates_count_is_exact,
+                "update_diagnostics": [
+                    {
+                        "update_id": update.update_id,
+                        "created_at": update.created_at,
+                        "has_author": update.has_author,
+                        "classification": update.classification,
+                        "is_migratable": update.is_migratable,
+                        "exclusion_reason": update.exclusion_reason,
+                    }
+                    for update in item.update_diagnostics
+                ],
                 "subitem_count": item.subitem_count,
                 "relation_targets": {
                     key: list(value) for key, value in item.relation_targets.items()
@@ -282,6 +440,30 @@ def inventory_from_payload(payload: dict) -> MondayBoardInventory:
             file_count=int(item.get("file_count") or 0),
             file_bytes=int(item.get("file_bytes") or 0),
             has_updates=bool(item.get("has_updates")),
+            source_updates_count=int(
+                item.get("source_updates_count")
+                or item.get("updates_count")
+                or bool(item.get("has_updates"))
+            ),
+            updates_count=int(
+                item.get("updates_count")
+                if item.get("updates_count") is not None
+                else bool(item.get("has_updates"))
+            ),
+            updates_count_is_exact=bool(
+                item.get("updates_count_is_exact", "updates_count" in item),
+            ),
+            update_diagnostics=tuple(
+                MondayUpdateDigest(
+                    update_id=str(update.get("update_id") or ""),
+                    created_at=update.get("created_at"),
+                    has_author=bool(update.get("has_author")),
+                    classification=str(update.get("classification") or ""),
+                    is_migratable=bool(update.get("is_migratable")),
+                    exclusion_reason=update.get("exclusion_reason"),
+                )
+                for update in item.get("update_diagnostics") or ()
+            ),
             subitem_count=int(item.get("subitem_count") or 0),
             relation_targets={
                 key: tuple(value)
