@@ -231,6 +231,8 @@ class ExecutionPlan:
     snapshot_fingerprint: str
     snapshot_total: int
     source_snapshot_timestamp: str
+    requested_item_ids: tuple[str, ...] | None = None
+    max_comments: int | None = None
     operations: list[PlannedOperation] = field(default_factory=list)
     relations_to_create: list[RelationWrite] = field(default_factory=list)
     relations_unresolved: list[RelationWrite] = field(default_factory=list)
@@ -255,6 +257,10 @@ class ExecutionPlan:
             "mode": self.mode,
             "max_items": self.max_items,
             "requested_item_id": self.requested_item_id,
+            "requested_item_ids": (
+                list(self.requested_item_ids) if self.requested_item_ids else None
+            ),
+            "max_comments": self.max_comments,
             "source_scope": len(self.operations),
             "snapshot": {
                 "fingerprint": self.snapshot_fingerprint,
@@ -341,6 +347,59 @@ def _wave_label(wave: int) -> str:
     return f"WAVE_{wave}"
 
 
+def _resolve_requested_item_ids(
+    *,
+    item_id: str | None,
+    item_ids: frozenset[str] | None,
+) -> frozenset[str] | None:
+    """Normaliza allowlist explícita (--item-id ou --item-ids)."""
+    if item_id is not None and item_ids is not None:
+        raise ExecutorAbort("Use item_id ou item_ids, não ambos.")
+    if item_ids is not None:
+        normalized = frozenset(str(value).strip() for value in item_ids if str(value).strip())
+        if not normalized:
+            raise ExecutorAbort("item_ids vazio.")
+        return normalized
+    if item_id is not None:
+        requested_item_id = str(item_id).strip()
+        if not requested_item_id:
+            raise ExecutorAbort("item_id vazio.")
+        return frozenset({requested_item_id})
+    return None
+
+
+def _validate_requested_item_scope(
+    *,
+    board_id: str,
+    wave_label: str,
+    inventory: MondayBoardInventory,
+    report: DryRunReport,
+    requested_item_ids: frozenset[str],
+) -> None:
+    """Garante que cada ID autorizado existe no board e na wave."""
+    for requested in sorted(requested_item_ids):
+        inventory_matches = [
+            item for item in inventory.items if item.item_id == requested
+        ]
+        if len(inventory_matches) != 1:
+            raise ExecutorAbort(
+                f"item_id {requested} deve ocorrer exatamente uma vez no board "
+                f"{board_id}; encontrados {len(inventory_matches)}.",
+            )
+        wave_matches = [
+            result
+            for result in report.items
+            if result.monday_board_id == board_id
+            and result.monday_item_id == requested
+            and result.wave == wave_label
+        ]
+        if len(wave_matches) != 1:
+            raise ExecutorAbort(
+                f"item_id {requested} deve pertencer exatamente uma vez a "
+                f"{board_id}/{wave_label}; encontrados {len(wave_matches)}.",
+            )
+
+
 def build_execution_plan(
     *,
     inventory: MondayBoardInventory,
@@ -348,6 +407,8 @@ def build_execution_plan(
     wave: int,
     max_items: int,
     item_id: str | None = None,
+    item_ids: frozenset[str] | None = None,
+    max_comments: int | None = None,
     mode: str = "plan",
     user_policy: UserMappingPolicy | None = None,
     persistent_ledger: dict[str, dict] | None = None,
@@ -368,30 +429,19 @@ def build_execution_plan(
         )
 
     wave_label = _wave_label(wave)
-    requested_item_id = str(item_id).strip() if item_id is not None else None
-    if requested_item_id == "":
-        raise ExecutorAbort("item_id vazio.")
-    if requested_item_id is not None:
-        inventory_matches = [
-            item for item in inventory.items if item.item_id == requested_item_id
-        ]
-        if len(inventory_matches) != 1:
-            raise ExecutorAbort(
-                f"item_id {requested_item_id} deve ocorrer exatamente uma vez no board "
-                f"{board_id}; encontrados {len(inventory_matches)}.",
-            )
-        wave_matches = [
-            result
-            for result in report.items
-            if result.monday_board_id == board_id
-            and result.monday_item_id == requested_item_id
-            and result.wave == wave_label
-        ]
-        if len(wave_matches) != 1:
-            raise ExecutorAbort(
-                f"item_id {requested_item_id} deve pertencer exatamente uma vez a "
-                f"{board_id}/{wave_label}; encontrados {len(wave_matches)}.",
-            )
+    requested_item_ids = _resolve_requested_item_ids(item_id=item_id, item_ids=item_ids)
+    requested_item_id = (
+        next(iter(requested_item_ids)) if requested_item_ids and len(requested_item_ids) == 1
+        else None
+    )
+    if requested_item_ids is not None:
+        _validate_requested_item_scope(
+            board_id=board_id,
+            wave_label=wave_label,
+            inventory=inventory,
+            report=report,
+            requested_item_ids=requested_item_ids,
+        )
     ledger = persistent_ledger or {}
     monday_id_index = sunday_monday_id_index or {}
     existing_markers = sunday_comment_markers or {}
@@ -407,7 +457,7 @@ def build_execution_plan(
     for result in report.items:
         if result.monday_board_id != board_id or result.wave != wave_label:
             continue
-        if requested_item_id is not None and result.monday_item_id != requested_item_id:
+        if requested_item_ids is not None and result.monday_item_id not in requested_item_ids:
             continue
         item = items_by_id.get(result.monday_item_id)
         if item is None:
@@ -523,6 +573,38 @@ def build_execution_plan(
             )
             relations.append(write)
 
+    if requested_item_ids is not None:
+        planned_ids = {operation.monday_item_id for operation in operations}
+        missing_ids = requested_item_ids - planned_ids
+        if missing_ids:
+            raise ExecutorAbort(
+                "item_ids ausentes no escopo do plano: "
+                + ", ".join(sorted(missing_ids)),
+            )
+        extra_ids = planned_ids - requested_item_ids
+        if extra_ids:
+            raise ExecutorAbort(
+                "item_ids extras no escopo do plano: "
+                + ", ".join(sorted(extra_ids)),
+            )
+        for operation in operations:
+            if operation.action == "already_migrated":
+                raise ExecutorAbort(
+                    f"item {operation.monday_item_id} already_migrated no lote autorizado.",
+                )
+            if operation.action not in ("create", "resume"):
+                raise ExecutorAbort(
+                    f"item {operation.monday_item_id} action={operation.action} "
+                    "no lote CREATE autorizado.",
+                )
+
+    if max_comments is not None:
+        total_comments = sum(operation.comments_to_create for operation in operations)
+        if total_comments != max_comments:
+            raise ExecutorAbort(
+                f"comments_to_create {total_comments} != max_comments {max_comments}.",
+            )
+
     plan = ExecutionPlan(
         monday_board_id=board_id,
         sunday_board_id=sunday_board_id,
@@ -530,6 +612,8 @@ def build_execution_plan(
         mode=mode,
         max_items=max_items,
         requested_item_id=requested_item_id,
+        requested_item_ids=tuple(sorted(requested_item_ids)) if requested_item_ids else None,
+        max_comments=max_comments,
         snapshot_fingerprint=snapshot_fingerprint(inventory),
         snapshot_total=len(inventory.items),
         source_snapshot_timestamp=report.source_snapshot_timestamp,

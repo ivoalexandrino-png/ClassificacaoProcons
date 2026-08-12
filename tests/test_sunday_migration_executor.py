@@ -62,7 +62,8 @@ def _kpi_inventory(items=None) -> MondayBoardInventory:
     )
 
 
-def _plan_for(inventory, *, wave=1, max_items=50, item_id=None, mode="plan", ledger=None,
+def _plan_for(inventory, *, wave=1, max_items=50, item_id=None, item_ids=None,
+              max_comments=None, mode="plan", ledger=None,
               monday_id_index=None, policy=POLICY, schema_checks=None):
     report, _plans, _pulled = run_dry_run(
         {inventory.board_id: inventory},
@@ -76,6 +77,8 @@ def _plan_for(inventory, *, wave=1, max_items=50, item_id=None, mode="plan", led
         wave=wave,
         max_items=max_items,
         item_id=item_id,
+        item_ids=item_ids,
+        max_comments=max_comments,
         mode=mode,
         user_policy=policy,
         persistent_ledger=ledger,
@@ -796,3 +799,99 @@ def test_snapshot_fingerprint_is_stable_and_sensitive():
         ),
     )
     assert snapshot_fingerprint(inventory) != snapshot_fingerprint(changed)
+
+
+def test_item_ids_allowlist_scopes_exact_operations():
+    inventory = _kpi_inventory()
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"2", "3"}),
+        max_items=2,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.requested_item_ids == ("2", "3")
+    assert [op.monday_item_id for op in plan.operations] == ["2", "3"]
+    assert plan.counts() == {"create": 2}
+
+
+def test_item_ids_rejects_missing_id():
+    inventory = _kpi_inventory()
+    with pytest.raises(ExecutorAbort, match="404"):
+        _plan_for(inventory, item_ids=frozenset({"2", "404"}))
+
+
+def test_item_ids_rejects_already_migrated_in_batch(tmp_path):
+    inventory = _kpi_inventory()
+    ledger = {
+        f"{KPI_BOARD}:2": {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": "2",
+            "sunday_board_id": "86",
+            "sunday_item_id": "9002",
+            "migration_status": "migrated",
+        },
+    }
+    with pytest.raises(ExecutorAbort, match="already_migrated"):
+        _plan_for(inventory, item_ids=frozenset({"2", "3"}), ledger=ledger)
+
+
+def test_max_comments_requires_exact_total():
+    inventory = MondayBoardInventory(
+        board_id=KPI_BOARD,
+        name="KPI",
+        groups={"g2023": "2023"},
+        columns=(MondayColumnInfo(id="name", title="Name", type="name"),),
+        items=(
+            MondayItemDigest(
+                item_id="1",
+                group_id="g2023",
+                created_at=RECENT,
+                updated_at=RECENT,
+                update_diagnostics=(
+                    MondayUpdateDigest(
+                        update_id="u1",
+                        created_at=RECENT,
+                        has_author=True,
+                        classification="text_update_with_author",
+                        is_migratable=True,
+                    ),
+                    MondayUpdateDigest(
+                        update_id="u2",
+                        created_at=RECENT,
+                        has_author=True,
+                        classification="text_update_with_author",
+                        is_migratable=True,
+                    ),
+                ),
+            ),
+        ),
+    )
+    plan_ok = _plan_for(
+        inventory,
+        item_ids=frozenset({"1"}),
+        max_items=1,
+        max_comments=2,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan_ok.max_comments == 2
+    with pytest.raises(ExecutorAbort, match="max_comments"):
+        _plan_for(
+            inventory,
+            item_ids=frozenset({"1"}),
+            max_items=1,
+            max_comments=1,
+            schema_checks=[GateCheck("schema_live_verificado", True)],
+        )
+
+
+def test_item_id_and_item_ids_are_mutually_exclusive():
+    inventory = _kpi_inventory()
+    with pytest.raises(ExecutorAbort, match="não ambos"):
+        build_execution_plan(
+            inventory=inventory,
+            report=run_dry_run({KPI_BOARD: inventory}, {})[0],
+            wave=1,
+            max_items=1,
+            item_id="1",
+            item_ids=frozenset({"1"}),
+        )
