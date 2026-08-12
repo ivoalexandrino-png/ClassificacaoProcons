@@ -6,6 +6,15 @@ PLAN do piloto KPI:
     python scripts/sunday_migration_execute.py \
         --board 5563754463 --wave 1 --mode plan --max-items 31
 
+Micro-piloto de 1 item (allowlist explícita; PLAN e APPLY usam o MESMO escopo):
+
+    python scripts/sunday_migration_execute.py \
+        --board 4443297481 --wave 1 --mode plan --max-items 1 \
+        --item-id <monday_item_id>
+
+Com `--item-id`, o escopo é SOMENTE o(s) item(ns) informado(s); id inexistente no
+board/wave ou correspondência ambígua abortam (nunca "primeiro item" silencioso).
+
 APPLY nunca roda sem: --mode apply + --confirm-writes + env
 SUNDAY_MIGRATION_ALLOW_APPLY=1 + gate 100% OK + snapshot revalidado.
 """
@@ -16,11 +25,13 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 from classificacao_procons.migration.apply_writer import (
     build_sunday_monday_id_index,
     fetch_monday_apply_sources,
+    fetch_monday_item_updates,
     verify_applied_board,
 )
 from classificacao_procons.migration.dry_run import run_dry_run
@@ -63,14 +74,39 @@ def _find_monday_id_column(snapshot) -> str:
     raise ExecutorAbort("Coluna Monday ID ausente no schema live do Sunday.")
 
 
-def _validate_plan_payload(payload: dict) -> None:
+def _resolve_target_group_id(plan, snapshot) -> str:
+    """Group id do Sunday para o(s) CREATE(s) do plano (título único; fail-closed)."""
+    titles = {
+        (operation.target_group or "").strip()
+        for operation in plan.operations
+        if operation.action == "create"
+    }
+    if len(titles) != 1 or not next(iter(titles)):
+        raise ExecutorAbort(f"Grupo-alvo ambíguo ou ausente no plano: {sorted(titles)}.")
+    title = next(iter(titles)).lower()
+    matches = [
+        group_id
+        for group_id, name in snapshot.groups.items()
+        if str(name).strip().lower() == title
+    ]
+    if len(matches) != 1:
+        raise ExecutorAbort(
+            f"Grupo {next(iter(titles))!r} não resolvido no board Sunday "
+            f"{plan.sunday_board_id}: {matches}.",
+        )
+    return matches[0]
+
+
+def _validate_plan_payload(payload: dict, *, expected_create: int) -> None:
     counts = payload.get("counts", {})
-    if counts.get("create") != KPI_EXPECTED_ROWS:
-        raise ExecutorAbort(f"CREATE esperado {KPI_EXPECTED_ROWS}, obtido {counts}.")
+    if counts.get("create") != expected_create:
+        raise ExecutorAbort(f"CREATE esperado {expected_create}, obtido {counts}.")
     for action in ("adopt", "absorb", "exclude_test", "blocked"):
         if counts.get(action, 0) != 0:
             raise ExecutorAbort(f"Contagem inesperada {action}={counts.get(action)}.")
-    for field in ("comments_to_create", "attachments_to_link", "relations_to_create"):
+    # comments são migrados pelo APPLY (idempotente por marcador); attachments e
+    # relações ainda NÃO têm writer — qualquer valor != 0 aborta (fail-closed).
+    for field in ("attachments_to_link", "relations_to_create"):
         if payload.get(field, 0) != 0:
             raise ExecutorAbort(f"Campo {field} deveria ser 0, obtido {payload.get(field)}.")
     if payload.get("relations_unresolved", 0) != 0:
@@ -85,6 +121,17 @@ def main() -> int:
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
     parser.add_argument("--mode", default="plan", choices=("plan", "apply"))
     parser.add_argument("--max-items", required=True, type=int)
+    parser.add_argument(
+        "--item-id",
+        action="append",
+        dest="item_ids",
+        default=None,
+        metavar="MONDAY_ITEM_ID",
+        help=(
+            "allowlist explícita por monday_item_id (repetível); PLAN e APPLY usam "
+            "exatamente o mesmo escopo; id ausente/ambíguo no board/wave aborta"
+        ),
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -104,6 +151,11 @@ def main() -> int:
 
     if args.board not in BOARD_ALLOWLIST:
         print(f"ABORT: board {args.board} fora da allowlist {sorted(BOARD_ALLOWLIST)}.")
+        return 2
+
+    item_allowlist = tuple(args.item_ids) if args.item_ids else None
+    if item_allowlist and len(set(item_allowlist)) != len(item_allowlist):
+        print("ABORT: --item-id com monday_item_id duplicado.")
         return 2
 
     if args.mode == "apply" and not args.confirm_writes:
@@ -178,27 +230,43 @@ def main() -> int:
     elif Path(args.sunday_snapshot).exists():
         sunday_snapshots = load_snapshot_file(args.sunday_snapshot)
 
+    target_sunday_board = BOARD_ALLOWLIST[args.board]
+    scope_item_ids = (
+        set(item_allowlist)
+        if item_allowlist
+        else {item.item_id for item in inventory.items}
+    )
+
     if args.mode == "apply" and client is not None:
-        sunday_items = client.list_items(KPI_SUNDAY_BOARD).items
-        if len(sunday_items) != 0:
-            print(f"ABORT: Sunday board {KPI_SUNDAY_BOARD} items={len(sunday_items)} (esperado 0).")
-            return 3
-        monday_id_column_id = _find_monday_id_column(sunday_snapshots[KPI_SUNDAY_BOARD])
+        monday_id_column_id = _find_monday_id_column(sunday_snapshots[target_sunday_board])
         live_index = build_sunday_monday_id_index(
             client,
-            board_id=KPI_SUNDAY_BOARD,
+            board_id=target_sunday_board,
             monday_id_column_id=monday_id_column_id,
         )
-        if live_index:
-            print(f"ABORT: Monday IDs já existentes no Sunday: {len(live_index)}.")
+        conflicts = scope_item_ids & set(live_index)
+        if conflicts:
+            print(f"ABORT: Monday IDs do escopo já existentes no Sunday: {len(conflicts)}.")
             return 3
+        if not item_allowlist:
+            # piloto full-board: destino precisa estar totalmente vazio.
+            sunday_items = client.list_items(target_sunday_board).items
+            if len(sunday_items) != 0:
+                print(
+                    f"ABORT: Sunday board {target_sunday_board} "
+                    f"items={len(sunday_items)} (esperado 0).",
+                )
+                return 3
+            if live_index:
+                print(f"ABORT: Monday IDs já existentes no Sunday: {len(live_index)}.")
+                return 3
         ledger = load_persistent_ledger(args.ledger)
         ledger_hits = sum(
-            1 for item in inventory.items
-            if ledger.get(f"{args.board}:{item.item_id}", {}).get("migration_status") == "migrated"
+            1 for item_id in scope_item_ids
+            if ledger.get(f"{args.board}:{item_id}", {}).get("migration_status") == "migrated"
         )
         if ledger_hits:
-            print(f"ABORT: ledger entries existentes para KPI: {ledger_hits}.")
+            print(f"ABORT: ledger entries existentes no escopo: {ledger_hits}.")
             return 3
 
     monday_id_index = {}
@@ -219,17 +287,22 @@ def main() -> int:
         user_policy=policy,
         users_mapped=set(policy.exact_match_ids),
     )
-    plan = build_execution_plan(
-        inventory=inventory,
-        report=report,
-        wave=args.wave,
-        max_items=args.max_items,
-        mode=args.mode,
-        user_policy=policy,
-        persistent_ledger=load_persistent_ledger(args.ledger),
-        sunday_monday_id_index=monday_id_index or None,
-        sunday_schema_checks=schema_checks,
-    )
+    try:
+        plan = build_execution_plan(
+            inventory=inventory,
+            report=report,
+            wave=args.wave,
+            max_items=args.max_items,
+            mode=args.mode,
+            user_policy=policy,
+            persistent_ledger=load_persistent_ledger(args.ledger),
+            sunday_monday_id_index=monday_id_index or None,
+            sunday_schema_checks=schema_checks,
+            item_allowlist=item_allowlist,
+        )
+    except ExecutorAbort as exc:
+        print(f"ABORT: {exc}")
+        return 3
 
     Path(args.out).write_text(
         json.dumps(plan.to_payload(), ensure_ascii=False, indent=2), encoding="utf-8",
@@ -237,9 +310,9 @@ def main() -> int:
     payload = plan.to_payload()
     print(f"\nPLAN gravado em {args.out}")
     print(json.dumps({k: payload[k] for k in (
-        "monday_board_id", "sunday_board_id", "wave", "mode", "snapshot", "counts",
-        "comments_to_create", "attachments_to_link", "relations_to_create",
-        "relations_unresolved", "gate_ok",
+        "monday_board_id", "sunday_board_id", "wave", "mode", "item_allowlist",
+        "snapshot", "counts", "comments_to_create", "attachments_to_link",
+        "relations_to_create", "relations_unresolved", "gate_ok",
     )}, ensure_ascii=False, indent=2))
     for check in payload["gate"]:
         print(f"  gate[{'OK ' if check['ok'] else 'FAIL'}] {check['check']}: {check['detail']}")
@@ -247,8 +320,9 @@ def main() -> int:
     if args.mode == "plan":
         return 0
 
+    expected_create = len(item_allowlist) if item_allowlist else KPI_EXPECTED_ROWS
     try:
-        _validate_plan_payload(payload)
+        _validate_plan_payload(payload, expected_create=expected_create)
     except ExecutorAbort as exc:
         print(f"\nABORT: {exc}")
         return 3
@@ -257,7 +331,7 @@ def main() -> int:
         print("ABORT: client Sunday ausente.")
         return 3
 
-    sunday_snapshot = sunday_snapshots[BOARD_ALLOWLIST[args.board]]
+    sunday_snapshot = sunday_snapshots[target_sunday_board]
     board_plan = build_board_plan(
         inventory,
         sunday_snapshot,
@@ -267,11 +341,32 @@ def main() -> int:
     if not monday_token:
         print("ABORT: MONDAY_API_TOKEN ausente para APPLY.")
         return 2
-    apply_sources = fetch_monday_apply_sources(monday_token, args.board)
-    if len(apply_sources) != len(inventory.items):
+    apply_sources = fetch_monday_apply_sources(
+        monday_token,
+        args.board,
+        item_ids=scope_item_ids if item_allowlist else None,
+    )
+    if len(apply_sources) != len(scope_item_ids):
         print(
             f"ABORT: apply_sources={len(apply_sources)} != "
-            f"inventory={len(inventory.items)}.",
+            f"escopo={len(scope_item_ids)}.",
+        )
+        return 3
+
+    create_item_ids = sorted(
+        operation.monday_item_id
+        for operation in plan.operations
+        if operation.action == "create"
+    )
+    try:
+        target_group_id = _resolve_target_group_id(plan, sunday_snapshot)
+    except ExecutorAbort as exc:
+        print(f"ABORT: {exc}")
+        return 3
+    if args.board == KPI_MONDAY_BOARD and target_group_id != KPI_TARGET_GROUP_ID:
+        print(
+            f"ABORT: grupo-alvo do KPI divergente ({target_group_id} != "
+            f"{KPI_TARGET_GROUP_ID}).",
         )
         return 3
 
@@ -281,7 +376,8 @@ def main() -> int:
         sunday_snapshot=sunday_snapshot,
         apply_sources=apply_sources,
         monday_id_column_id=_find_monday_id_column(sunday_snapshot),
-        target_group_id=KPI_TARGET_GROUP_ID,
+        target_group_id=target_group_id,
+        updates_by_item=fetch_monday_item_updates(monday_token, create_item_ids),
     )
 
     print("\nIniciando APPLY (fail-fast)…")
@@ -299,14 +395,22 @@ def main() -> int:
         print(f"\nABORT: {exc}")
         return 3
 
+    verify_inventory = inventory
+    if item_allowlist:
+        verify_inventory = replace(
+            inventory,
+            items=tuple(
+                item for item in inventory.items if item.item_id in scope_item_ids
+            ),
+        )
     field_report = verify_applied_board(
         client=client,
         plan=plan,
-        inventory=inventory,
+        inventory=verify_inventory,
         board_plan=board_plan,
         apply_sources=apply_sources,
         monday_id_column_id=migration_context.monday_id_column_id,
-        target_group_id=KPI_TARGET_GROUP_ID,
+        target_group_id=target_group_id,
     )
 
     post_plan = build_execution_plan(
@@ -323,14 +427,19 @@ def main() -> int:
             monday_id_column_id=migration_context.monday_id_column_id,
         ),
         sunday_schema_checks=schema_checks,
+        item_allowlist=item_allowlist,
     )
     post_payload = post_plan.to_payload()
 
     apply_report = {
         "monday_board_id": args.board,
         "sunday_board_id": plan.sunday_board_id,
+        "item_allowlist": list(plan.item_allowlist),
         "succeeded": apply_result.succeeded,
-        "failed": [{"monday_item_id": item_id, "error": err} for item_id, err in apply_result.failed],
+        "failed": [
+            {"monday_item_id": item_id, "error": err}
+            for item_id, err in apply_result.failed
+        ],
         "not_attempted": apply_result.not_attempted,
         "writes": apply_result.write_stats,
         "field_checks_total": field_report.total,

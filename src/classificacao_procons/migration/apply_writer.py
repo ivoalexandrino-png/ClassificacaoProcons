@@ -12,6 +12,7 @@ from classificacao_procons.migration.executor import (
     DEFAULT_LEDGER_PATH,
     ExecutionPlan,
     PlannedOperation,
+    comment_idempotency_marker,
     load_persistent_ledger,
 )
 from classificacao_procons.migration.mappings import (
@@ -26,6 +27,20 @@ from classificacao_procons.migration.models import (
     SundayBoardSnapshot,
 )
 from classificacao_procons.monday.client import _graphql_request
+
+_ITEM_UPDATES_QUERY = """
+query ($ids: [ID!], $limit: Int!) {
+  items(ids: $ids) {
+    id
+    updates(limit: $limit) {
+      id
+      text_body
+      created_at
+      creator { name }
+    }
+  }
+}
+"""
 
 _APPLY_ITEMS_QUERY = """
 query ($ids: [ID!], $cursor: String, $limit: Int!) {
@@ -50,6 +65,16 @@ class MondayApplySource:
     name: str
     group_id: str | None
     values_by_column_id: dict[str, str | None]  # text ou label de status
+
+
+@dataclass(frozen=True)
+class MondayUpdateSource:
+    """Update do Monday a migrar como comment (conteúdo nunca vai para logs)."""
+
+    update_id: str
+    body: str
+    creator_name: str | None = None
+    created_at: str | None = None
 
 
 @dataclass
@@ -124,6 +149,78 @@ def fetch_monday_apply_sources(
         if not cursor:
             break
     return sources
+
+
+def fetch_monday_item_updates(
+    api_token: str,
+    item_ids: list[str],
+    *,
+    limit: int = 100,
+) -> dict[str, tuple[MondayUpdateSource, ...]]:
+    """Lê os updates dos itens no Monday (somente GET GraphQL), mais antigos primeiro."""
+    if not item_ids:
+        return {}
+    data = _graphql_request(
+        api_token=api_token,
+        query=_ITEM_UPDATES_QUERY,
+        variables={"ids": item_ids, "limit": limit},
+    )
+    result: dict[str, tuple[MondayUpdateSource, ...]] = {}
+    for item in data.get("items") or []:
+        updates = [
+            MondayUpdateSource(
+                update_id=str(update["id"]),
+                body=str(update.get("text_body") or "").strip(),
+                creator_name=(update.get("creator") or {}).get("name"),
+                created_at=update.get("created_at"),
+            )
+            for update in item.get("updates") or []
+            if update.get("id") is not None
+        ]
+        updates.sort(key=lambda update: (update.created_at or "", update.update_id))
+        result[str(item["id"])] = tuple(updates)
+    return result
+
+
+def build_migration_comment_body(monday_item_id: str, update: MondayUpdateSource) -> str:
+    """Corpo do comment migrado: cabeçalho com autor/data + texto + marcador determinístico."""
+    header_parts = ["Monday"]
+    if update.creator_name:
+        header_parts.append(str(update.creator_name))
+    if update.created_at:
+        header_parts.append(str(update.created_at))
+    header = "[" + " · ".join(header_parts) + "]"
+    marker = comment_idempotency_marker(monday_item_id, update.update_id)
+    return f"{header}\n{update.body}\n\n{marker}"
+
+
+def apply_create_comments(
+    *,
+    client,
+    sunday_item_id: str,
+    monday_item_id: str,
+    updates: tuple[MondayUpdateSource, ...],
+    stats: ApplyWriteStats | None = None,
+) -> int:
+    """Cria comments dos updates Monday, idempotente pelo marcador no corpo."""
+    if not updates:
+        return 0
+    existing_bodies = [
+        comment.body or "" for comment in client.list_comments(sunday_item_id)
+    ]
+    created = 0
+    for update in updates:
+        marker = comment_idempotency_marker(monday_item_id, update.update_id)
+        if any(marker in body for body in existing_bodies):
+            continue
+        client.add_comment(
+            sunday_item_id,
+            build_migration_comment_body(monday_item_id, update),
+        )
+        created += 1
+        if stats is not None:
+            stats.comments += 1
+    return created
 
 
 def build_sunday_monday_id_index(

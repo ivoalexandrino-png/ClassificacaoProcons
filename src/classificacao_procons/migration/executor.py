@@ -208,6 +208,7 @@ class ExecutionPlan:
     snapshot_fingerprint: str
     snapshot_total: int
     source_snapshot_timestamp: str
+    item_allowlist: tuple[str, ...] = ()
     operations: list[PlannedOperation] = field(default_factory=list)
     relations_to_create: list[RelationWrite] = field(default_factory=list)
     relations_unresolved: list[RelationWrite] = field(default_factory=list)
@@ -231,6 +232,7 @@ class ExecutionPlan:
             "wave": self.wave,
             "mode": self.mode,
             "max_items": self.max_items,
+            "item_allowlist": list(self.item_allowlist),
             "snapshot": {
                 "fingerprint": self.snapshot_fingerprint,
                 "total": self.snapshot_total,
@@ -288,6 +290,20 @@ def _wave_label(wave: int) -> str:
     return f"WAVE_{wave}"
 
 
+def _normalize_item_allowlist(
+    item_allowlist: tuple[str, ...] | list[str] | None,
+) -> tuple[str, ...] | None:
+    """Valida a allowlist explícita por monday_item_id (fail-closed, sem escolha implícita)."""
+    if item_allowlist is None:
+        return None
+    normalized = tuple(str(item_id).strip() for item_id in item_allowlist)
+    if not normalized or any(not item_id for item_id in normalized):
+        raise ExecutorAbort("item_allowlist vazia ou com monday_item_id vazio.")
+    if len(set(normalized)) != len(normalized):
+        raise ExecutorAbort("item_allowlist com monday_item_id duplicado.")
+    return normalized
+
+
 def build_execution_plan(
     *,
     inventory: MondayBoardInventory,
@@ -299,8 +315,15 @@ def build_execution_plan(
     persistent_ledger: dict[str, dict] | None = None,
     sunday_monday_id_index: dict[str, str] | None = None,
     sunday_schema_checks: list[GateCheck] | None = None,
+    item_allowlist: tuple[str, ...] | list[str] | None = None,
 ) -> ExecutionPlan:
-    """Monta o plano executável a partir do dry-run canônico (zero escrita)."""
+    """Monta o plano executável a partir do dry-run canônico (zero escrita).
+
+    `item_allowlist` restringe o escopo a monday_item_ids explícitos: cada id da
+    lista precisa corresponder a EXATAMENTE uma source row do board/wave; 0 ou >1
+    correspondências abortam (nunca "primeiro item" silencioso).
+    """
+    allowlist = _normalize_item_allowlist(item_allowlist)
     board_id = inventory.board_id
     if board_id not in BOARD_ALLOWLIST:
         raise ExecutorAbort(f"Board {board_id} fora da allowlist aprovada.")
@@ -326,6 +349,8 @@ def build_execution_plan(
     relations: list[RelationWrite] = []
     for result in report.items:
         if result.monday_board_id != board_id or result.wave != wave_label:
+            continue
+        if allowlist is not None and result.monday_item_id not in allowlist:
             continue
         item = items_by_id.get(result.monday_item_id)
         if item is None:
@@ -414,12 +439,30 @@ def build_execution_plan(
             )
             relations.append(write)
 
+    if allowlist is not None:
+        matches: dict[str, int] = {}
+        for operation in operations:
+            matches[operation.monday_item_id] = matches.get(operation.monday_item_id, 0) + 1
+        missing = [item_id for item_id in allowlist if matches.get(item_id, 0) == 0]
+        if missing:
+            raise ExecutorAbort(
+                f"item_allowlist: monday_item_id não encontrado no board {board_id}"
+                f"/{wave_label}: {', '.join(missing)}.",
+            )
+        duplicated = [item_id for item_id in allowlist if matches.get(item_id, 0) > 1]
+        if duplicated:
+            raise ExecutorAbort(
+                "item_allowlist: escopo ambíguo — mais de uma source row para "
+                f"{', '.join(duplicated)}.",
+            )
+
     plan = ExecutionPlan(
         monday_board_id=board_id,
         sunday_board_id=sunday_board_id,
         wave=wave_label,
         mode=mode,
         max_items=max_items,
+        item_allowlist=allowlist or (),
         snapshot_fingerprint=snapshot_fingerprint(inventory),
         snapshot_total=len(inventory.items),
         source_snapshot_timestamp=report.source_snapshot_timestamp,
@@ -524,6 +567,7 @@ class ApplyMigrationContext:
     apply_sources: dict[str, object]
     monday_id_column_id: str
     target_group_id: str
+    updates_by_item: dict[str, tuple] = field(default_factory=dict)
 
 
 def apply_plan(
@@ -555,12 +599,20 @@ def apply_plan(
             "Snapshot do Monday mudou desde o PLAN aprovado "
             f"({current} != {plan.snapshot_fingerprint}); gere novo PLAN.",
         )
+    if plan.item_allowlist:
+        scope = {operation.monday_item_id for operation in plan.operations}
+        if scope != set(plan.item_allowlist):
+            raise ExecutorAbort(
+                "Escopo do APPLY difere da item_allowlist do PLAN "
+                f"({sorted(scope)} != {sorted(plan.item_allowlist)}).",
+            )
 
     report = ApplyReport()
     write_stats = None
     if migration_context is not None:
         from classificacao_procons.migration.apply_writer import (
             ApplyWriteStats,
+            apply_create_comments,
             apply_create_item,
             build_sunday_monday_id_index,
         )
@@ -591,13 +643,23 @@ def apply_plan(
                     monday_id_column_id=migration_context.monday_id_column_id,
                 )
                 ledger_key = f"{plan.monday_board_id}:{operation.monday_item_id}"
-                if (
-                    load_persistent_ledger(ledger_path)
-                    .get(ledger_key, {})
-                    .get("migration_status")
-                    == "migrated"
-                    or operation.monday_item_id in live_index
-                ):
+                ledger_record = load_persistent_ledger(ledger_path).get(ledger_key, {})
+                ledger_migrated = ledger_record.get("migration_status") == "migrated"
+                existing_sunday_id = live_index.get(operation.monday_item_id) or (
+                    ledger_record.get("sunday_item_id") if ledger_migrated else None
+                )
+                if existing_sunday_id or ledger_migrated:
+                    if existing_sunday_id:
+                        # Retomada idempotente: item já existe; só completa comments.
+                        apply_create_comments(
+                            client=client,
+                            sunday_item_id=str(existing_sunday_id),
+                            monday_item_id=operation.monday_item_id,
+                            updates=migration_context.updates_by_item.get(
+                                operation.monday_item_id, (),
+                            ),
+                            stats=write_stats,
+                        )
                     report.succeeded.append(operation.monday_item_id)
                     continue
                 apply_source = migration_context.apply_sources.get(operation.monday_item_id)
@@ -615,6 +677,15 @@ def apply_plan(
                     apply_source=apply_source,
                     monday_id_column_id=migration_context.monday_id_column_id,
                     target_group_id=migration_context.target_group_id,
+                    stats=write_stats,
+                )
+                apply_create_comments(
+                    client=client,
+                    sunday_item_id=sunday_item_id,
+                    monday_item_id=operation.monday_item_id,
+                    updates=migration_context.updates_by_item.get(
+                        operation.monday_item_id, (),
+                    ),
                     stats=write_stats,
                 )
             elif operation.action == "adopt":

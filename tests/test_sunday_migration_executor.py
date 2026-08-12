@@ -479,6 +479,152 @@ def test_subitems_counted_for_contratos_roots():
     assert group_rule(CONTRATOS, "Contratos Encerrados")[1].startswith("Vigência")
 
 
+# ------------------------------------------------------- item allowlist (1 item)
+
+
+def _plan_kwargs(inventory, **overrides):
+    report, _plans, _pulled = run_dry_run(
+        {inventory.board_id: inventory},
+        {},
+        user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    kwargs = dict(
+        inventory=inventory,
+        report=report,
+        wave=1,
+        max_items=50,
+        mode="plan",
+        user_policy=POLICY,
+    )
+    kwargs.update(overrides)
+    return kwargs
+
+
+def test_item_allowlist_restricts_plan_to_explicit_item():
+    plan = build_execution_plan(**_plan_kwargs(_kpi_inventory(), item_allowlist=("2",)))
+    assert [op.monday_item_id for op in plan.operations] == ["2"]
+    assert plan.item_allowlist == ("2",)
+    payload = plan.to_payload()
+    assert payload["item_allowlist"] == ["2"]
+    assert payload["counts"] == {"create": 1}
+
+
+def test_item_allowlist_unknown_item_aborts():
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        build_execution_plan(**_plan_kwargs(_kpi_inventory(), item_allowlist=("999",)))
+
+
+def test_item_allowlist_item_outside_wave_aborts():
+    # itens do KPI são WAVE_1; pedir WAVE_2 não encontra o item → abort.
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        build_execution_plan(
+            **_plan_kwargs(_kpi_inventory(), wave=2, item_allowlist=("2",)),
+        )
+
+
+def test_item_allowlist_duplicate_or_empty_ids_abort():
+    with pytest.raises(ExecutorAbort, match="duplicado"):
+        build_execution_plan(
+            **_plan_kwargs(_kpi_inventory(), item_allowlist=("2", "2")),
+        )
+    with pytest.raises(ExecutorAbort, match="vazia"):
+        build_execution_plan(**_plan_kwargs(_kpi_inventory(), item_allowlist=()))
+    with pytest.raises(ExecutorAbort, match="vazio"):
+        build_execution_plan(**_plan_kwargs(_kpi_inventory(), item_allowlist=(" ",)))
+
+
+def test_item_allowlist_ambiguous_match_aborts():
+    duplicated = _kpi_inventory()
+    report, _plans, _pulled = run_dry_run(
+        {duplicated.board_id: duplicated},
+        {},
+        user_policy=POLICY,
+        users_mapped=set(POLICY.exact_match_ids),
+    )
+    report.items.append(report.items[1])  # simula source row duplicada para o id 2
+    with pytest.raises(ExecutorAbort, match="ambíguo"):
+        build_execution_plan(
+            inventory=duplicated,
+            report=report,
+            wave=1,
+            max_items=50,
+            user_policy=POLICY,
+            item_allowlist=("2",),
+        )
+
+
+def test_apply_with_item_allowlist_writes_only_that_item(monkeypatch, tmp_path):
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    plan = build_execution_plan(
+        **_plan_kwargs(
+            _kpi_inventory(),
+            mode="apply",
+            item_allowlist=("2",),
+            sunday_schema_checks=[GateCheck("schema_live_verificado", True)],
+        ),
+    )
+    spy = SpyClient()
+    ledger_path = tmp_path / "ledger.json"
+    result = apply_plan(
+        plan, client=spy, confirm_writes=True,
+        snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        ledger_path=ledger_path,
+    )
+    assert spy.created == ["2"]  # SOMENTE o item da allowlist
+    assert result.succeeded == ["2"]
+    records = load_persistent_ledger(ledger_path)
+    assert set(records) == {f"{KPI_BOARD}:2"}
+
+
+def test_apply_max_items_still_enforced_with_item_allowlist(monkeypatch):
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    plan = build_execution_plan(
+        **_plan_kwargs(
+            _kpi_inventory(),
+            mode="apply",
+            max_items=0,
+            item_allowlist=("2",),
+            sunday_schema_checks=[GateCheck("schema_live_verificado", True)],
+        ),
+    )
+    gate = {check.name: check.ok for check in plan.gate}
+    assert gate["max_items"] is False
+    with pytest.raises(ExecutorAbort, match="max_items"):
+        apply_plan(
+            plan, client=SpyClient(), confirm_writes=True,
+            snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        )
+
+
+def test_apply_aborts_when_scope_differs_from_allowlist(monkeypatch, tmp_path):
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    plan = build_execution_plan(
+        **_plan_kwargs(
+            _kpi_inventory(),
+            mode="apply",
+            item_allowlist=("2",),
+            sunday_schema_checks=[GateCheck("schema_live_verificado", True)],
+        ),
+    )
+    full_plan = build_execution_plan(
+        **_plan_kwargs(
+            _kpi_inventory(),
+            mode="apply",
+            sunday_schema_checks=[GateCheck("schema_live_verificado", True)],
+        ),
+    )
+    plan.operations = full_plan.operations  # plano adulterado (escopo ≠ allowlist)
+    spy = SpyClient()
+    with pytest.raises(ExecutorAbort, match="allowlist"):
+        apply_plan(
+            plan, client=spy, confirm_writes=True,
+            snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+            ledger_path=tmp_path / "ledger.json",
+        )
+    assert spy.created == []  # abortou antes da primeira escrita
+
+
 # ---------------------------------------------- comments/attachments/segredos
 
 
@@ -487,6 +633,97 @@ def test_comment_and_attachment_idempotency_markers():
     assert marker == "[monday-migracao:123:u9]"
     name = attachment_idempotency_name("555", "contrato.pdf")
     assert name.startswith("monday-asset-555")
+
+
+class CommentSpyClient:
+    """Client espião só de comments (list + add)."""
+
+    def __init__(self, existing_bodies: list[str] | None = None):
+        self._existing = list(existing_bodies or [])
+        self.added: list[str] = []
+
+    def list_comments(self, item_id):
+        from types import SimpleNamespace
+
+        return [SimpleNamespace(body=body) for body in self._existing]
+
+    def add_comment(self, item_id, body, **kwargs):
+        self.added.append(body)
+        self._existing.append(body)
+
+
+def test_comment_body_preserves_author_date_and_marker():
+    from classificacao_procons.migration.apply_writer import (
+        MondayUpdateSource,
+        build_migration_comment_body,
+    )
+
+    update = MondayUpdateSource(
+        update_id="u1", body="andamento do processo",
+        creator_name="Fulano", created_at="2026-08-01T10:00:00Z",
+    )
+    body = build_migration_comment_body("123", update)
+    assert body.startswith("[Monday · Fulano · 2026-08-01T10:00:00Z]")
+    assert "andamento do processo" in body
+    assert body.rstrip().endswith("[monday-migracao:123:u1]")
+
+
+def test_apply_create_comments_is_idempotent_by_marker():
+    from classificacao_procons.migration.apply_writer import (
+        ApplyWriteStats,
+        MondayUpdateSource,
+        apply_create_comments,
+    )
+
+    updates = (
+        MondayUpdateSource(update_id="u1", body="primeiro"),
+        MondayUpdateSource(update_id="u2", body="segundo"),
+    )
+    spy = CommentSpyClient()
+    stats = ApplyWriteStats()
+    created = apply_create_comments(
+        client=spy, sunday_item_id="9001", monday_item_id="123",
+        updates=updates, stats=stats,
+    )
+    assert created == 2
+    assert stats.comments == 2
+    assert "[monday-migracao:123:u1]" in spy.added[0]
+    assert "[monday-migracao:123:u2]" in spy.added[1]
+
+    # Reexecução: os marcadores já existem → NENHUM comment duplicado.
+    rerun = apply_create_comments(
+        client=spy, sunday_item_id="9001", monday_item_id="123",
+        updates=updates, stats=stats,
+    )
+    assert rerun == 0
+    assert len(spy.added) == 2
+    assert stats.comments == 2
+
+
+def test_fetch_monday_item_updates_sorts_oldest_first(monkeypatch):
+    from classificacao_procons.migration import apply_writer
+
+    def fake_graphql(**kwargs):
+        return {
+            "items": [
+                {
+                    "id": "123",
+                    "updates": [
+                        {"id": "u2", "text_body": "novo",
+                         "created_at": "2026-08-02T00:00:00Z",
+                         "creator": {"name": "B"}},
+                        {"id": "u1", "text_body": "antigo",
+                         "created_at": "2026-08-01T00:00:00Z",
+                         "creator": {"name": "A"}},
+                    ],
+                },
+            ],
+        }
+
+    monkeypatch.setattr(apply_writer, "_graphql_request", fake_graphql)
+    result = apply_writer.fetch_monday_item_updates("token", ["123"])
+    assert [update.update_id for update in result["123"]] == ["u1", "u2"]
+    assert result["123"][0].creator_name == "A"
 
 
 def test_schema_checks_require_monday_id_column():
