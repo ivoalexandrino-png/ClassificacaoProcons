@@ -349,6 +349,33 @@ PAT com os escopos certos; e os campos dos DTOs de criação ainda precisam de c
    "board provider" comum, selecionada por `LEGAL_BACKEND`.
 5. **Rotacionar o PAT** exposto no chat (pendente — o usuário optou por pular por ora).
 
+## 13. Disposições de fonte + ledger (dry-run read-only) — Audiências
+
+Implementado em `src/classificacao_procons/sunday/migration/` (offline, sem escrita):
+
+- **Disposições** (`dispositions.py`): `CREATE`, `ADOPT`, `ABSORB`, `EXCLUDE_TEST`, `MANUAL`,
+  `ERROR`. Conservação (§5): a soma == total de source rows do snapshot. `SUNDAY_NATIVE` é
+  classificação do lado Sunday (fora do denominador Monday).
+- **Ledger** (`ledger.py`): admite **N Monday IDs → 1 Sunday item**; a coluna Monday ID recebe só
+  o **canônico** (aliases ABSORB ficam no ledger). Validações: ADOPT exige `sunday_item_id`;
+  ABSORB exige `canonical_monday_item_id`; EXCLUDE_TEST exige `reason`.
+- **Dry-run** (`dryrun.py`): disposição e **onda** são dimensões independentes. `NO_MATCH → CREATE`.
+- **Regras Audiências** (`audiencias.py`, Monday `4443295406` → Sunday `72`): 8 ADOPT
+  (7043–7050), 2 ABSORB (Daiane→canônico 7043; placeholder 22/10 00:00→canônico 16:00), 1 CREATE
+  técnico (16:00), 1 EXCLUDE_TEST (validação, `VALIDATION_RECORD`), Maria Helena `7065`
+  SUNDAY_NATIVE. Validado contra o snapshot **live** (121 rows): CREATE 110, ADOPT 8, ABSORB 2,
+  EXCLUDE_TEST 1, MANUAL 0, ERROR 0, SUNDAY_NATIVE 1, **121/121 conservado**.
+
+### Bloqueios para as partes globais (NÃO inventados)
+
+- **Engine global multi-board / preflight**: `WAVE1_TARGETS` (8 boards), matching de usuários
+  (25/3/30), `GROUP_RULES`, Tipo do board 87, relações por `column_id`, inventário global de 4.396
+  source rows — **não existem no repositório** e não foram fornecidos. A onda de Audiências fica
+  **não atribuída** até `WAVE1_TARGETS` ser informado.
+- **Sunday live**: o token do Sunday nesta VM foi **revogado** (401) — leitura ao vivo do Sunday
+  indisponível até um novo run com `SUNDAY_API_TOKEN` válido. As regras ADOPT (7043–7050, 7065) são
+  aplicadas conforme aprovado; a re-verificação live desses itens fica pendente.
+
 ## Perguntas em aberto
 
 - ~~O Sunday expõe API GraphQL compatível com o Monday?~~ **Respondido (§12): não — é REST próprio
