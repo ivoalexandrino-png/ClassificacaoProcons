@@ -79,6 +79,103 @@ WAVE1_RELATION_TARGETS: dict[tuple[str, str], str] = {
 # operacional): KPI é pequeno e é dado de referência (decisão de 2026-08-11).
 WAVE1_FULL_BOARDS: frozenset[str] = frozenset({"5563754463"})
 
+# ---------------------------------------------------------------------------
+# Regras EXPLÍCITAS por grupo do Monday (preflight, item 3): todo group_id do
+# escopo precisa de uma regra declarada — "preservar" (grupo homônimo no
+# destino), "colapsar" (→ grupo Itens; a dimensão já vive em coluna) ou
+# "transformar" (→ alimenta um campo no destino). Grupo sem regra = ERROR no
+# dry-run; NUNCA fallback silencioso para Itens.
+# Títulos exatos do inventário real de 2026-08-11 (normalizados sem acento).
+GROUP_ACTION_PRESERVE = "preservar"
+GROUP_ACTION_COLLAPSE = "colapsar"
+GROUP_ACTION_TRANSFORM = "transformar"
+
+GROUP_RULES: dict[str, dict[str, tuple[str, str]]] = {
+    # monday_board_id -> {titulo normalizado: (ação, nota)}
+    "4944254220": {
+        "pendentes de resposta": (GROUP_ACTION_PRESERVE, "fila operacional do Procon"),
+        "processos administrativos": (GROUP_ACTION_PRESERVE, "fila de PA"),
+        "2023": (GROUP_ACTION_COLLAPSE, "arquivo anual; ano preservado nas datas"),
+        "2024": (GROUP_ACTION_COLLAPSE, "arquivo anual"),
+        "2025": (GROUP_ACTION_COLLAPSE, "arquivo anual"),
+        "2026": (GROUP_ACTION_COLLAPSE, "arquivo anual"),
+    },
+    "3961072966": {
+        "prazos processos": (GROUP_ACTION_PRESERVE, "grupo usado pelo agente jurídico"),
+        "procon": (GROUP_ACTION_COLLAPSE, "domínio Procon; coluna Processo Administrativo"),
+        "prazos procon's": (GROUP_ACTION_COLLAPSE, "idem"),
+    },
+    "4443295406": {
+        "audiencias (procons e processos)": (
+            GROUP_ACTION_COLLAPSE,
+            "board 72 preserva os grupos atuais; distinção vive na coluna Processo/Procon",
+        ),
+    },
+    "5343921475": {
+        "processos consumidores ativos": (
+            GROUP_ACTION_PRESERVE,
+            "grupo-mestre usado por juridico/casos.py",
+        ),
+        "civel": (GROUP_ACTION_COLLAPSE, "dimensão na coluna 'Processo relacionado a'"),
+        "fiscal tributario": (GROUP_ACTION_COLLAPSE, "idem"),
+        "criminal": (GROUP_ACTION_COLLAPSE, "idem"),
+        "administrativo": (GROUP_ACTION_COLLAPSE, "idem"),
+        "processos encerrados": (GROUP_ACTION_COLLAPSE, "estado na coluna Status=Encerrado"),
+    },
+    "4443297481": {
+        "trabalhista ativo": (GROUP_ACTION_COLLAPSE, "estado na coluna Status"),
+        "trabalhista encerrado": (GROUP_ACTION_COLLAPSE, "estado na coluna Status"),
+    },
+    "5563754463": {
+        "2023": (GROUP_ACTION_COLLAPSE, "ano na Data Ajuizamento"),
+        "2022": (GROUP_ACTION_COLLAPSE, "idem"),
+        "2021": (GROUP_ACTION_COLLAPSE, "idem"),
+        "2020": (GROUP_ACTION_COLLAPSE, "idem"),
+        "2018": (GROUP_ACTION_COLLAPSE, "idem"),
+    },
+    "5301515799": {
+        "contratos pendentes de assinatura jan": (GROUP_ACTION_PRESERVE, "fila Jan"),
+        "contratos pendentes de assinatura luciano": (GROUP_ACTION_PRESERVE, "fila Luciano"),
+        "pendente fornecedor": (GROUP_ACTION_PRESERVE, "fila fornecedor"),
+        "assinados": (GROUP_ACTION_PRESERVE, "terminal"),
+        "recusado": (GROUP_ACTION_PRESERVE, "terminal"),
+    },
+    "5385471914": {
+        # grupos são o "tipo" do contrato → alimentam a coluna Tipo do board 87
+        "rh": (GROUP_ACTION_TRANSFORM, "Tipo=RH"),
+        "contratos b4a": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos B4A"),
+        "contratos mmkt": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos MMKT"),
+        "contratos itaro": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos Itaro"),
+        "contratos rv bvi": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos RV BVI"),
+        "contratos aurora": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos Aurora"),
+        "contratos societarios": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos Societários"),
+        "contratos b2b": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos B2B"),
+        "contratos de cambio": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos de Câmbio"),
+        "nda": (GROUP_ACTION_TRANSFORM, "Tipo=NDA"),
+        "contratos influencers (queens)": (
+            GROUP_ACTION_TRANSFORM,
+            "Tipo=Contratos Influencers (Queens)",
+        ),
+        "procuracoes": (GROUP_ACTION_TRANSFORM, "Tipo=Procurações"),
+        "contratos jan": (GROUP_ACTION_TRANSFORM, "Tipo=Contratos Jan"),
+        "sindicato": (GROUP_ACTION_TRANSFORM, "Tipo=Sindicato"),
+        "politicas internas": (GROUP_ACTION_TRANSFORM, "Tipo=Políticas Internas"),
+        "ferramentas": (GROUP_ACTION_TRANSFORM, "Tipo=Ferramentas"),
+        # Encerrados NÃO vira Tipo (decisão do usuário): vira Vigência=Não Vigente.
+        "contratos encerrados": (
+            GROUP_ACTION_TRANSFORM,
+            "Vigência=Não Vigente; Tipo fica vazio (não inventar)",
+        ),
+    },
+}
+
+
+def group_rule(board_id: str, group_title: str | None) -> tuple[str, str] | None:
+    """Regra explícita para um grupo do Monday; None = sem regra (ERROR)."""
+    if group_title is None:
+        return None
+    return GROUP_RULES.get(board_id, {}).get(_normalize(group_title))
+
 # Grupos que significam "concluído" (semântica real de cada board — grupos de
 # arquivo por ano, assinados/recusados e encerrados).
 _DONE_GROUP_PATTERNS = (

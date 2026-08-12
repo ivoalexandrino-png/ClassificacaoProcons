@@ -23,6 +23,7 @@ from classificacao_procons.migration.mappings import (
     WAVE1_FULL_BOARDS,
     build_board_plan,
     find_main_status_column,
+    group_rule,
     item_is_concluded,
     sunday_board_by_monday_map,
 )
@@ -201,8 +202,20 @@ def classify_item(
     scenario: str,
     known_target_items: dict[str, set[str]],
     users_mapped: set[str],
+    group_title: str | None = None,
 ) -> ItemDryRunResult:
     """Classifica um item (sanitizado) num cenário do dry-run."""
+    # Grupo sem regra explícita = ERROR em QUALQUER onda (nunca fallback
+    # silencioso para Itens) — preflight item 3.
+    if group_rule(plan.monday_board_id, group_title) is None:
+        return ItemDryRunResult(
+            monday_board_id=plan.monday_board_id,
+            monday_item_id=item.item_id,
+            classification="ERROR",
+            reasons=("OTHER",),
+            flags=("grupo_sem_regra_explicita",),
+            wave="onda1" if in_recorte else "onda2",
+        )
     if not in_recorte:
         # Fora da Onda 1 ≠ descarte: backfill histórico OBRIGATÓRIO na Onda 2.
         return ItemDryRunResult(
@@ -325,6 +338,7 @@ def run_dry_run(
                     scenario=scenario,
                     known_target_items=known_target_items,
                     users_mapped=users_mapped or set(),
+                    group_title=inventory.groups.get(item.group_id or ""),
                 ),
             )
     return report, plans, pulled

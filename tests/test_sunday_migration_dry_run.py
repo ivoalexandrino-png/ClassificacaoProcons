@@ -280,6 +280,38 @@ def test_should_include_full_board_exception_in_wave1():
     assert "1" in selected  # KPI integral na Onda 1 (exceção aprovada)
 
 
+def test_should_error_on_group_without_explicit_rule():
+    # Grupo desconhecido no board: NUNCA fallback silencioso para Itens.
+    from classificacao_procons.migration.models import MondayBoardInventory
+
+    inventory = MondayBoardInventory(
+        board_id="5301515799",
+        name="Controle",
+        groups={"g_novo": "Grupo Surpresa Sem Regra"},
+        columns=(),
+        items=(
+            MondayItemDigest(item_id="1", group_id="g_novo", created_at=RECENT,
+                             updated_at=RECENT),
+        ),
+    )
+    report, _plans, _pulled = run_dry_run({"5301515799": inventory}, {}, cutoff=CUTOFF)
+    result = report.items[0]
+    assert result.classification == "ERROR"
+    assert "grupo_sem_regra_explicita" in result.flags
+
+
+def test_should_have_explicit_rule_for_every_known_group():
+    from classificacao_procons.migration.mappings import group_rule
+
+    # Amostra das regras reais aprovadas (preservar/colapsar/transformar).
+    assert group_rule("5301515799", "Assinados") == ("preservar", "terminal")
+    assert group_rule("4944254220", "2024")[0] == "colapsar"
+    assert group_rule("5385471914", "Contratos B2B")[0] == "transformar"
+    assert group_rule("5385471914", "Contratos Encerrados")[1].startswith("Vigência")
+    assert group_rule("5343921475", "Cível")[0] == "colapsar"
+    assert group_rule("5301515799", "Grupo Inexistente") is None
+
+
 def test_should_conserve_total_across_waves():
     open_item = MondayItemDigest(item_id="1", group_id="g_jan", created_at=RECENT,
                                  updated_at=RECENT)
