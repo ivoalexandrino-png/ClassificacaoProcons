@@ -60,7 +60,8 @@ def _kpi_inventory(items=None) -> MondayBoardInventory:
 
 
 def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
-              monday_id_index=None, policy=POLICY, schema_checks=None):
+              monday_id_index=None, policy=POLICY, schema_checks=None,
+              item_allowlist=None):
     report, _plans, _pulled = run_dry_run(
         {inventory.board_id: inventory},
         {},
@@ -77,6 +78,7 @@ def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
         persistent_ledger=ledger,
         sunday_monday_id_index=monday_id_index,
         sunday_schema_checks=schema_checks,
+        item_allowlist=item_allowlist,
     )
 
 
@@ -168,6 +170,98 @@ def test_snapshot_changed_aborts_before_first_write(monkeypatch, tmp_path):
             ledger_path=tmp_path / "ledger.json",
         )
     assert spy.created == []  # abortou ANTES da primeira escrita
+
+
+# -------------------------------------------------- item allowlist (--item-id)
+
+TRABALHISTA = "4443297481"
+
+
+def _trabalhista_inventory() -> MondayBoardInventory:
+    """Board trabalhista: 1 item ativo recente (WAVE_1) + 1 encerrado antigo (WAVE_2)."""
+    return MondayBoardInventory(
+        board_id=TRABALHISTA,
+        name="Processos Trabalhista",
+        groups={"topics": "Trabalhista Ativo", "novo_grupo": "Trabalhista Encerrado"},
+        columns=(MondayColumnInfo(id="name", title="Name", type="name"),),
+        items=(
+            MondayItemDigest(item_id="W1_ATIVO", group_id="topics",
+                             created_at=RECENT, updated_at=RECENT, has_updates=True),
+            MondayItemDigest(item_id="W2_ENCERRADO", group_id="novo_grupo",
+                             created_at="2019-01-01T00:00:00Z",
+                             updated_at="2019-01-01T00:00:00Z"),
+        ),
+    )
+
+
+def test_item_allowlist_scopes_plan_to_single_item():
+    plan = _plan_for(_kpi_inventory(), item_allowlist={"2"})
+    assert [op.monday_item_id for op in plan.operations] == ["2"]
+    assert plan.counts() == {"create": 1}
+
+
+def test_item_allowlist_multiple_ids_selects_exactly_those():
+    plan = _plan_for(_kpi_inventory(), item_allowlist={"1", "3"})
+    assert sorted(op.monday_item_id for op in plan.operations) == ["1", "3"]
+
+
+def test_item_allowlist_missing_item_aborts_without_choosing_first():
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        _plan_for(_kpi_inventory(), item_allowlist={"999"})
+
+
+def test_item_allowlist_empty_aborts():
+    with pytest.raises(ExecutorAbort, match="vazia"):
+        _plan_for(_kpi_inventory(), item_allowlist=set())
+
+
+def test_item_allowlist_rejects_item_from_wrong_wave():
+    inventory = _trabalhista_inventory()
+    # O item encerrado é WAVE_2: pedi-lo na onda 1 precisa abortar (não pertence).
+    with pytest.raises(ExecutorAbort, match="não encontrado"):
+        _plan_for(inventory, wave=1, item_allowlist={"W2_ENCERRADO"})
+    # Na onda correta (2) ele é encontrado e vira exatamente uma operação.
+    plan_w2 = _plan_for(inventory, wave=2, item_allowlist={"W2_ENCERRADO"})
+    assert [op.monday_item_id for op in plan_w2.operations] == ["W2_ENCERRADO"]
+
+
+def test_item_allowlist_duplicate_occurrence_aborts():
+    inventory = _kpi_inventory()
+    report, _plans, _pulled = run_dry_run(
+        {inventory.board_id: inventory}, {},
+        user_policy=POLICY, users_mapped=set(POLICY.exact_match_ids),
+    )
+    # Simula duas source rows com o mesmo monday_item_id no mesmo board/onda.
+    dup = next(item for item in report.items if item.monday_item_id == "2")
+    report.items.append(dup)
+    with pytest.raises(ExecutorAbort, match="múltiplas ocorrências"):
+        build_execution_plan(
+            inventory=inventory, report=report, wave=1, max_items=50,
+            user_policy=POLICY, item_allowlist={"2"},
+        )
+
+
+def test_item_allowlist_still_enforces_max_items():
+    plan = _plan_for(_kpi_inventory(), max_items=0, item_allowlist={"2"},
+                     schema_checks=[GateCheck("schema_live_verificado", True)])
+    gate = {check.name: check.ok for check in plan.gate}
+    assert gate["max_items"] is False  # allowlist não dispensa o limite obrigatório
+
+
+def test_item_allowlist_plan_and_apply_share_scope(monkeypatch, tmp_path):
+    """APPLY com allowlist migra SOMENTE o item informado (mesmo escopo do PLAN)."""
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    plan = _plan_for(_kpi_inventory(), mode="apply", item_allowlist={"2"},
+                     schema_checks=[GateCheck("schema_live_verificado", True)])
+    assert [op.monday_item_id for op in plan.operations] == ["2"]
+    spy = SpyClient()
+    result = apply_plan(
+        plan, client=spy, confirm_writes=True,
+        snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        ledger_path=tmp_path / "ledger.json",
+    )
+    assert spy.created == ["2"]  # nenhum outro item do board foi tocado
+    assert result.succeeded == ["2"]
 
 
 # ---------------------------------------------------------------- dispositions

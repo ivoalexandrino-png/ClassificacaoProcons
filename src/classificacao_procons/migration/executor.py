@@ -288,6 +288,20 @@ def _wave_label(wave: int) -> str:
     return f"WAVE_{wave}"
 
 
+def _normalize_item_allowlist(
+    item_allowlist: frozenset[str] | set[str] | tuple[str, ...] | list[str] | None,
+) -> set[str] | None:
+    """Normaliza a allowlist explícita por item (ids como str, sem vazios)."""
+    if item_allowlist is None:
+        return None
+    allow = {str(item_id).strip() for item_id in item_allowlist if str(item_id).strip()}
+    if not allow:
+        raise ExecutorAbort(
+            "item allowlist explícita vazia: informe ao menos um monday_item_id.",
+        )
+    return allow
+
+
 def build_execution_plan(
     *,
     inventory: MondayBoardInventory,
@@ -299,8 +313,17 @@ def build_execution_plan(
     persistent_ledger: dict[str, dict] | None = None,
     sunday_monday_id_index: dict[str, str] | None = None,
     sunday_schema_checks: list[GateCheck] | None = None,
+    item_allowlist: frozenset[str] | set[str] | tuple[str, ...] | list[str] | None = None,
 ) -> ExecutionPlan:
-    """Monta o plano executável a partir do dry-run canônico (zero escrita)."""
+    """Monta o plano executável a partir do dry-run canônico (zero escrita).
+
+    Quando ``item_allowlist`` é fornecida, o escopo é restrito EXCLUSIVAMENTE aos
+    monday_item_ids informados (allowlist explícita por item). Cada id precisa
+    pertencer ao board/onda informados e resolver para exatamente uma source row:
+    id ausente → abort; id com múltiplas ocorrências → abort. Nunca há escolha
+    silenciosa de "primeiro item". PLAN e APPLY derivam o escopo desta mesma
+    função, portanto usam exatamente a mesma allowlist.
+    """
     board_id = inventory.board_id
     if board_id not in BOARD_ALLOWLIST:
         raise ExecutorAbort(f"Board {board_id} fora da allowlist aprovada.")
@@ -322,6 +345,9 @@ def build_execution_plan(
         for entry in run.ledger.entries
     }
 
+    allow = _normalize_item_allowlist(item_allowlist)
+    allow_match_counts: dict[str, int] = {item_id: 0 for item_id in (allow or set())}
+
     operations: list[PlannedOperation] = []
     relations: list[RelationWrite] = []
     for result in report.items:
@@ -330,6 +356,10 @@ def build_execution_plan(
         item = items_by_id.get(result.monday_item_id)
         if item is None:
             continue
+        if allow is not None:
+            if result.monday_item_id not in allow:
+                continue
+            allow_match_counts[result.monday_item_id] += 1
         entry = dispositions.get((board_id, result.monday_item_id))
         disposition = (entry.disposition if entry else result.disposition) or (
             Disposition.CREATE
@@ -413,6 +443,24 @@ def build_execution_plan(
                 resolved_sunday_item_ids=resolved,
             )
             relations.append(write)
+
+    if allow is not None:
+        not_found = sorted(
+            item_id for item_id, count in allow_match_counts.items() if count == 0
+        )
+        if not_found:
+            raise ExecutorAbort(
+                f"item(ns) da allowlist não encontrado(s) no board {board_id} / "
+                f"{wave_label}: {not_found} (não pertence(m) ao board/onda informados).",
+            )
+        duplicated = sorted(
+            item_id for item_id, count in allow_match_counts.items() if count > 1
+        )
+        if duplicated:
+            raise ExecutorAbort(
+                f"item(ns) da allowlist com múltiplas ocorrências no escopo: "
+                f"{duplicated}; abortando (nunca escolher silenciosamente um).",
+            )
 
     plan = ExecutionPlan(
         monday_board_id=board_id,

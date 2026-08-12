@@ -85,6 +85,17 @@ def main() -> int:
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
     parser.add_argument("--mode", default="plan", choices=("plan", "apply"))
     parser.add_argument("--max-items", required=True, type=int)
+    parser.add_argument(
+        "--item-id",
+        action="append",
+        default=None,
+        metavar="MONDAY_ITEM_ID",
+        help=(
+            "allowlist explícita por monday_item_id (repetível). Restringe PLAN e "
+            "APPLY EXCLUSIVAMENTE a estes itens; cada id precisa pertencer ao "
+            "board/onda informados (ausente/duplicado → abort)."
+        ),
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -101,6 +112,14 @@ def main() -> int:
         help="relatório sanitizado do APPLY",
     )
     args = parser.parse_args()
+
+    item_allowlist: frozenset[str] | None = None
+    if args.item_id:
+        item_allowlist = frozenset(str(item_id).strip() for item_id in args.item_id)
+        if not item_allowlist or "" in item_allowlist:
+            print("ABORT: --item-id vazio.")
+            return 2
+        print(f"Escopo restrito por --item-id: {sorted(item_allowlist)}")
 
     if args.board not in BOARD_ALLOWLIST:
         print(f"ABORT: board {args.board} fora da allowlist {sorted(BOARD_ALLOWLIST)}.")
@@ -219,17 +238,22 @@ def main() -> int:
         user_policy=policy,
         users_mapped=set(policy.exact_match_ids),
     )
-    plan = build_execution_plan(
-        inventory=inventory,
-        report=report,
-        wave=args.wave,
-        max_items=args.max_items,
-        mode=args.mode,
-        user_policy=policy,
-        persistent_ledger=load_persistent_ledger(args.ledger),
-        sunday_monday_id_index=monday_id_index or None,
-        sunday_schema_checks=schema_checks,
-    )
+    try:
+        plan = build_execution_plan(
+            inventory=inventory,
+            report=report,
+            wave=args.wave,
+            max_items=args.max_items,
+            mode=args.mode,
+            user_policy=policy,
+            persistent_ledger=load_persistent_ledger(args.ledger),
+            sunday_monday_id_index=monday_id_index or None,
+            sunday_schema_checks=schema_checks,
+            item_allowlist=item_allowlist,
+        )
+    except ExecutorAbort as exc:
+        print(f"ABORT: {exc}")
+        return 3
 
     Path(args.out).write_text(
         json.dumps(plan.to_payload(), ensure_ascii=False, indent=2), encoding="utf-8",
@@ -267,11 +291,16 @@ def main() -> int:
     if not monday_token:
         print("ABORT: MONDAY_API_TOKEN ausente para APPLY.")
         return 2
-    apply_sources = fetch_monday_apply_sources(monday_token, args.board)
-    if len(apply_sources) != len(inventory.items):
+    apply_sources = fetch_monday_apply_sources(
+        monday_token,
+        args.board,
+        item_ids=set(item_allowlist) if item_allowlist else None,
+    )
+    expected_sources = len(item_allowlist) if item_allowlist else len(inventory.items)
+    if len(apply_sources) != expected_sources:
         print(
             f"ABORT: apply_sources={len(apply_sources)} != "
-            f"inventory={len(inventory.items)}.",
+            f"esperado={expected_sources}.",
         )
         return 3
 
@@ -323,6 +352,7 @@ def main() -> int:
             monday_id_column_id=migration_context.monday_id_column_id,
         ),
         sunday_schema_checks=schema_checks,
+        item_allowlist=item_allowlist,
     )
     post_payload = post_plan.to_payload()
 
