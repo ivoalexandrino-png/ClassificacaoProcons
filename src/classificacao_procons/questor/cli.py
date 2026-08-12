@@ -70,6 +70,7 @@ def _run_check(args: argparse.Namespace) -> int:
         caixa_mode=args.caixa_mode,
         dry_run=args.dry_run,
         only_new=not args.resend,
+        weekly_digest=args.weekly,
         state_path=Path(args.state_path),
         token_path=args.token,
         portal_url=args.portal_url or os.environ.get("QUESTOR_PORTAL_URL"),
@@ -182,6 +183,14 @@ def main(argv: list[str] | None = None) -> int:
         "--resend",
         action="store_true",
         help="Reenvia todas as pendências, ignorando o estado de já alertadas.",
+    )
+    check_parser.add_argument(
+        "--weekly",
+        action="store_true",
+        help=(
+            "Resumo semanal consolidado: envia todas as pendências em aberto "
+            "(mesmo já avisadas) num único e-mail."
+        ),
     )
     check_parser.add_argument(
         "--warn-within-days",

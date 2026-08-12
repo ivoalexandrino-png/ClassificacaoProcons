@@ -16,6 +16,9 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_QUEM_ASSINA_JAN,
     CONTROLE_QUEM_ASSINA_LUCIANO,
 )
+from classificacao_procons.contratos.controle_idempotency import (
+    build_controle_create_idempotency_key,
+)
 from classificacao_procons.contratos.controle_required_tracks import (
     document_required_controle_tracks,
 )
@@ -64,7 +67,7 @@ def classify_controle_item_track(
         return "luciano"
     if jan_group_id and item.group_id == jan_group_id:
         return "jan"
-    return "luciano"
+    return "unknown"
 
 
 def controle_dual_tracks_satisfied_for_items(
@@ -175,6 +178,10 @@ def ensure_controle_dual_tracks_for_document(
                 signer_label=CONTROLE_SIGNER_LABEL_JAN,
                 platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
                 inclusion_date=inclusion_date,
+                idempotency_key=build_controle_create_idempotency_key(
+                    autentique_document_id=document.document_id,
+                    track="jan",
+                ),
             )
             created_jan = True
 
@@ -199,6 +206,10 @@ def ensure_controle_dual_tracks_for_document(
                 signer_label=CONTROLE_SIGNER_LABEL_LUCIANO,
                 platform_name=CONTROLE_PLATFORM_AUTENTIQUE,
                 inclusion_date=inclusion_date,
+                idempotency_key=build_controle_create_idempotency_key(
+                    autentique_document_id=document.document_id,
+                    track="luciano",
+                ),
             )
             created_luciano = True
 

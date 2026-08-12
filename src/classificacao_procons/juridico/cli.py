@@ -11,6 +11,7 @@ from pathlib import Path
 
 from classificacao_procons.email.gmail import GmailClientError
 from classificacao_procons.google_auth import has_drive_access, has_valid_token
+from classificacao_procons.juridico.casos_consumidor.aggregate import build_process_rows
 from classificacao_procons.juridico.casos_consumidor.benchmark import benchmark_similar_cases
 from classificacao_procons.juridico.casos_consumidor.pipeline import (
     CasosScanOptions,
@@ -20,10 +21,20 @@ from classificacao_procons.juridico.casos_consumidor.report import (
     load_cases_from_json,
     write_casos_csv,
     write_casos_json,
+    write_process_csv,
 )
 from classificacao_procons.juridico.cnj import extract_process_number
 from classificacao_procons.juridico.comunica import ComunicaError, fetch_case_communications
 from classificacao_procons.juridico.constants import DEFAULT_CONSUMER_PROCESSES_DRIVE_FOLDER_ID
+from classificacao_procons.juridico.custas.pipeline import (
+    CustasScanOptions,
+    scan_court_fees,
+)
+from classificacao_procons.juridico.custas.report import (
+    write_custas_csv,
+    write_custas_process_csv,
+    write_custas_scan_json,
+)
 from classificacao_procons.juridico.datajud import DataJudError, fetch_case_movements
 from classificacao_procons.juridico.depositos.pipeline import (
     DepositScanOptions,
@@ -96,6 +107,44 @@ def _run_depositos_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_custas_scan(args: argparse.Namespace) -> int:
+    if not has_drive_access(args.token):
+        print(DRIVE_AUTH_HINT, file=sys.stderr)
+        return 1
+
+    options = CustasScanOptions(
+        root_folder_id=args.root_folder_id,
+        work_dir=Path(args.work_dir),
+        token_path=args.token,
+        max_consumers=args.max_consumers,
+        use_gemini=not args.no_gemini,
+        max_gemini_calls=args.max_gemini_calls,
+        allow_vision=not args.no_vision,
+    )
+    result = scan_court_fees(options)
+    csv_path = Path(args.output_csv)
+    write_custas_csv(result=result, destination=csv_path)
+    if args.output_json:
+        write_custas_scan_json(result=result, destination=Path(args.output_json))
+    if args.output_process_csv:
+        write_custas_process_csv(result=result, destination=Path(args.output_process_csv))
+
+    summary = {
+        "consumers_scanned": result.consumers_scanned,
+        "pdfs_seen": result.pdfs_seen,
+        "pdfs_analyzed": result.pdfs_analyzed,
+        "pdfs_skipped_path": result.pdfs_skipped_path,
+        "court_fee_records": len(result.records),
+        "output_csv": str(csv_path),
+    }
+    if args.output_json:
+        summary["output_json"] = args.output_json
+    if args.output_process_csv:
+        summary["output_process_csv"] = args.output_process_csv
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _theme_deposit_totals(cases: list) -> list[dict[str, object]]:
     from collections import defaultdict
     from decimal import Decimal
@@ -131,6 +180,7 @@ def _run_casos_scan(args: argparse.Namespace) -> int:
         deposits_json_path=Path(args.deposits_json),
         use_gemini=not args.no_gemini,
         max_gemini_calls=args.max_gemini_calls,
+        with_monday_kpi=args.with_monday,
     )
     result = scan_consumer_cases(options)
     csv_path = Path(args.output_csv)
@@ -138,12 +188,24 @@ def _run_casos_scan(args: argparse.Namespace) -> int:
     json_path = Path(args.output_json)
     write_casos_json(result=result, destination=json_path)
 
+    process_path = Path(args.output_process_csv)
+    kpi_index = result.kpi_by_process or {}
+    process_rows = build_process_rows(
+        cases=result.cases,
+        deposits_json_path=Path(args.deposits_json),
+        kpi_by_process=kpi_index,
+    )
+    write_process_csv(rows=process_rows, destination=process_path)
+
     summary = {
         "consumers_scanned": result.consumers_scanned,
         "consumers_with_deposits": result.consumers_with_deposits,
         "cases": len(result.cases),
+        "process_rows": len(process_rows),
+        "kpi_rows_matched": len(kpi_index),
         "output_csv": str(csv_path),
         "output_json": str(json_path),
+        "output_process_csv": str(process_path),
         "deposits_by_theme": _theme_deposit_totals(result.cases),
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
@@ -589,6 +651,58 @@ def main(argv: list[str] | None = None) -> int:
         help="Limite de chamadas Gemini por execução (classificação estruturada).",
     )
 
+    custas_parser = subparsers.add_parser(
+        "custas-scan",
+        help="Varre pastas de consumidores no Drive e extrai custas processuais (sem depósitos)",
+    )
+    custas_parser.add_argument(
+        "--root-folder-id",
+        default=DEFAULT_CONSUMER_PROCESSES_DRIVE_FOLDER_ID,
+        help="ID da pasta raiz dos processos de consumidores no Drive.",
+    )
+    custas_parser.add_argument(
+        "--max-consumers",
+        type=int,
+        default=30,
+        help="Limite de pastas de consumidor (padrão: 30; use 0 para todas).",
+    )
+    custas_parser.add_argument(
+        "--work-dir",
+        default="data/custas-scan-cache",
+        help="Diretório local para cache de downloads.",
+    )
+    custas_parser.add_argument(
+        "--output-csv",
+        default="data/custas-processuais.csv",
+        help="CSV de saída com custas identificadas.",
+    )
+    custas_parser.add_argument(
+        "--output-json",
+        default="data/custas-processuais.json",
+        help="JSON com resumo completo da varredura.",
+    )
+    custas_parser.add_argument(
+        "--output-process-csv",
+        default="data/custas-por-processo.csv",
+        help="CSV agregado por número de processo (CNJ).",
+    )
+    custas_parser.add_argument(
+        "--no-gemini",
+        action="store_true",
+        help="Não usar Gemini para classificar PDFs ambíguos.",
+    )
+    custas_parser.add_argument(
+        "--no-vision",
+        action="store_true",
+        help="Não usar Gemini para OCR em PDFs sem texto.",
+    )
+    custas_parser.add_argument(
+        "--max-gemini-calls",
+        type=int,
+        default=600,
+        help="Limite de chamadas Gemini por execução (classificação estruturada).",
+    )
+
     casos_parser = subparsers.add_parser(
         "casos-scan",
         help="Classifica temas dos casos e cruza com depósitos judiciais",
@@ -619,8 +733,13 @@ def main(argv: list[str] | None = None) -> int:
         "--output-json",
         default="data/casos-consumidor.json",
     )
+    casos_parser.add_argument(
+        "--output-process-csv",
+        default="data/casos-por-processo.csv",
+    )
     casos_parser.add_argument("--no-gemini", action="store_true")
-    casos_parser.add_argument("--max-gemini-calls", type=int, default=250)
+    casos_parser.add_argument("--with-monday", action="store_true")
+    casos_parser.add_argument("--max-gemini-calls", type=int, default=400)
 
     benchmark_parser = subparsers.add_parser(
         "casos-benchmark",
@@ -653,6 +772,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.max_consumers == 0:
             args.max_consumers = None
         return _run_depositos_scan(args)
+    if args.command == "custas-scan":
+        if args.max_consumers == 0:
+            args.max_consumers = None
+        return _run_custas_scan(args)
     if args.command == "casos-scan":
         if args.max_consumers == 0:
             args.max_consumers = None

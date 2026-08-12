@@ -138,6 +138,27 @@ def test_should_dry_run_without_portal_or_drive(
 
 
 @patch("classificacao_procons.pipeline.GmailProconFetcher")
+@patch("classificacao_procons.pipeline.has_valid_token", return_value=True)
+def test_should_fetch_explicit_message_ids_when_provided(
+    _has_token_mock,
+    fetcher_cls_mock,
+) -> None:
+    fetcher = MagicMock()
+    fetcher_cls_mock.from_credentials.return_value = fetcher
+    fetcher.fetch_notification.return_value = _notification()
+
+    process_new_complaints(
+        PipelineOptions(
+            dry_run=True,
+            message_ids=("msg-explicit",),
+        ),
+    )
+
+    fetcher.list_unread_notifications.assert_not_called()
+    fetcher.fetch_notification.assert_called_once_with("msg-explicit")
+
+
+@patch("classificacao_procons.pipeline.GmailProconFetcher")
 @patch("classificacao_procons.pipeline.has_gmail_modify_access", return_value=True)
 @patch("classificacao_procons.pipeline.has_valid_token", return_value=True)
 @patch("classificacao_procons.pipeline.update_administrative_process")

@@ -45,6 +45,7 @@ jobs:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           AUTENTIQUE_API_TOKEN: ${{ secrets.AUTENTIQUE_API_TOKEN }}
           CONTROLE_PAUSE_CREATE: "false"
+          CONTROLE_WRITE_ENABLED: "false"
         run: |
           contratos-webhook register-controle \
             --document-id "${{ inputs.document_id }}"

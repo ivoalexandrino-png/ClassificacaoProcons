@@ -86,6 +86,23 @@ def test_select_stale_certidao_ids_returns_non_regular() -> None:
     assert select_stale_certidao_ids(rows) == [2, 3, 4]
 
 
+def test_select_certidoes_to_renew_includes_expiring_and_expired() -> None:
+    from datetime import date
+
+    from classificacao_procons.questor.portal import select_certidoes_to_renew
+
+    rows = [
+        {"Id": 1, "SituacaoCertidao": 1, "CertidaoDataVencimento": "2026-12-31T00:00:00"},
+        {"Id": 2, "SituacaoCertidao": 0, "CertidaoDataVencimento": "2027-01-01T00:00:00"},
+        {"Id": 3, "SituacaoCertidao": 1, "CertidaoDataVencimento": "2026-08-20T00:00:00"},
+        {"Id": 4, "SituacaoCertidao": 1, "CertidaoDataVencimento": "2026-07-01T00:00:00"},
+        {"Id": 5, "SituacaoCertidao": 1, "CertidaoDataVencimento": None},
+    ]
+    # 1 regular/vigente → fora; 2 irregular; 3 a vencer; 4 vencida; 5 sem validade
+    ids = select_certidoes_to_renew(rows, today=date(2026, 8, 10), warn_days=15)
+    assert ids == [2, 3, 4, 5]
+
+
 class _FakeResponse:
     def __init__(self, payload, status=200):
         self._payload = payload

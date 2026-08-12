@@ -32,6 +32,7 @@ IssueSeverity = Literal["critical", "warning", "info"]
 IssueKind = Literal[
     "certidao_positiva",
     "certidao_restricao",
+    "certidao_pendente_conferencia",
     "certidao_vencida",
     "certidao_a_vencer",
     "certidao_indisponivel",
@@ -54,6 +55,8 @@ class Certidao:
     uf: str | None = None
     data_emissao: date | None = None
     data_validade: date | None = None
+    protocolo: str | None = None
+    conferida: bool | None = None
     observacao: str | None = None
     url: str | None = None
 
@@ -100,6 +103,15 @@ class FiscalIssue:
     due_date: date | None = None
     source_url: str | None = None
     dedup_key: str = ""
+    # Metadados estruturados para um e-mail detalhado.
+    empresa: str | None = None
+    cnpj: str | None = None
+    uf: str | None = None
+    data_emissao: date | None = None
+    data_referencia: date | None = None
+    remetente: str | None = None
+    protocolo: str | None = None
+    orientacao: str | None = None
 
 
 @dataclass(frozen=True)

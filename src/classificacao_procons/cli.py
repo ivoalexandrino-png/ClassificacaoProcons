@@ -242,6 +242,7 @@ def _run_process(args: argparse.Namespace) -> int:
         credentials_path=args.credentials,
         token_path=args.token,
         source_ids=_parse_source_ids(args.sources),
+        message_ids=tuple(args.message_id) if args.message_id else None,
     )
 
     try:
@@ -357,6 +358,7 @@ def _run_process_interactions(args: argparse.Namespace) -> int:
         token_path=args.token,
         fetch_portal=not args.skip_portal,
         download_dir=Path(args.download_dir),
+        message_ids=tuple(args.message_id) if args.message_id else None,
     )
 
     try:
@@ -457,6 +459,13 @@ def main(argv: list[str] | None = None) -> int:
             "Padrão: todas."
         ),
     )
+    process_parser.add_argument(
+        "--message-id",
+        action="append",
+        dest="message_id",
+        metavar="GMAIL_MESSAGE_ID",
+        help="Processar estes e-mails pelo ID do Gmail (mesmo já lidos).",
+    )
 
     elaborate_parser = subparsers.add_parser(
         "elaborate",
@@ -534,6 +543,13 @@ def main(argv: list[str] | None = None) -> int:
         "--skip-portal",
         action="store_true",
         help="Não abre o portal (só e-mail + anexos no update).",
+    )
+    interactions_parser.add_argument(
+        "--message-id",
+        action="append",
+        dest="message_id",
+        metavar="GMAIL_MESSAGE_ID",
+        help="Processar estes e-mails pelo ID do Gmail (mesmo já lidos).",
     )
 
     sla_parser = subparsers.add_parser(

@@ -36,7 +36,7 @@ def _signed_doc() -> AutentiqueDocumentSummary:
 def _pending_doc() -> AutentiqueDocumentSummary:
     return AutentiqueDocumentSummary(
         document_id="doc-pending-1",
-        name="Contrato pendente novo",
+        name="Contrato B2B - Empresa Teste",
         created_at=None,
         signed_pdf_url=None,
         signatures=(
@@ -185,6 +185,40 @@ class TestControleAutentiquePlan:
         row = classify_autentique_document_for_controle(document=document, index=index)
         assert row.action == ControlePlanAction.IGNORAR
         assert row.reason == "monday_assinado_same_title_do_not_create"
+
+    def test_should_ignore_pending_when_scope_manual_review(self) -> None:
+        index = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset(),
+            all_items=(),
+        )
+        document = AutentiqueDocumentSummary(
+            document_id="doc-generic",
+            name="Contrato pendente novo",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=_pending_doc().signatures,
+        )
+        row = classify_autentique_document_for_controle(document=document, index=index)
+        assert row.action == ControlePlanAction.IGNORAR
+        assert row.reason == "scope_generic_contrato_title"
+
+    def test_should_ignore_ferias_when_jan_is_signer(self) -> None:
+        index = ControleAssinaturasIndex(
+            document_ids=frozenset(),
+            exact_names=frozenset(),
+            all_items=(),
+        )
+        document = AutentiqueDocumentSummary(
+            document_id="doc-ferias",
+            name="Solicitação de Férias - Colaborador",
+            created_at=None,
+            signed_pdf_url=None,
+            signatures=_pending_doc().signatures,
+        )
+        row = classify_autentique_document_for_controle(document=document, index=index)
+        assert row.action == ControlePlanAction.IGNORAR
+        assert row.reason == "scope_hr_non_contract_domain"
 
     def test_should_build_plan_counts(self) -> None:
         index = ControleAssinaturasIndex(

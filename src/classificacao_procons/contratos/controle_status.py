@@ -58,13 +58,11 @@ def resolve_controle_status_for_track(
     terminal = resolve_controle_terminal_status(document)
     if terminal is not None:
         return terminal
-    if document.is_fully_signed:
-        return CONTROLE_STATUS_ASSINADO
     if track not in ("jan", "luciano"):
         return resolve_controle_status_document(document)
-    if not _internal_signer_signed(document, track=track):
-        return CONTROLE_STATUS_AGUARDANDO_ASSINATURA
-    return CONTROLE_STATUS_AGUARDANDO_OUTROS
+    if _internal_signer_signed(document, track=track):
+        return CONTROLE_STATUS_ASSINADO
+    return CONTROLE_STATUS_AGUARDANDO_ASSINATURA
 
 
 def resolve_signed_at_for_track(

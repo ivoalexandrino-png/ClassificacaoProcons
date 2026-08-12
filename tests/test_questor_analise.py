@@ -39,6 +39,28 @@ class TestAnalyzeCertidao:
         issues = analyze_certidao(certidao, today=TODAY)
         assert issues[0].kind == "certidao_vencida"
 
+    def test_should_downgrade_irregular_pending_conference_to_warning(self) -> None:
+        cert = _certidao(
+            situacao="positiva",
+            protocolo="Aguardando conferencia",
+            conferida=False,
+        )
+        issues = analyze_certidao(cert, today=TODAY)
+        assert issues[0].kind == "certidao_pendente_conferencia"
+        assert issues[0].severity == "warning"
+
+    def test_should_keep_irregular_critical_when_conferida(self) -> None:
+        cert = _certidao(situacao="positiva", protocolo="HABILITADO", conferida=True)
+        issues = analyze_certidao(cert, today=TODAY)
+        assert issues[0].kind == "certidao_positiva"
+        assert issues[0].severity == "critical"
+
+    def test_should_populate_orientacao_and_cnpj(self) -> None:
+        cert = _certidao(situacao="positiva", empresa="B4A", cnpj="13475001000134")
+        issue = analyze_certidao(cert, today=TODAY)[0]
+        assert issue.orientacao
+        assert issue.cnpj == "13.475.001/0001-34"
+
     def test_should_flag_indisponivel_as_warning(self) -> None:
         issues = analyze_certidao(_certidao(situacao="indisponivel"), today=TODAY)
         assert issues[0].kind == "certidao_indisponivel"

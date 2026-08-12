@@ -15,7 +15,7 @@ raspar o DOM paginado.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from html import unescape
 from typing import Any, Final
 from urllib.parse import urlparse
@@ -63,6 +63,7 @@ class QuestorPortalOptions:
     # reler. Reduz o risco de situação desatualizada (ex.: CND já emitida no órgão).
     refresh_stale_certidoes: bool = False
     refresh_wait_seconds: int = 120
+    renew_warn_days: int = 15
 
 # SituacaoCertidao == 1 é "Regular"; as demais (Irregular/Neutro/Falha/Restrição)
 # podem estar defasadas e valem uma recaptura.
@@ -82,6 +83,32 @@ def select_stale_certidao_ids(rows: list[dict[str, Any]]) -> list[int]:
             ids.append(int(raw_id))
         except (TypeError, ValueError):
             continue
+    return ids
+
+
+def select_certidoes_to_renew(
+    rows: list[dict[str, Any]],
+    *,
+    today: date | None = None,
+    warn_days: int = 15,
+) -> list[int]:
+    """IDs a recapturar: não regulares OU vencidas/a vencer (renovação preventiva)."""
+    reference = today or date.today()
+    ids: list[int] = []
+    for row in rows:
+        raw_id = row.get("Id")
+        if raw_id is None:
+            continue
+        renew = row.get("SituacaoCertidao") != _REGULAR_SITUACAO_CODE
+        if not renew:
+            venc = parse_brazilian_date(row.get("CertidaoDataVencimento"))
+            if venc is None or (venc - reference).days <= warn_days:
+                renew = True
+        if renew:
+            try:
+                ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                continue
     return ids
 
 
@@ -117,7 +144,8 @@ def certidao_from_api_row(row: dict[str, Any]) -> Certidao:
         uf=(row.get("UF") or "").strip() or None,
         data_emissao=parse_brazilian_date(row.get("CertidaoDataEmissao")),
         data_validade=parse_brazilian_date(row.get("CertidaoDataVencimento")),
-        observacao=(row.get("CertidaoProtocolo") or "").strip() or None,
+        protocolo=(row.get("CertidaoProtocolo") or "").strip() or None,
+        conferida=(row.get("Conferida") == 1) if row.get("Conferida") is not None else None,
     )
 
 
@@ -227,7 +255,7 @@ def refresh_stale_certidoes(options: QuestorPortalOptions) -> RefreshResult:
         try:
             _login(page, options)
             rows = _fetch_dataset(page, base_url, CERTIDOES_ENDPOINT, take=options.take)
-            stale_ids = select_stale_certidao_ids(rows)
+            stale_ids = select_certidoes_to_renew(rows, warn_days=options.renew_warn_days)
             triggered = sum(
                 trigger_certidao_refresh(page.request, base_url, cert_id)
                 for cert_id in stale_ids
@@ -255,7 +283,9 @@ def fetch_questor_snapshot(options: QuestorPortalOptions) -> QuestorSnapshot:
                 page, base_url, CERTIDOES_ENDPOINT, take=options.take,
             )
             if options.refresh_stale_certidoes:
-                stale_ids = select_stale_certidao_ids(certidoes_rows)
+                stale_ids = select_certidoes_to_renew(
+                    certidoes_rows, warn_days=options.renew_warn_days,
+                )
                 triggered = sum(
                     trigger_certidao_refresh(page.request, base_url, cert_id)
                     for cert_id in stale_ids

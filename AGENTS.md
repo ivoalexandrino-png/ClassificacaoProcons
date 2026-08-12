@@ -81,6 +81,8 @@ gh workflow run "Catch-up contratos (Autentique → Monday/Drive)" -f dry_run=fa
 
 **Pausa de criação no Controle:** por padrão **não** criamos novos itens no quadro (`CONTROLE_PAUSE_CREATE=true` ou variável ausente). Sync, webhooks `document.created` e `register-controle` continuam com vínculo legado, reparo de filas Jan/Luciano e atualização de status. Para criar faltantes de propósito: `CONTROLE_PAUSE_CREATE=false` ou `contratos-webhook sync-controle --allow-create`.
 
+**Kill switch de escrita (Controle Assinaturas):** por padrão **nenhuma** mutation Monday desta integração (`CONTROLE_WRITE_ENABLED=false` ou ausente). Compare/diagnósticos e `dry_run` continuam. Para reativar writes em produção: `CONTROLE_WRITE_ENABLED=true` (junto com política de criação acima).
+
 ### Questor (certidões negativas + caixa postal fiscal)
 
 Agente que lê o retrato do Questor Zen (`https://<conta>.zen.questor.com.br`) — situação das certidões (Federal/PGFN, Estadual, Municipal, FGTS, etc.) e mensagens da caixa postal (DTE/e-CAC) — detecta pendências e, havendo problema **novo**, envia e-mail ao time fiscal e de contabilidade.
@@ -98,6 +100,8 @@ Buscamos o dataset completo (`take` alto) e filtramos em Python — mais robusto
 **Regras (`questor/analise.py`, offline e testável):** certidão Irregular/Restrição → crítico; vencida (data/estado) → crítico; a vencer ≤ janela → aviso; Falha → aviso (indisponível); Regular/Neutro → ok. Caixa postal: severidade pela relevância do assunto (ver classificador).
 
 **Relevância da caixa postal (`questor/relevancia.py`):** classifica a mensagem por assunto/remetente (allowlist). Categorias e severidade: `fiscalização`, `lançamento`/auto de infração/multa, `débito/atraso de pagamento` (inclui CADIN, compensação de ofício, PEP/parcelamento), `intimação/exigência` → **crítico**; `autorregularização`, `vencimento de certidão`, `processo administrativo` (e-Processo, PER/DCOMP, despacho decisório) → **aviso**. Sem palavra-chave relevante → ignorada (Escrituração Fiscal Digital, recibos DCTF, Redarf, NF-e, orientações). Para acrescentar assuntos novos sem alterar código, use a env `QUESTOR_RELEVANCIA_EXTRA` (`categoria:palavra;categoria:palavra`). Obs.: `ExibidaAte` é "exibida até" (não é prazo legal de ciência) — não é usado para severidade.
+
+**Pendente de conferência (evita falso "irregular"):** o Questor pode exibir uma certidão como Irregular enquanto a captura está "Aguardando conferência" (`CertidaoProtocolo`), situação ainda não confirmada. Nesse caso o agente classifica como **aviso "pendente de conferência"** (não crítico), com orientação de conferir no Questor e reconfirmar no órgão — cobre o caso de CND recém-emitida que o Questor ainda não conferiu.
 
 **Recaptura de certidões (reduz dado desatualizado):** o Questor guarda a última captura, que pode estar atrás do órgão (ex.: CND já emitida). O agente pode disparar a recaptura (`POST .../certidaoempresa/RenovarCertidao?certidaoEmpresaId=<Id>`) das certidões **não regulares** antes de ler. Como a recaptura é **assíncrona** (o robô leva minutos), o fluxo recomendado é em **duas fases**: `questor refresh` (dispara) e, ~30 min depois, `questor check` (lê e alerta). Alternativa em um passo: `questor check --refresh-certidoes --refresh-wait-seconds N` (espera embutida; menos confiável, pois a latência costuma passar de 2 min).
 
@@ -124,7 +128,12 @@ questor check --portal-url https://b4a.zen.questor.com.br/ --empresa "B4A / MMKT
   --to juridico@b4a.com.br,fiscal@b4a.com.br --caixa-mode relevantes_por_assunto
 ```
 
-**Execução diária:** workflow `.github/workflows/questor-daily.yml`, em **duas fases** — `30 10 * * *` (07:30 BRT) dispara a recaptura (`questor refresh`) e `0 11 * * *` (08:00 BRT) lê e alerta (`questor check`); `workflow_dispatch` roda a fase de leitura. Destinatários: `juridico@b4a.com.br` e `fiscal@b4a.com.br`. Estado de dedup persiste via `actions/cache` (só alerta pendência **nova**). Secrets: `MONDAY_API_TOKEN`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`; vars opcionais `QUESTOR_PORTAL_URL`, `QUESTOR_MONDAY_ITEM`.
+**Execução diária (cadência):** workflow `.github/workflows/questor-daily.yml`:
+- `30 10 * * *` (07:30 BRT, todo dia) → `questor refresh`: **auto-renova** (recaptura) as certidões não regulares **e** as vencidas/a vencer (renovação preventiva, `select_certidoes_to_renew`).
+- `0 11 * * 0,2-6` (08:00 BRT, demais dias) → `questor check` **incremental**: só pendências **novas** (dedup via `actions/cache`); dias sem novidade não geram e-mail.
+- `0 11 * * 1` (08:00 BRT, segunda) → `questor check --weekly`: **resumo semanal consolidado** com todas as pendências ainda em aberto (mesmo já avisadas), num único e-mail.
+
+Destinatários: `juridico@b4a.com.br` e `fiscal@b4a.com.br`. Cada pendência traz um **diagnóstico** (status do Questor, ex.: "Aguardando conferência"/"Restrição") para entender o que aconteceu. Secrets: `MONDAY_API_TOKEN`, `GMAIL_OAUTH_JSON`, `GMAIL_TOKEN_JSON`; vars opcionais `QUESTOR_PORTAL_URL`, `QUESTOR_MONDAY_ITEM`.
 
 Playwright: rodar `playwright install chromium` (o update script já faz). O login do Questor é sessão única — evite acessos concorrentes (o cron roda às 08:00 BRT).
 

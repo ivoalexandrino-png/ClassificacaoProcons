@@ -10,7 +10,7 @@ from classificacao_procons.contratos.constants import (
     CONTROLE_LINK_TRACK_JAN,
     CONTROLE_LINK_TRACK_LUCIANO,
     CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
-    CONTROLE_STATUS_AGUARDANDO_OUTROS,
+    CONTROLE_STATUS_ASSINADO,
     SIGNER_EMAIL_JAN,
     SIGNER_EMAIL_LUCIANO,
 )
@@ -167,4 +167,4 @@ class TestControleSignerTracks:
         by_item = {call.kwargs["item_id"]: call.kwargs for call in update_mock.call_args_list}
         assert by_item["jan-1"]["status_label"] == CONTROLE_STATUS_AGUARDANDO_ASSINATURA
         assert by_item["jan-1"]["signed_at"] is None
-        assert by_item["luc-1"]["status_label"] == CONTROLE_STATUS_AGUARDANDO_OUTROS
+        assert by_item["luc-1"]["status_label"] == CONTROLE_STATUS_ASSINADO
