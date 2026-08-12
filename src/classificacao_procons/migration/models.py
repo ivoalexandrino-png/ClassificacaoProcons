@@ -23,6 +23,25 @@ Strategy = Literal[
 # obrigatório na Onda 2 (backfill histórico): 4.391/4.391 itens no Sunday ao final.
 Classification = Literal["WAVE_1_READY", "WAVE_2_HISTORICAL", "MANUAL", "ERROR"]
 
+# Disposição de fonte: o que fazer com cada source row (linha do Monday). É uma
+# dimensão INDEPENDENTE da onda (Classification): um item pode ser wave=1 e
+# disposition=ADOPT, ou wave=1 e disposition=ABSORB, etc. A soma das disposições
+# deve igualar o total de source rows do snapshot (conservação).
+Disposition = Literal["CREATE", "ADOPT", "ABSORB", "EXCLUDE_TEST", "MANUAL", "ERROR"]
+
+ALL_DISPOSITIONS: tuple[Disposition, ...] = (
+    "CREATE",
+    "ADOPT",
+    "ABSORB",
+    "EXCLUDE_TEST",
+    "MANUAL",
+    "ERROR",
+)
+
+# Classificação de itens do lado Sunday sem source row Monday: preservar, não
+# excluir, não inventar Monday ID e NÃO contar no denominador de source rows.
+SundayItemClassification = Literal["SUNDAY_NATIVE"]
+
 ManualReason = Literal[
     "MISSING_TARGET_COLUMN",
     "MISSING_STATUS_MAPPING",
@@ -190,7 +209,26 @@ class LedgerRecord:
     source_updated_at: str | None = None
     error: str | None = None
     attempts: int = 0
+    # Dimensão disposição (independente da onda). Quando ABSORB, `canonical_monday_item_id`
+    # aponta para a linha canônica; múltiplos Monday IDs podem compartilhar um sunday_item_id.
+    disposition: Disposition | None = None
+    canonical_monday_item_id: str | None = None
+    disposition_reason: str | None = None
 
     @property
     def key(self) -> str:
         return f"{self.monday_board_id}:{self.monday_item_id}"
+
+    @property
+    def creates_sunday_item(self) -> bool:
+        return self.disposition == "CREATE"
+
+
+@dataclass(frozen=True)
+class SundayNativeRecord:
+    """Item nativo do Sunday (sem source row Monday). Fora do denominador Monday."""
+
+    sunday_board_id: str
+    sunday_item_id: str
+    classification: SundayItemClassification = "SUNDAY_NATIVE"
+    note: str | None = None
