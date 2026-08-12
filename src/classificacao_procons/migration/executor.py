@@ -205,6 +205,7 @@ class ExecutionPlan:
     wave: str
     mode: str
     max_items: int
+    requested_item_id: str | None
     snapshot_fingerprint: str
     snapshot_total: int
     source_snapshot_timestamp: str
@@ -231,6 +232,8 @@ class ExecutionPlan:
             "wave": self.wave,
             "mode": self.mode,
             "max_items": self.max_items,
+            "requested_item_id": self.requested_item_id,
+            "source_scope": len(self.operations),
             "snapshot": {
                 "fingerprint": self.snapshot_fingerprint,
                 "total": self.snapshot_total,
@@ -294,6 +297,7 @@ def build_execution_plan(
     report: DryRunReport,
     wave: int,
     max_items: int,
+    item_id: str | None = None,
     mode: str = "plan",
     user_policy: UserMappingPolicy | None = None,
     persistent_ledger: dict[str, dict] | None = None,
@@ -313,6 +317,30 @@ def build_execution_plan(
         )
 
     wave_label = _wave_label(wave)
+    requested_item_id = str(item_id).strip() if item_id is not None else None
+    if requested_item_id == "":
+        raise ExecutorAbort("item_id vazio.")
+    if requested_item_id is not None:
+        inventory_matches = [
+            item for item in inventory.items if item.item_id == requested_item_id
+        ]
+        if len(inventory_matches) != 1:
+            raise ExecutorAbort(
+                f"item_id {requested_item_id} deve ocorrer exatamente uma vez no board "
+                f"{board_id}; encontrados {len(inventory_matches)}.",
+            )
+        wave_matches = [
+            result
+            for result in report.items
+            if result.monday_board_id == board_id
+            and result.monday_item_id == requested_item_id
+            and result.wave == wave_label
+        ]
+        if len(wave_matches) != 1:
+            raise ExecutorAbort(
+                f"item_id {requested_item_id} deve pertencer exatamente uma vez a "
+                f"{board_id}/{wave_label}; encontrados {len(wave_matches)}.",
+            )
     ledger = persistent_ledger or {}
     monday_id_index = sunday_monday_id_index or {}
     items_by_id = {item.item_id: item for item in inventory.items}
@@ -326,6 +354,8 @@ def build_execution_plan(
     relations: list[RelationWrite] = []
     for result in report.items:
         if result.monday_board_id != board_id or result.wave != wave_label:
+            continue
+        if requested_item_id is not None and result.monday_item_id != requested_item_id:
             continue
         item = items_by_id.get(result.monday_item_id)
         if item is None:
@@ -420,6 +450,7 @@ def build_execution_plan(
         wave=wave_label,
         mode=mode,
         max_items=max_items,
+        requested_item_id=requested_item_id,
         snapshot_fingerprint=snapshot_fingerprint(inventory),
         snapshot_total=len(inventory.items),
         source_snapshot_timestamp=report.source_snapshot_timestamp,
