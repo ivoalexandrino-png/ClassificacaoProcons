@@ -6,8 +6,15 @@ PLAN do piloto KPI:
     python scripts/sunday_migration_execute.py \
         --board 5563754463 --wave 1 --mode plan --max-items 31
 
+PLAN de micro-piloto (allowlist explícita por item):
+
+    python scripts/sunday_migration_execute.py \
+        --board 4443297481 --wave 1 --mode plan --max-items 1 \
+        --item-id 4443498618 --refresh-sunday
+
 APPLY nunca roda sem: --mode apply + --confirm-writes + env
 SUNDAY_MIGRATION_ALLOW_APPLY=1 + gate 100% OK + snapshot revalidado.
+Com --item-id, PLAN e APPLY usam exatamente o mesmo escopo (somente esses IDs).
 """
 
 from __future__ import annotations
@@ -85,6 +92,17 @@ def main() -> int:
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
     parser.add_argument("--mode", default="plan", choices=("plan", "apply"))
     parser.add_argument("--max-items", required=True, type=int)
+    parser.add_argument(
+        "--item-id",
+        action="append",
+        dest="item_ids",
+        default=None,
+        help=(
+            "allowlist explícita de monday_item_id (repetível). "
+            "PLAN/APPLY migram SOMENTE esses itens na wave informada; "
+            "0 ou match ambíguo aborta (não escolhe 'primeiro item')."
+        ),
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -219,17 +237,22 @@ def main() -> int:
         user_policy=policy,
         users_mapped=set(policy.exact_match_ids),
     )
-    plan = build_execution_plan(
-        inventory=inventory,
-        report=report,
-        wave=args.wave,
-        max_items=args.max_items,
-        mode=args.mode,
-        user_policy=policy,
-        persistent_ledger=load_persistent_ledger(args.ledger),
-        sunday_monday_id_index=monday_id_index or None,
-        sunday_schema_checks=schema_checks,
-    )
+    try:
+        plan = build_execution_plan(
+            inventory=inventory,
+            report=report,
+            wave=args.wave,
+            max_items=args.max_items,
+            mode=args.mode,
+            user_policy=policy,
+            persistent_ledger=load_persistent_ledger(args.ledger),
+            sunday_monday_id_index=monday_id_index or None,
+            sunday_schema_checks=schema_checks,
+            monday_item_ids=args.item_ids,
+        )
+    except ExecutorAbort as exc:
+        print(f"ABORT: {exc}")
+        return 3
 
     Path(args.out).write_text(
         json.dumps(plan.to_payload(), ensure_ascii=False, indent=2), encoding="utf-8",
@@ -237,7 +260,8 @@ def main() -> int:
     payload = plan.to_payload()
     print(f"\nPLAN gravado em {args.out}")
     print(json.dumps({k: payload[k] for k in (
-        "monday_board_id", "sunday_board_id", "wave", "mode", "snapshot", "counts",
+        "monday_board_id", "sunday_board_id", "wave", "mode", "max_items",
+        "item_allowlist", "source_scope", "snapshot", "counts",
         "comments_to_create", "attachments_to_link", "relations_to_create",
         "relations_unresolved", "gate_ok",
     )}, ensure_ascii=False, indent=2))
@@ -247,12 +271,12 @@ def main() -> int:
     if args.mode == "plan":
         return 0
 
-    try:
-        _validate_plan_payload(payload)
-    except ExecutorAbort as exc:
-        print(f"\nABORT: {exc}")
-        return 3
-
+    if args.board == KPI_MONDAY_BOARD:
+        try:
+            _validate_plan_payload(payload)
+        except ExecutorAbort as exc:
+            print(f"\nABORT: {exc}")
+            return 3
     if client is None:
         print("ABORT: client Sunday ausente.")
         return 3
@@ -323,6 +347,7 @@ def main() -> int:
             monday_id_column_id=migration_context.monday_id_column_id,
         ),
         sunday_schema_checks=schema_checks,
+        monday_item_ids=args.item_ids,
     )
     post_payload = post_plan.to_payload()
 

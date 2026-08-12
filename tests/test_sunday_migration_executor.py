@@ -60,7 +60,8 @@ def _kpi_inventory(items=None) -> MondayBoardInventory:
 
 
 def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
-              monday_id_index=None, policy=POLICY, schema_checks=None):
+              monday_id_index=None, policy=POLICY, schema_checks=None,
+              monday_item_ids=None):
     report, _plans, _pulled = run_dry_run(
         {inventory.board_id: inventory},
         {},
@@ -77,6 +78,7 @@ def _plan_for(inventory, *, wave=1, max_items=50, mode="plan", ledger=None,
         persistent_ledger=ledger,
         sunday_monday_id_index=monday_id_index,
         sunday_schema_checks=schema_checks,
+        monday_item_ids=monday_item_ids,
     )
 
 
@@ -487,6 +489,94 @@ def test_comment_and_attachment_idempotency_markers():
     assert marker == "[monday-migracao:123:u9]"
     name = attachment_idempotency_name("555", "contrato.pdf")
     assert name.startswith("monday-asset-555")
+
+
+def test_should_scope_plan_to_single_item_allowlist():
+    inventory = _kpi_inventory()
+    plan = _plan_for(inventory, monday_item_ids=["2"], max_items=1)
+    assert len(plan.operations) == 1
+    assert [op.monday_item_id for op in plan.operations] == ["2"]
+    assert plan.item_allowlist == ("2",)
+    assert plan.counts() == {"create": 1}
+    payload = plan.to_payload()
+    assert payload["source_scope"] == 1
+    assert payload["item_allowlist"] == ["2"]
+
+
+def test_should_abort_when_item_allowlist_not_on_board():
+    with pytest.raises(ExecutorAbort, match="ausente"):
+        _plan_for(_kpi_inventory(), monday_item_ids=["999999"], max_items=1)
+
+
+def test_should_abort_when_item_allowlist_not_in_wave():
+    # Item histórico (WAVE_2) não pode ser selecionado com --wave 1.
+    processos = "4443297481"
+    inventory = MondayBoardInventory(
+        board_id=processos,
+        name="Processos Trabalhista",
+        groups={
+            "g_open": "Trabalhista Ativo",
+            "g_done": "Trabalhista Encerrado",
+        },
+        columns=(MondayColumnInfo(id="status", title="Status", type="status"),),
+        items=(
+            MondayItemDigest(
+                item_id="10",
+                group_id="g_open",
+                created_at=RECENT,
+                updated_at=RECENT,
+                has_updates=True,
+                status_labels={"status": "Em andamento"},
+            ),
+            MondayItemDigest(
+                item_id="20",
+                group_id="g_done",
+                created_at="2020-01-01T00:00:00Z",
+                updated_at="2020-01-01T00:00:00Z",
+                status_labels={"status": "Encerrado"},
+            ),
+        ),
+    )
+    report, _plans, _pulled = run_dry_run({processos: inventory}, {})
+    waves = {
+        result.monday_item_id: result.wave
+        for result in report.items
+        if result.monday_board_id == processos
+    }
+    assert waves["10"] == "WAVE_1"
+    assert waves["20"] == "WAVE_2"
+    with pytest.raises(ExecutorAbort, match="não pertence"):
+        build_execution_plan(
+            inventory=inventory,
+            report=report,
+            wave=1,
+            max_items=1,
+            monday_item_ids=["20"],
+        )
+
+
+def test_should_abort_when_item_allowlist_empty():
+    with pytest.raises(ExecutorAbort, match="vazia"):
+        _plan_for(_kpi_inventory(), monday_item_ids=["", "  "], max_items=1)
+
+
+def test_should_keep_same_scope_for_plan_and_apply_modes():
+    inventory = _kpi_inventory()
+    plan = _plan_for(inventory, mode="plan", monday_item_ids=["1"], max_items=1)
+    apply_plan_obj = _plan_for(
+        inventory, mode="apply", monday_item_ids=["1"], max_items=1,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert [op.monday_item_id for op in plan.operations] == ["1"]
+    assert [op.monday_item_id for op in apply_plan_obj.operations] == ["1"]
+    assert plan.item_allowlist == apply_plan_obj.item_allowlist == ("1",)
+
+
+def test_should_not_silently_pick_first_item_without_allowlist_match():
+    inventory = _kpi_inventory()
+    # Dois IDs pedirem, mas um inexistente → abort (não reduz para o válido).
+    with pytest.raises(ExecutorAbort, match="ausente"):
+        _plan_for(inventory, monday_item_ids=["1", "404"], max_items=2)
 
 
 def test_schema_checks_require_monday_id_column():

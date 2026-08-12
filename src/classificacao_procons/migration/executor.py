@@ -212,6 +212,7 @@ class ExecutionPlan:
     relations_to_create: list[RelationWrite] = field(default_factory=list)
     relations_unresolved: list[RelationWrite] = field(default_factory=list)
     gate: list[GateCheck] = field(default_factory=list)
+    item_allowlist: tuple[str, ...] = ()
 
     @property
     def gate_ok(self) -> bool:
@@ -231,6 +232,8 @@ class ExecutionPlan:
             "wave": self.wave,
             "mode": self.mode,
             "max_items": self.max_items,
+            "item_allowlist": list(self.item_allowlist),
+            "source_scope": len(self.operations),
             "snapshot": {
                 "fingerprint": self.snapshot_fingerprint,
                 "total": self.snapshot_total,
@@ -288,6 +291,22 @@ def _wave_label(wave: int) -> str:
     return f"WAVE_{wave}"
 
 
+def normalize_item_allowlist(
+    item_ids: list[str] | tuple[str, ...] | frozenset[str] | None,
+) -> frozenset[str] | None:
+    """Normaliza a allowlist explícita por monday_item_id (None = sem filtro)."""
+    if item_ids is None:
+        return None
+    normalized = frozenset(
+        str(item_id).strip() for item_id in item_ids if str(item_id).strip()
+    )
+    if not normalized:
+        raise ExecutorAbort(
+            "Allowlist --item-id vazia; informe ao menos um monday_item_id.",
+        )
+    return normalized
+
+
 def build_execution_plan(
     *,
     inventory: MondayBoardInventory,
@@ -299,8 +318,13 @@ def build_execution_plan(
     persistent_ledger: dict[str, dict] | None = None,
     sunday_monday_id_index: dict[str, str] | None = None,
     sunday_schema_checks: list[GateCheck] | None = None,
+    monday_item_ids: list[str] | tuple[str, ...] | frozenset[str] | None = None,
 ) -> ExecutionPlan:
-    """Monta o plano executável a partir do dry-run canônico (zero escrita)."""
+    """Monta o plano executável a partir do dry-run canônico (zero escrita).
+
+    Com `monday_item_ids`, PLAN/APPLY ficam restritos exatamente a esses IDs
+    na wave informada (0 matches → abort; match ambíguo/duplicado → abort).
+    """
     board_id = inventory.board_id
     if board_id not in BOARD_ALLOWLIST:
         raise ExecutorAbort(f"Board {board_id} fora da allowlist aprovada.")
@@ -313,6 +337,7 @@ def build_execution_plan(
         )
 
     wave_label = _wave_label(wave)
+    allowlist = normalize_item_allowlist(monday_item_ids)
     ledger = persistent_ledger or {}
     monday_id_index = sunday_monday_id_index or {}
     items_by_id = {item.item_id: item for item in inventory.items}
@@ -322,10 +347,22 @@ def build_execution_plan(
         for entry in run.ledger.entries
     }
 
+    if allowlist is not None:
+        missing_on_board = sorted(
+            item_id for item_id in allowlist if item_id not in items_by_id
+        )
+        if missing_on_board:
+            raise ExecutorAbort(
+                "Item(ns) da allowlist ausente(s) no board "
+                f"{board_id}: {', '.join(missing_on_board)}.",
+            )
+
     operations: list[PlannedOperation] = []
     relations: list[RelationWrite] = []
     for result in report.items:
         if result.monday_board_id != board_id or result.wave != wave_label:
+            continue
+        if allowlist is not None and result.monday_item_id not in allowlist:
             continue
         item = items_by_id.get(result.monday_item_id)
         if item is None:
@@ -414,6 +451,26 @@ def build_execution_plan(
             )
             relations.append(write)
 
+    if allowlist is not None:
+        matched_ids = [op.monday_item_id for op in operations]
+        matched_set = set(matched_ids)
+        if len(matched_ids) != len(matched_set):
+            raise ExecutorAbort(
+                "Allowlist ambígua: mais de uma operação para o mesmo "
+                f"monday_item_id na {wave_label}.",
+            )
+        missing_in_wave = sorted(allowlist - matched_set)
+        if missing_in_wave:
+            raise ExecutorAbort(
+                f"Item(ns) da allowlist não pertence(m) à {wave_label} do board "
+                f"{board_id}: {', '.join(missing_in_wave)}.",
+            )
+        if len(operations) != len(allowlist):
+            raise ExecutorAbort(
+                f"Allowlist pediu {len(allowlist)} item(ns), plano resolveu "
+                f"{len(operations)}; abort sem escolher 'primeiro item'.",
+            )
+
     plan = ExecutionPlan(
         monday_board_id=board_id,
         sunday_board_id=sunday_board_id,
@@ -426,6 +483,7 @@ def build_execution_plan(
         operations=operations,
         relations_to_create=[write for write in relations if not write.unresolved],
         relations_unresolved=[write for write in relations if write.unresolved],
+        item_allowlist=tuple(sorted(allowlist)) if allowlist is not None else (),
     )
     plan.gate = _build_gate(plan, sunday_schema_checks or [])
     return plan
