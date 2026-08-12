@@ -884,6 +884,27 @@ def test_max_comments_requires_exact_total():
         )
 
 
+def test_item_ids_allows_single_already_migrated_item():
+    inventory = _kpi_inventory()
+    ledger = {
+        f"{KPI_BOARD}:1": {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": "1",
+            "sunday_board_id": "86",
+            "sunday_item_id": "9001",
+            "migration_status": "migrated",
+        },
+    }
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"1"}),
+        max_items=1,
+        ledger=ledger,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.counts() == {"already_migrated": 1}
+
+
 def test_item_id_and_item_ids_are_mutually_exclusive():
     inventory = _kpi_inventory()
     with pytest.raises(ExecutorAbort, match="não ambos"):

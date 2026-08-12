@@ -587,16 +587,17 @@ def build_execution_plan(
                 "item_ids extras no escopo do plano: "
                 + ", ".join(sorted(extra_ids)),
             )
-        for operation in operations:
-            if operation.action == "already_migrated":
-                raise ExecutorAbort(
-                    f"item {operation.monday_item_id} already_migrated no lote autorizado.",
-                )
-            if operation.action not in ("create", "resume"):
-                raise ExecutorAbort(
-                    f"item {operation.monday_item_id} action={operation.action} "
-                    "no lote CREATE autorizado.",
-                )
+        if len(requested_item_ids) > 1:
+            for operation in operations:
+                if operation.action == "already_migrated":
+                    raise ExecutorAbort(
+                        f"item {operation.monday_item_id} already_migrated no lote autorizado.",
+                    )
+                if operation.action not in ("create", "resume"):
+                    raise ExecutorAbort(
+                        f"item {operation.monday_item_id} action={operation.action} "
+                        "no lote CREATE autorizado.",
+                    )
 
     if max_comments is not None:
         total_comments = sum(operation.comments_to_create for operation in operations)
