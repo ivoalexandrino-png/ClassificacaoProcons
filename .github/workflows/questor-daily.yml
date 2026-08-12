@@ -2,11 +2,14 @@ name: Questor diário (certidões + caixa postal)
 
 on:
   schedule:
-    # Fluxo em duas fases (a recaptura no Questor é assíncrona, leva minutos):
-    # 07:30 BRT dispara a recaptura das certidões não regulares; 08:00 BRT lê e
-    # alerta com os dados já atualizados. Horários em UTC (BRT = UTC-3).
-    - cron: "30 10 * * *"  # 07:30 BRT → refresh (gatilho de recaptura)
-    - cron: "0 11 * * *"   # 08:00 BRT → check (leitura + alerta)
+    # Cadência (horários em UTC; BRT = UTC-3):
+    # 07:30 BRT todo dia → recaptura/renova (auto-renova certidões pendentes/vencendo).
+    # 08:00 BRT seg → resumo semanal consolidado (todas as pendências em aberto).
+    # 08:00 BRT demais dias → incremental (só pendências novas; dias sem novidade
+    # não geram e-mail).
+    - cron: "30 10 * * *"    # 07:30 BRT → refresh (auto-renova) todo dia
+    - cron: "0 11 * * 1"     # 08:00 BRT segunda → resumo semanal consolidado
+    - cron: "0 11 * * 0,2-6"  # 08:00 BRT demais dias → incremental
   workflow_dispatch:
     inputs:
       dry_run:
@@ -27,6 +30,11 @@ on:
           - todas
       resend:
         description: "Reenviar pendências já alertadas (ignora o estado)"
+        required: false
+        default: false
+        type: boolean
+      weekly:
+        description: "Enviar como resumo semanal consolidado (todas em aberto)"
         required: false
         default: false
         type: boolean
@@ -107,6 +115,7 @@ jobs:
           --to juridico@b4a.com.br,fiscal@b4a.com.br
           --empresa "B4A / MMKT"
           --caixa-mode ${{ inputs.caixa_mode || 'relevantes_por_assunto' }}
+          ${{ (github.event.schedule == '0 11 * * 1' || inputs.weekly) && '--weekly' || '' }}
           ${{ inputs.resend && '--resend' || '' }}
           ${{ inputs.dry_run && '--dry-run' || '' }}
 

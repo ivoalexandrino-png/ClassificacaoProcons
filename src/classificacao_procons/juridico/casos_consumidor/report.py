@@ -7,6 +7,7 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
+from classificacao_procons.juridico.casos_consumidor.aggregate import ProcessCaseRow
 from classificacao_procons.juridico.casos_consumidor.models import (
     CaseTheme,
     CasosScanResult,
@@ -23,6 +24,10 @@ _CSV_FIELDS = (
     "total_judicial_deposits_brl",
     "deposit_records_count",
     "condemnation_amount_brl",
+    "kpi_condemnation_brl",
+    "kpi_paid_brl",
+    "kpi_result",
+    "best_condemnation_brl",
     "has_sentence_pdf",
     "complaint_excerpt",
 )
@@ -46,6 +51,14 @@ def _case_to_dict(case: ConsumerCaseInsight) -> dict[str, str | int | None]:
             f"{case.condemnation_amount_brl:.2f}"
             if case.condemnation_amount_brl is not None
             else None
+        ),
+        "kpi_condemnation_brl": (
+            f"{case.kpi_condemnation_brl:.2f}" if case.kpi_condemnation_brl is not None else None
+        ),
+        "kpi_paid_brl": f"{case.kpi_paid_brl:.2f}" if case.kpi_paid_brl is not None else None,
+        "kpi_result": case.kpi_result,
+        "best_condemnation_brl": (
+            f"{case.best_condemnation_brl:.2f}" if case.best_condemnation_brl is not None else None
         ),
         "has_sentence_pdf": "yes" if case.has_sentence_pdf else "no",
         "complaint_excerpt": case.complaint_excerpt,
@@ -99,6 +112,70 @@ def load_cases_from_json(path: Path) -> list[ConsumerCaseInsight]:
                 condemnation_amount_brl=Decimal(condemnation) if condemnation else None,
                 has_sentence_pdf=str(row.get("has_sentence_pdf", "")).casefold() == "yes",
                 complaint_excerpt=row.get("complaint_excerpt"),
+                kpi_condemnation_brl=_decimal_or_none(row.get("kpi_condemnation_brl")),
+                kpi_paid_brl=_decimal_or_none(row.get("kpi_paid_brl")),
+                kpi_result=row.get("kpi_result"),
+                best_condemnation_brl=_decimal_or_none(row.get("best_condemnation_brl")),
             ),
         )
     return cases
+
+
+def _decimal_or_none(value: object) -> Decimal | None:
+    if value is None or value == "":
+        return None
+    return Decimal(str(value))
+
+
+_PROCESS_FIELDS = (
+    "process_number",
+    "consumer_folders",
+    "primary_theme",
+    "total_judicial_deposits_brl",
+    "deposit_line_count",
+    "condemnation_sentence_brl",
+    "kpi_condemnation_brl",
+    "kpi_paid_brl",
+    "kpi_result",
+    "best_condemnation_brl",
+)
+
+
+def write_process_csv(*, rows: list[ProcessCaseRow], destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(_PROCESS_FIELDS))
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(
+                {
+                    "process_number": row.process_number,
+                    "consumer_folders": ";".join(row.consumer_folders),
+                    "primary_theme": row.primary_theme.value,
+                    "total_judicial_deposits_brl": (
+                        f"{row.total_judicial_deposits_brl:.2f}"
+                        if row.total_judicial_deposits_brl is not None
+                        else None
+                    ),
+                    "deposit_line_count": row.deposit_line_count,
+                    "condemnation_sentence_brl": (
+                        f"{row.condemnation_sentence_brl:.2f}"
+                        if row.condemnation_sentence_brl is not None
+                        else None
+                    ),
+                    "kpi_condemnation_brl": (
+                        f"{row.kpi_condemnation_brl:.2f}"
+                        if row.kpi_condemnation_brl is not None
+                        else None
+                    ),
+                    "kpi_paid_brl": (
+                        f"{row.kpi_paid_brl:.2f}" if row.kpi_paid_brl is not None else None
+                    ),
+                    "kpi_result": row.kpi_result,
+                    "best_condemnation_brl": (
+                        f"{row.best_condemnation_brl:.2f}"
+                        if row.best_condemnation_brl is not None
+                        else None
+                    ),
+                },
+            )

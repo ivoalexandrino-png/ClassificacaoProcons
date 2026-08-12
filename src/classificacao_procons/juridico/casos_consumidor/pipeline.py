@@ -10,8 +10,10 @@ from classificacao_procons.gemini.client import get_api_key_from_env
 from classificacao_procons.juridico.casos_consumidor.deposits_loader import (
     load_deposits_by_consumer,
 )
+from classificacao_procons.juridico.casos_consumidor.enrich import enrich_cases_with_kpi
 from classificacao_procons.juridico.casos_consumidor.material import build_consumer_context
 from classificacao_procons.juridico.casos_consumidor.models import (
+    CaseTheme,
     CasosScanResult,
     ConsumerCaseInsight,
 )
@@ -35,7 +37,8 @@ class CasosScanOptions:
     max_consumers: int | None = None
     deposits_json_path: Path = Path("data/depositos-judiciais.json")
     use_gemini: bool = True
-    max_gemini_calls: int = 250
+    max_gemini_calls: int = 400
+    with_monday_kpi: bool = False
 
 
 def _classify_theme(
@@ -52,7 +55,16 @@ def _classify_theme(
         excerpt = text[:240].replace("\n", " ").strip() if text else None
         return rules_primary, rules_secondary, rules_conf, excerpt
 
-    if rules_conf == "high" and rules_primary.value != "outros":
+    if rules_conf == "high" and rules_primary != CaseTheme.OUTROS:
+        excerpt = text[:240].replace("\n", " ").strip() if text else None
+        return rules_primary, rules_secondary, rules_conf, excerpt
+
+    should_refine = (
+        rules_primary == CaseTheme.OUTROS
+        or rules_conf == "low"
+        or (rules_conf == "medium" and len(text.strip()) >= 120)
+    )
+    if not should_refine:
         excerpt = text[:240].replace("\n", " ").strip() if text else None
         return rules_primary, rules_secondary, rules_conf, excerpt
 
@@ -141,11 +153,17 @@ def scan_consumer_cases(options: CasosScanOptions) -> CasosScanResult:
                     if context.complaint_text
                     else None
                 ),
+                best_condemnation_brl=condemnation or total_deposits,
             ),
         )
+
+    kpi_by_process = None
+    if options.with_monday_kpi:
+        cases, kpi_by_process = enrich_cases_with_kpi(cases, api_token=None)
 
     return CasosScanResult(
         cases=cases,
         consumers_scanned=len(consumers),
         consumers_with_deposits=with_deposits,
+        kpi_by_process=kpi_by_process,
     )

@@ -52,6 +52,7 @@ class QuestorPipelineOptions:
     unread_window_days: int = DEFAULT_UNREAD_WINDOW_DAYS
     dry_run: bool = False
     only_new: bool = True
+    weekly_digest: bool = False
     state_path: Path = DEFAULT_STATE_PATH
     token_path: str = "credentials/gmail-token.json"
     # Portal (scraping) — opcional; só usado quando o snapshot não é injetado.
@@ -218,8 +219,10 @@ def run_questor_check(
         warn_within_days=options.warn_within_days,
     )
 
+    # No resumo semanal consolidado, envia todas as pendências em aberto (mesmo as
+    # já avisadas); nos dias comuns, só as novas (dedup por estado).
     alerted_keys = _load_alerted_keys(options.state_path)
-    if options.only_new:
+    if options.only_new and not options.weekly_digest:
         new_issues = tuple(
             issue for issue in analysis.issues if issue.dedup_key not in alerted_keys
         )
@@ -257,6 +260,7 @@ def run_questor_check(
         to=list(options.recipients),
         cc=list(options.cc),
         extra_note=backlog_note,
+        weekly=options.weekly_digest,
     )
     try:
         sender = GmailSender.from_credentials(token_path=options.token_path)

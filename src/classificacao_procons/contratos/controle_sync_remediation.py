@@ -22,6 +22,9 @@ from classificacao_procons.contratos.controle_legacy_guard import (
     status_is_assinado,
 )
 from classificacao_procons.contratos.controle_reconcile import find_duplicate_normalized_names
+from classificacao_procons.contratos.controle_write_policy import (
+    require_controle_write_unless_dry_run,
+)
 from classificacao_procons.contratos.models import ControleAssinaturasItem
 from classificacao_procons.contratos.monday_contracts import (
     ControleAssinaturasIndex,
@@ -249,6 +252,7 @@ def remediate_erroneous_sync_duplicates(
     max_pages: int = 50,
     dry_run: bool = True,
 ) -> ErroneousSyncRemediationResult:
+    require_controle_write_unless_dry_run(dry_run=dry_run)
     try:
         documents = list_documents(api_token=autentique_api_token, max_pages=max_pages)
     except AutentiqueClientError as exc:

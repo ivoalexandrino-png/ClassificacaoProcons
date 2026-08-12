@@ -85,6 +85,7 @@ class PipelineOptions:
     monday_group_name: str = DEFAULT_GROUP_NAME
     register_on_monday: bool = True
     source_ids: tuple[str, ...] | None = None
+    message_ids: tuple[str, ...] | None = None
 
 
 def calculate_sac_and_legal_deadlines(*, base_date: date | None = None) -> tuple[date, date]:
@@ -1069,7 +1070,14 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
     )
 
     try:
-        notifications = fetcher.list_unread_notifications(max_results=options.max_results)
+        if options.message_ids:
+            notifications = []
+            for message_id in options.message_ids:
+                notification = fetcher.fetch_notification(message_id)
+                if notification is not None:
+                    notifications.append(notification)
+        else:
+            notifications = fetcher.list_unread_notifications(max_results=options.max_results)
     except GmailClientError as exc:
         raise PipelineError(str(exc)) from exc
 

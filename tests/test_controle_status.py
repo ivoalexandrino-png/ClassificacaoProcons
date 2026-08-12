@@ -6,7 +6,6 @@ from classificacao_procons.contratos.autentique.client import (
 )
 from classificacao_procons.contratos.constants import (
     CONTROLE_STATUS_AGUARDANDO_ASSINATURA,
-    CONTROLE_STATUS_AGUARDANDO_OUTROS,
     CONTROLE_STATUS_ASSINADO,
     SIGNER_DISPLAY_NAME_LUCIANO,
     SIGNER_EMAIL_JAN,
@@ -60,7 +59,7 @@ class TestControleStatusPerTrack:
         )
         assert resolve_signed_at_for_track(document, track="jan") is None
         assert resolve_controle_status_for_track(document, track="luciano") == (
-            CONTROLE_STATUS_AGUARDANDO_OUTROS
+            CONTROLE_STATUS_ASSINADO
         )
         assert resolve_signed_at_for_track(document, track="luciano") is not None
 

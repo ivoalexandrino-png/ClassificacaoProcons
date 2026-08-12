@@ -36,6 +36,10 @@ from classificacao_procons.migration.models import (
     MondayItemDigest,
     SundayBoardSnapshot,
 )
+from classificacao_procons.migration.user_mapping import (
+    UserMappingPolicy,
+    people_assignment_requires_manual,
+)
 
 RECORTE_MONTHS = 12
 
@@ -201,7 +205,8 @@ def classify_item(
     in_recorte: bool,
     scenario: str,
     known_target_items: dict[str, set[str]],
-    users_mapped: set[str],
+    users_mapped: set[str] | None = None,
+    user_policy: UserMappingPolicy | None = None,
     group_title: str | None = None,
 ) -> ItemDryRunResult:
     """Classifica um item (sanitizado) num cenário do dry-run."""
@@ -214,7 +219,7 @@ def classify_item(
             classification="ERROR",
             reasons=("OTHER",),
             flags=("grupo_sem_regra_explicita",),
-            wave="onda1" if in_recorte else "onda2",
+            wave="WAVE_1" if in_recorte else "WAVE_2",
         )
     if not in_recorte:
         # Fora da Onda 1 ≠ descarte: backfill histórico OBRIGATÓRIO na Onda 2.
@@ -223,7 +228,7 @@ def classify_item(
             monday_item_id=item.item_id,
             classification="WAVE_2_HISTORICAL",
             reasons=("HISTORICAL_BACKFILL",),
-            wave="onda2",
+            wave="WAVE_2",
         )
     reasons: list[ManualReason] = []
     flags: list[str] = []
@@ -254,8 +259,19 @@ def classify_item(
             reasons.append("MISSING_STATUS_MAPPING")
             break
 
-    if item.people_ids and not set(item.people_ids).issubset(users_mapped):
-        reasons.append("MISSING_USER_MAPPING")
+    if item.people_ids:
+        mapped = users_mapped or set()
+        if user_policy is not None:
+            for person_id in item.people_ids:
+                if people_assignment_requires_manual(
+                    person_id,
+                    user_policy,
+                    approved_exact_match_ids=mapped,
+                ):
+                    reasons.append("MISSING_USER_MAPPING")
+                    break
+        elif not set(item.people_ids).issubset(mapped):
+            reasons.append("MISSING_USER_MAPPING")
 
     for relation in plan.relation_plans:
         targets = item.relation_targets.get(relation.monday_column_id, ())
@@ -288,7 +304,7 @@ def classify_item(
         classification=classification,
         reasons=tuple(dict.fromkeys(reasons)),
         flags=tuple(dict.fromkeys(flags)),
-        wave="onda1",
+        wave="WAVE_1",
     )
 
 
@@ -298,6 +314,7 @@ def run_dry_run(
     *,
     cutoff: datetime | None = None,
     users_mapped: set[str] | None = None,
+    user_policy: UserMappingPolicy | None = None,
     scenario: str = "pos_checklist",
 ) -> tuple[DryRunReport, dict[str, BoardPlan], dict[str, int]]:
     """Executa o dry-run completo. NUNCA chama métodos de escrita.
@@ -337,7 +354,8 @@ def run_dry_run(
                     in_recorte=item.item_id in selections[board_id],
                     scenario=scenario,
                     known_target_items=known_target_items,
-                    users_mapped=users_mapped or set(),
+                    users_mapped=users_mapped,
+                    user_policy=user_policy,
                     group_title=inventory.groups.get(item.group_id or ""),
                 ),
             )

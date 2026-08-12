@@ -24,6 +24,7 @@ from classificacao_procons.contratos.contratos_enrichment import (
     ContratosEnrichmentError,
     process_contratos_item_created,
 )
+from classificacao_procons.contratos.controle_compare_diagnostics import diagnostic_row_to_dict
 from classificacao_procons.contratos.controle_link_suggestions import apply_controle_link_suggestion
 from classificacao_procons.contratos.controle_monday_status import (
     CONTROLE_STATUS_LABELS_REQUIRED,
@@ -210,14 +211,77 @@ def _run_validate_controle_status_labels(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
-def _run_compare_controle(args: argparse.Namespace) -> int:
-    try:
-        result = compare_autentique_with_controle(max_pages=args.max_pages)
-    except ControleSyncError as exc:
-        print(f"Erro: {exc}", file=sys.stderr)
-        return 1
+def _build_compare_controle_payload(
+    result: object,
+    *,
+    document_diagnostics_limit: int | None = 500,
+) -> dict[str, object]:
+    from classificacao_procons.contratos.controle_create_policy import (
+        ENV_PAUSE_CREATE,
+        is_controle_create_paused,
+    )
+    from classificacao_procons.contratos.controle_write_policy import (
+        ENV_CONTROLE_WRITE_ENABLED,
+        is_controle_write_enabled,
+    )
 
-    summary = {
+    diagnostic_rows = getattr(result, "document_diagnostics", ()) or ()
+    diag_summary = getattr(result, "diagnostic_summary", None)
+    rows_for_export = diagnostic_rows
+    if document_diagnostics_limit is not None:
+        rows_for_export = diagnostic_rows[:document_diagnostics_limit]
+
+    duplicate_item_docs = sum(1 for row in diagnostic_rows if row.duplicate_items)
+    legacy_without_id_docs = sum(
+        1 for row in diagnostic_rows if row.legacy_items_without_autentique_id
+    )
+    legacy_without_id_items = sum(
+        len(row.legacy_items_without_autentique_id) for row in diagnostic_rows
+    )
+
+    diagnostic_summary_payload: dict[str, object] | None = None
+    if diag_summary is not None:
+        diagnostic_summary_payload = {
+            "documents_analyzed": diag_summary.documents_analyzed,
+            "total_documents": diag_summary.documents_analyzed,
+            "expected_tracks_jan_only": diag_summary.expected_tracks_jan_only,
+            "jan_only": diag_summary.expected_tracks_jan_only,
+            "expected_tracks_luciano_only": diag_summary.expected_tracks_luciano_only,
+            "luciano_only": diag_summary.expected_tracks_luciano_only,
+            "expected_tracks_both": diag_summary.expected_tracks_both,
+            "both": diag_summary.expected_tracks_both,
+            "expected_tracks_none": diag_summary.expected_tracks_none,
+            "no_internal_signer": diag_summary.expected_tracks_none,
+            "scope_eligible": diag_summary.scope_eligible,
+            "scope_ineligible": diag_summary.scope_ineligible,
+            "scope_manual_review": diag_summary.scope_manual_review,
+            "proposed_action_counts": dict(diag_summary.proposed_action_counts),
+            "ignored_non_contract": diag_summary.proposed_action_counts.get(
+                "ignored_non_contract",
+                0,
+            ),
+            "missing_track_total": diag_summary.missing_track_total,
+            "missing_tracks": diag_summary.missing_track_total,
+            "unexpected_track_total": diag_summary.unexpected_track_total,
+            "unexpected_tracks": diag_summary.unexpected_track_total,
+            "status_divergence_total": diag_summary.status_divergence_total,
+            "status_mismatches": diag_summary.status_divergence_total,
+            "documents_with_duplicate_items": duplicate_item_docs,
+            "duplicate_items": duplicate_item_docs,
+            "documents_with_legacy_without_autentique_id": legacy_without_id_docs,
+            "legacy_items_without_autentique_id": legacy_without_id_items,
+        }
+
+    return {
+        "run_metadata": {
+            "mode": "compare_controle_read_only",
+            "controle_pause_create_active": is_controle_create_paused(),
+            "controle_pause_create_env": os.environ.get(ENV_PAUSE_CREATE, "true"),
+            "controle_write_enabled": is_controle_write_enabled(),
+            "controle_write_enabled_env": os.environ.get(ENV_CONTROLE_WRITE_ENABLED, "false"),
+            "allow_create_cli": False,
+            "mutations_executed": False,
+        },
         "autentique_total": result.autentique_total,
         "monday_items_total": result.monday_items_total,
         "pending_missing_in_monday_count": len(result.pending_missing_in_monday),
@@ -231,6 +295,10 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
         "legacy_link_suggestions_count": len(result.legacy_link_suggestions),
         "monday_multiple_autentique_ids_count": len(result.monday_multiple_autentique_ids),
         "plan_action_counts": dict(result.plan_action_counts),
+        "diagnostic_summary": diagnostic_summary_payload,
+        "document_diagnostics": [
+            diagnostic_row_to_dict(row) for row in rows_for_export
+        ],
         "pending_missing_in_monday": [
             {"document_id": doc_id, "document_name": name}
             for doc_id, name in result.pending_missing_in_monday[:200]
@@ -305,21 +373,41 @@ def _run_compare_controle(args: argparse.Namespace) -> int:
             for item_id, name, ids in result.monday_multiple_autentique_ids[:200]
         ],
     }
+
+
+def _run_compare_controle(args: argparse.Namespace) -> int:
+    try:
+        result = compare_autentique_with_controle(max_pages=args.max_pages)
+    except ControleSyncError as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+
+    stdout_payload = _build_compare_controle_payload(result, document_diagnostics_limit=500)
+    if getattr(args, "export_compare_json", None):
+        full_payload = _build_compare_controle_payload(result, document_diagnostics_limit=None)
+        if getattr(args, "git_ref", None):
+            full_payload["run_metadata"]["git_ref"] = args.git_ref
+        if getattr(args, "git_sha", None):
+            full_payload["run_metadata"]["git_sha"] = args.git_sha
+        Path(args.export_compare_json).write_text(
+            json.dumps(full_payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
     if getattr(args, "export_pending_json", None):
         export_path = Path(args.export_pending_json)
         export_path.write_text(
             json.dumps(
                 {
-                    "pending_missing_in_monday": summary["pending_missing_in_monday"],
-                    "signed_missing_in_monday": summary["signed_missing_in_monday"],
-                    "legacy_link_suggestions": summary["legacy_link_suggestions"],
+                    "pending_missing_in_monday": stdout_payload["pending_missing_in_monday"],
+                    "signed_missing_in_monday": stdout_payload["signed_missing_in_monday"],
+                    "legacy_link_suggestions": stdout_payload["legacy_link_suggestions"],
                 },
                 ensure_ascii=False,
                 indent=2,
             ),
             encoding="utf-8",
         )
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    print(json.dumps(stdout_payload, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -741,6 +829,19 @@ def main(argv: list[str] | None = None) -> int:
         "--export-pending-json",
         metavar="PATH",
         help="Grava pending/signed missing e sugestões de link legado em JSON",
+    )
+    compare_parser.add_argument(
+        "--export-compare-json",
+        metavar="PATH",
+        help="Grava JSON completo do compare (todos os document_diagnostics) para auditoria",
+    )
+    compare_parser.add_argument(
+        "--git-ref",
+        help="Metadado opcional: ref Git (ex.: branch) gravado no export",
+    )
+    compare_parser.add_argument(
+        "--git-sha",
+        help="Metadado opcional: commit SHA gravado no export",
     )
     compare_parser.set_defaults(func=_run_compare_controle)
 

@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from classificacao_procons.migration.dispositions import Disposition
+
 Strategy = Literal[
     "direto",
     "transformacao",
@@ -22,6 +24,8 @@ Strategy = Literal[
 # Nenhum item é descartado — o que não entra na Onda 1 (cutover operacional) é
 # obrigatório na Onda 2 (backfill histórico): 4.391/4.391 itens no Sunday ao final.
 Classification = Literal["WAVE_1_READY", "WAVE_2_HISTORICAL", "MANUAL", "ERROR"]
+
+Wave = Literal["WAVE_1", "WAVE_2"]
 
 ManualReason = Literal[
     "MISSING_TARGET_COLUMN",
@@ -157,7 +161,8 @@ class ItemDryRunResult:
     classification: Classification
     reasons: tuple[ManualReason, ...] = ()
     flags: tuple[str, ...] = ()  # avisos não bloqueantes (ex.: file_materialization)
-    wave: Literal["onda1", "onda2"] = "onda1"
+    wave: Wave = "WAVE_1"
+    disposition: Disposition | None = None
 
 
 @dataclass(frozen=True)

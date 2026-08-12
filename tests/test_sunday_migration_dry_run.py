@@ -258,7 +258,7 @@ def test_should_classify_wave2_historical_out_of_onda1():
     # Fora da Onda 1 não é descarte: backfill obrigatório da Onda 2.
     assert result.classification == "WAVE_2_HISTORICAL"
     assert result.reasons == ("HISTORICAL_BACKFILL",)
-    assert result.wave == "onda2"
+    assert result.wave == "WAVE_2"
     payload = report.to_payload()
     assert payload["onda2_backfill_obrigatorio"] == 1
     assert payload["meta_final"] == "1/1 itens no Sunday (duas ondas)"
