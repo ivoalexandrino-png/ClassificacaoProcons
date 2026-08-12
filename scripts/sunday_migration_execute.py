@@ -81,6 +81,7 @@ def _validate_plan_payload(
     *,
     expected_writable: int,
     allow_already_migrated: bool = False,
+    expected_comments: int | None = None,
 ) -> None:
     counts = payload.get("counts", {})
     writable = counts.get("create", 0) + counts.get("resume", 0)
@@ -88,6 +89,12 @@ def _validate_plan_payload(
         raise ExecutorAbort(
             f"CREATE/RESUME esperado {expected_writable}, obtido {counts}.",
         )
+    if expected_comments is not None:
+        actual_comments = payload.get("comments_to_create", 0)
+        if actual_comments != expected_comments:
+            raise ExecutorAbort(
+                f"comments_to_create esperado {expected_comments}, obtido {actual_comments}.",
+            )
     disallowed = ("adopt", "absorb", "exclude_test", "blocked")
     if not allow_already_migrated:
         disallowed = (*disallowed, "already_migrated")
@@ -100,6 +107,29 @@ def _validate_plan_payload(
         raise ExecutorAbort("Gate fail-closed reprovado no PLAN.")
 
 
+def _parse_requested_item_ids(
+    item_id: str | None,
+    item_ids: str | None,
+) -> frozenset[str] | None:
+    if item_id and item_ids:
+        raise ExecutorAbort("Use --item-id OU --item-ids, não ambos.")
+    if item_ids:
+        parsed = frozenset(
+            value.strip()
+            for value in item_ids.split(",")
+            if value.strip()
+        )
+        if not parsed:
+            raise ExecutorAbort("--item-ids vazio.")
+        return parsed
+    if item_id:
+        value = item_id.strip()
+        if not value:
+            raise ExecutorAbort("--item-id vazio.")
+        return frozenset({value})
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", required=True, help="monday_board_id (allowlist)")
@@ -109,6 +139,15 @@ def main() -> int:
     parser.add_argument(
         "--item-id",
         help="allowlist explícita: PLAN/APPLY inclui exatamente este monday_item_id",
+    )
+    parser.add_argument(
+        "--item-ids",
+        help="allowlist explícita CSV: PLAN/APPLY inclui exatamente estes monday_item_ids",
+    )
+    parser.add_argument(
+        "--max-comments",
+        type=int,
+        help="limite exato de comments_to_create do escopo autorizado",
     )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
@@ -141,6 +180,12 @@ def main() -> int:
 
     if args.mode == "apply" and not args.refresh_sunday:
         print("ABORT: APPLY exige --refresh-sunday (schema live imediato).")
+        return 3
+
+    try:
+        requested_item_ids = _parse_requested_item_ids(args.item_id, args.item_ids)
+    except ExecutorAbort as exc:
+        print(f"ABORT: {exc}")
         return 3
 
     inventory_holder: dict[str, object] = {"inventory": None}
@@ -232,7 +277,8 @@ def main() -> int:
         report=report,
         wave=args.wave,
         max_items=args.max_items,
-        item_id=args.item_id,
+        item_ids=requested_item_ids,
+        max_comments=args.max_comments,
         mode=args.mode,
         user_policy=policy,
         persistent_ledger=load_persistent_ledger(args.ledger),
@@ -261,15 +307,18 @@ def main() -> int:
 
     try:
         counts = payload.get("counts", {})
-        expected_writable = 1 if args.item_id else (
-            counts.get("create", 0) + counts.get("resume", 0)
-        )
+        scoped_ids = requested_item_ids
+        if scoped_ids is not None:
+            expected_writable = len(scoped_ids)
+        else:
+            expected_writable = counts.get("create", 0) + counts.get("resume", 0)
         _validate_plan_payload(
             payload,
             expected_writable=expected_writable,
             allow_already_migrated=(
-                not args.item_id and counts.get("already_migrated", 0) > 0
+                scoped_ids is None and counts.get("already_migrated", 0) > 0
             ),
+            expected_comments=args.max_comments,
         )
     except ExecutorAbort as exc:
         print(f"\nABORT: {exc}")
@@ -353,7 +402,8 @@ def main() -> int:
         report=report,
         wave=args.wave,
         max_items=args.max_items,
-        item_id=args.item_id,
+        item_ids=requested_item_ids,
+        max_comments=args.max_comments,
         mode="plan",
         user_policy=policy,
         persistent_ledger=load_persistent_ledger(args.ledger),
