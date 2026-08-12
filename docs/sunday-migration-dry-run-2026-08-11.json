@@ -1,0 +1,1790 @@
+{
+  "cutoff": "2025-08-11T03:10:58.113346+00:00",
+  "estado_atual": {
+    "scenario": "estado_atual",
+    "cutoff": "2025-08-11T03:10:58.113346+00:00",
+    "total_analisado": 4391,
+    "total_no_recorte": 2060,
+    "counts": {
+      "READY": 0,
+      "MANUAL": 2060,
+      "SKIP": 2331,
+      "ERROR": 0
+    },
+    "percentuais_sobre_recorte": {
+      "READY": 0.0,
+      "MANUAL": 100.0,
+      "ERROR": 0.0
+    },
+    "manual_por_motivo": {
+      "MISSING_TARGET_COLUMN": 2060,
+      "MISSING_USER_MAPPING": 1569,
+      "INVALID_RELATION_CONFIG": 57
+    },
+    "por_board": {
+      "4944254220": {
+        "READY": 0,
+        "MANUAL": 193,
+        "SKIP": 264,
+        "ERROR": 0
+      },
+      "3961072966": {
+        "READY": 0,
+        "MANUAL": 175,
+        "SKIP": 703,
+        "ERROR": 0
+      },
+      "4443295406": {
+        "READY": 0,
+        "MANUAL": 41,
+        "SKIP": 79,
+        "ERROR": 0
+      },
+      "5343921475": {
+        "READY": 0,
+        "MANUAL": 125,
+        "SKIP": 30,
+        "ERROR": 0
+      },
+      "4443297481": {
+        "READY": 0,
+        "MANUAL": 10,
+        "SKIP": 14,
+        "ERROR": 0
+      },
+      "5563754463": {
+        "READY": 0,
+        "MANUAL": 0,
+        "SKIP": 31,
+        "ERROR": 0
+      },
+      "5301515799": {
+        "READY": 0,
+        "MANUAL": 553,
+        "SKIP": 1054,
+        "ERROR": 0
+      },
+      "5385471914": {
+        "READY": 0,
+        "MANUAL": 963,
+        "SKIP": 156,
+        "ERROR": 0
+      }
+    },
+    "flags": {
+      "board_destino_inexistente": 1466,
+      "file_materialization": 233,
+      "updates_para_migrar": 1105,
+      "subitens": 105
+    }
+  },
+  "estado_atual_pull_in_relacoes": {
+    "5343921475": 1
+  },
+  "pos_checklist": {
+    "scenario": "pos_checklist",
+    "cutoff": "2025-08-11T03:10:58.113346+00:00",
+    "total_analisado": 4391,
+    "total_no_recorte": 2060,
+    "counts": {
+      "READY": 491,
+      "MANUAL": 1569,
+      "SKIP": 2331,
+      "ERROR": 0
+    },
+    "percentuais_sobre_recorte": {
+      "READY": 23.8,
+      "MANUAL": 76.2,
+      "ERROR": 0.0
+    },
+    "manual_por_motivo": {
+      "MISSING_USER_MAPPING": 1569
+    },
+    "por_board": {
+      "4944254220": {
+        "READY": 193,
+        "MANUAL": 0,
+        "SKIP": 264,
+        "ERROR": 0
+      },
+      "3961072966": {
+        "READY": 7,
+        "MANUAL": 168,
+        "SKIP": 703,
+        "ERROR": 0
+      },
+      "4443295406": {
+        "READY": 9,
+        "MANUAL": 32,
+        "SKIP": 79,
+        "ERROR": 0
+      },
+      "5343921475": {
+        "READY": 0,
+        "MANUAL": 125,
+        "SKIP": 30,
+        "ERROR": 0
+      },
+      "4443297481": {
+        "READY": 10,
+        "MANUAL": 0,
+        "SKIP": 14,
+        "ERROR": 0
+      },
+      "5563754463": {
+        "READY": 0,
+        "MANUAL": 0,
+        "SKIP": 31,
+        "ERROR": 0
+      },
+      "5301515799": {
+        "READY": 42,
+        "MANUAL": 511,
+        "SKIP": 1054,
+        "ERROR": 0
+      },
+      "5385471914": {
+        "READY": 230,
+        "MANUAL": 733,
+        "SKIP": 156,
+        "ERROR": 0
+      }
+    },
+    "flags": {
+      "file_materialization": 233,
+      "updates_para_migrar": 1105,
+      "subitens": 105
+    }
+  },
+  "pos_checklist_pull_in_relacoes": {
+    "5343921475": 1
+  },
+  "planos": {
+    "4944254220": {
+      "monday": "Procons",
+      "sunday_board_id": null,
+      "sunday_name": null,
+      "dominio": "procon",
+      "confianca": "ALTA",
+      "nota": "TARGET A CRIAR MANUALMENTE (board Procons).",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "subelementos_mkm7khms",
+          "titulo": "Subelementos",
+          "tipo": "subtasks",
+          "estrategia": "derivado_pelo_codigo",
+          "alvo_sunday": "subitens nativos (parent_item_id)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto",
+          "titulo": "Procon/Órgão",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1",
+          "titulo": "Origem",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "long_text_mkxb3zgq",
+          "titulo": "CPF",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "arquivos",
+          "titulo": "Notificação Procon",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto1",
+          "titulo": "CIP/FA",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data",
+          "titulo": "Data da Reclamação",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data30",
+          "titulo": "Prazo resposta SAC",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data3",
+          "titulo": "Prazo Resposta Jurídico",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data2",
+          "titulo": "Data da Resposta Legal/Baixa",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "color_mknz9dwg",
+          "titulo": "Houve Cancelamento de Assinatura?",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status8",
+          "titulo": "Status",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "arquivos8",
+          "titulo": "Docs SAC",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "long_text",
+          "titulo": "Observações/Histórico",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_11",
+          "titulo": "Causa 1",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "dup__of_causa_1",
+          "titulo": "Causa 2 (se houver)",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "dup__of_causa_2",
+          "titulo": "Causa 3 (se houver)",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "color",
+          "titulo": "Causa 4 (se houver)",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_118",
+          "titulo": "Gerou Processo Administrativo",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "date_mkxcbdff",
+          "titulo": "Prazo Resposta Processo Administrativo",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "color_mkxc8v59",
+          "titulo": "Processo Administrativo Respondido",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "color_mky56w54",
+          "titulo": "Já está na black list?",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status_1": {
+          "Men's \"Loja\"": "men_s_loja",
+          "Glam \"Clube\"": "glam_clube",
+          "Glam \"Loja\"": "glam_loja",
+          "Men's \"Clube\"": "men_s_clube"
+        },
+        "color_mknz9dwg": {
+          "Não": "nao",
+          "Sim": "sim"
+        },
+        "status8": {
+          "Baixado": "baixado",
+          "Respondido": "respondido"
+        },
+        "status_11": {
+          "Problemas com Cancelamento": "problemas_com_cancelamento",
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas na experiência": "problemas_na_experiencia",
+          "Problemas no pagamento": "problemas_no_pagamento",
+          "Problemas com entrega": "problemas_com_entrega"
+        },
+        "dup__of_causa_1": {
+          "Problemas com Cancelamento": "problemas_com_cancelamento",
+          "Problemas com Entrega": "problemas_com_entrega",
+          "Problemas com Pagamentos": "problemas_com_pagamentos",
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas na Experiência": "problemas_na_experiencia"
+        },
+        "dup__of_causa_2": {
+          "Problemas com Cancelamento": "problemas_com_cancelamento",
+          "Problemas com Entrega": "problemas_com_entrega",
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas com Pagamento": "problemas_com_pagamento",
+          "Problemas na Experiência": "problemas_na_experiencia"
+        },
+        "color": {
+          "Problemas com Cancelamento": "problemas_com_cancelamento",
+          "Problemas com a Experiência": "problemas_com_a_experiencia",
+          "Problemas com a Entrega": "problemas_com_a_entrega",
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas no pagamento": "problemas_no_pagamento"
+        },
+        "status_118": {
+          "Sim": "sim",
+          "Não": "nao"
+        },
+        "color_mkxc8v59": {
+          "Sim": "sim",
+          "Não": "nao",
+          "Cancelado": "cancelado"
+        },
+        "color_mky56w54": {
+          "Não": "nao",
+          "Sim": "sim",
+          "Em análise": "em_analise"
+        }
+      },
+      "relacoes": []
+    },
+    "3961072966": {
+      "monday": "Prazos",
+      "sunday_board_id": null,
+      "sunday_name": null,
+      "dominio": "juridico",
+      "confianca": "ALTA",
+      "nota": "TARGET A CRIAR MANUALMENTE (board Prazos).",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "subelementos",
+          "titulo": "Subelementos",
+          "tipo": "subtasks",
+          "estrategia": "derivado_pelo_codigo",
+          "alvo_sunday": "subitens nativos (parent_item_id)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto",
+          "titulo": "Número Processo",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1",
+          "titulo": "Processo Administrativo",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status",
+          "titulo": "Status",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data",
+          "titulo": "Data",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "dup__of_data__1",
+          "titulo": "Fatal",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "person",
+          "titulo": "Pessoa",
+          "tipo": "people",
+          "estrategia": "transformacao",
+          "alvo_sunday": "people (owner) via de-para de usuários",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "arquivos6",
+          "titulo": "Arquivos",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "controle_de_tempo",
+          "titulo": "Controle de tempo",
+          "tipo": "time_tracking",
+          "estrategia": "transformacao",
+          "alvo_sunday": "number (horas acumuladas)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "conectar_quadros",
+          "titulo": "Processos Consumidores",
+          "tipo": "board_relation",
+          "estrategia": "transformacao",
+          "alvo_sunday": "board_relation (values) + mapa de IDs",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status_1": {
+          "Não": "nao",
+          "Sim": "sim"
+        },
+        "status": {
+          "Em progresso": "em_progresso",
+          "Feito": "feito",
+          "Parado": "parado",
+          "Não realizada": "nao_realizada",
+          "Não Iniciado": "nao_iniciado",
+          "Cancelada": "cancelada"
+        }
+      },
+      "relacoes": [
+        {
+          "coluna": "Processos Consumidores",
+          "monday_target_board": "5343921475",
+          "sunday_target_esperado": null,
+          "source_board_id_configurado": null,
+          "config_ok": null,
+          "nota": null
+        }
+      ]
+    },
+    "4443295406": {
+      "monday": "Audiências",
+      "sunday_board_id": "72",
+      "sunday_name": "Legal - Audiências",
+      "dominio": "juridico",
+      "confianca": "MEDIA",
+      "nota": "Candidato natural, mas só tem as 5 colunas de sistema — schema a completar.",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "subelementos__1",
+          "titulo": "Subelementos",
+          "tipo": "subtasks",
+          "estrategia": "derivado_pelo_codigo",
+          "alvo_sunday": "subitens nativos (parent_item_id)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data",
+          "titulo": "Data",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": true
+        },
+        {
+          "monday_column_id": "local",
+          "titulo": "Local",
+          "tipo": "location",
+          "estrategia": "transformacao",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1",
+          "titulo": "Presencial ou Virtual",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "color",
+          "titulo": "Responsável por comparecer",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status3",
+          "titulo": "Status documentos",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "link",
+          "titulo": "Link Audiência (se virtual)",
+          "tipo": "link",
+          "estrategia": "direto",
+          "alvo_sunday": "link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status8",
+          "titulo": "Processo/Procon",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "arquivos",
+          "titulo": "Arquivos",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "pessoas7",
+          "titulo": "Pessoas",
+          "tipo": "people",
+          "estrategia": "transformacao",
+          "alvo_sunday": "people (owner) via de-para de usuários",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status5",
+          "titulo": "Status",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": true
+        },
+        {
+          "monday_column_id": "e_mail7",
+          "titulo": "E-mail",
+          "tipo": "email",
+          "estrategia": "direto",
+          "alvo_sunday": "email",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "conectar_quadros__1",
+          "titulo": "Processos Judiciais",
+          "tipo": "board_relation",
+          "estrategia": "transformacao",
+          "alvo_sunday": "board_relation (values) + mapa de IDs",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "conectar_quadros8__1",
+          "titulo": "Processos Judiciais",
+          "tipo": "board_relation",
+          "estrategia": "transformacao",
+          "alvo_sunday": "board_relation (values) + mapa de IDs",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros6__1",
+          "titulo": "Número do Processo",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto__1",
+          "titulo": "Orientações de Audiência",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status_1": {
+          "Presencial": "presencial",
+          "Virtual": "virtual"
+        },
+        "color": {
+          "Metajur": "metajur",
+          "Interno-B4A": "interno_b4a",
+          "LBZ": "lbz"
+        },
+        "status3": {
+          "Prontos - pendente Protocolo": "prontos_pendente_protocolo",
+          "Já Apresentados": "ja_apresentados",
+          "A Fazer": "a_fazer"
+        },
+        "status8": {
+          "Procon": "procon",
+          "Processo": "processo",
+          "Outro": "outro"
+        },
+        "status5": {
+          "Aguardando": "aguardando",
+          "Feito": "feito",
+          "Cancelada": "cancelada",
+          "Em Andamento": "em_andamento",
+          "Encerrado": "encerrado"
+        }
+      },
+      "relacoes": [
+        {
+          "coluna": "Processos Judiciais",
+          "monday_target_board": "5343921475",
+          "sunday_target_esperado": null,
+          "source_board_id_configurado": null,
+          "config_ok": null,
+          "nota": null
+        },
+        {
+          "coluna": "Processos Judiciais",
+          "monday_target_board": "5343921475",
+          "sunday_target_esperado": null,
+          "source_board_id_configurado": null,
+          "config_ok": null,
+          "nota": null
+        }
+      ]
+    },
+    "5343921475": {
+      "monday": "Processos Judiciais",
+      "sunday_board_id": null,
+      "sunday_name": null,
+      "dominio": "juridico",
+      "confianca": "ALTA",
+      "nota": "TARGET A CRIAR MANUALMENTE (quadro-mestre; alvo de relações).",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "subelementos__1",
+          "titulo": "Subelementos",
+          "tipo": "subtasks",
+          "estrategia": "derivado_pelo_codigo",
+          "alvo_sunday": "subitens nativos (parent_item_id)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status85",
+          "titulo": "Processo relacionado a",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "pessoas",
+          "titulo": "SAC",
+          "tipo": "people",
+          "estrategia": "transformacao",
+          "alvo_sunday": "people (owner) via de-para de usuários",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto2",
+          "titulo": "Tipo de Ação",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data99",
+          "titulo": "Data de Distribuição",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_15__1",
+          "titulo": "Sistema",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status8",
+          "titulo": "Órgão/JEC",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status3",
+          "titulo": "TJ",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_mero",
+          "titulo": "Número",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "arquivos",
+          "titulo": "Cópia do Processo (CONSUMIDOR)",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "file__1",
+          "titulo": "Cópia do Processo (NÃO CONSUMIDOR)",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data9",
+          "titulo": "Prazo Resposta SAC",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "long_text",
+          "titulo": "Observações/Históricos",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "color_mknz5qfs",
+          "titulo": "Houve Cancelamento de Assinatura?",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "arquivos2",
+          "titulo": "Documentos SAC",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data0",
+          "titulo": "Prazo Resposta Legal",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1__1",
+          "titulo": "Audiência",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data9__1",
+          "titulo": "Data ad Audiência",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "local__1",
+          "titulo": "Local da Audiência",
+          "tipo": "location",
+          "estrategia": "transformacao",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "pessoas__1",
+          "titulo": "Pessoa responsável pela Audiência",
+          "tipo": "people",
+          "estrategia": "transformacao",
+          "alvo_sunday": "people (owner) via de-para de usuários",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "e_mail__1",
+          "titulo": "E-mail Metajur/LBZ (se houver)",
+          "tipo": "email",
+          "estrategia": "direto",
+          "alvo_sunday": "email",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros6",
+          "titulo": "valor da causa",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto_longo",
+          "titulo": "Movimentações",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status9",
+          "titulo": "Risco",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros",
+          "titulo": "Provisão B4A",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros6__1",
+          "titulo": "Provisão MMKT",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros__1",
+          "titulo": "Depósito B4A",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros68",
+          "titulo": "Depósito MMKT",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros1__1",
+          "titulo": "Pagamentos B4A",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros5__1",
+          "titulo": "Pagamentos MMKT",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros1",
+          "titulo": "condenação",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "f_rmula",
+          "titulo": "saving",
+          "tipo": "formula",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "formula (expressão do Sunday)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status92",
+          "titulo": "Problema Principal (se aplicável)",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status2",
+          "titulo": "Status",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_10__1",
+          "titulo": "Decisão Judicial",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status85": {
+          "Tributário": "tributario",
+          "Consumidor": "consumidor",
+          "Criminal": "criminal",
+          "Administrativo": "administrativo",
+          "Cível": "civel",
+          "Trabalhista": "trabalhista"
+        },
+        "status_15__1": {
+          "ESAJ": "esaj",
+          "PJE": "pje",
+          "PROJUDI": "projudi",
+          "SISTEMA PRÓPRIO": "sistema_proprio",
+          "EPROC": "eproc"
+        },
+        "status8": {
+          "JEC": "jec",
+          "VC": "vc",
+          "TRF": "trf",
+          "VF": "vf",
+          "JT": "jt"
+        },
+        "status3": {
+          "TJAC": "tjac",
+          "TJSP": "tjsp",
+          "TJAL": "tjal",
+          "TJAM": "tjam",
+          "TJDF": "tjdf",
+          "TJBA": "tjba",
+          "TJES": "tjes",
+          "TJCE": "tjce",
+          "TJGO": "tjgo",
+          "TJMA": "tjma",
+          "TJAP": "tjap",
+          "TJMG": "tjmg",
+          "TJMS": "tjms",
+          "TJMT": "tjmt",
+          "TJPA": "tjpa",
+          "TJPB": "tjpb",
+          "TJPE": "tjpe",
+          "TJPI": "tjpi",
+          "TJPR": "tjpr",
+          "TJRJ": "tjrj",
+          "TJRN": "tjrn",
+          "TJRO": "tjro",
+          "TJRR": "tjrr",
+          "TJRS": "tjrs",
+          "TJSC": "tjsc",
+          "TJSE": "tjse",
+          "TJTO": "tjto",
+          "TRT2": "trt2"
+        },
+        "color_mknz5qfs": {
+          "Não": "nao",
+          "Sim": "sim"
+        },
+        "status_1__1": {
+          "Sim": "sim",
+          "Não": "nao"
+        },
+        "status9": {
+          "Possível": "possivel",
+          "Remoto": "remoto",
+          "Provável": "provavel"
+        },
+        "status92": {
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas na Entrega": "problemas_na_entrega",
+          "Problemas com Cancelamento": "problemas_com_cancelamento",
+          "Problemas no Pagamento": "problemas_no_pagamento",
+          "Problemas na Experiência": "problemas_na_experiencia"
+        },
+        "status2": {
+          "Encerrado": "encerrado",
+          "Em Andamento": "em_andamento",
+          "Suspenso": "suspenso"
+        },
+        "status_10__1": {
+          "Acordo": "acordo",
+          "Improcedente Favoravel a B4A/MMKT": "improcedente_favoravel_a_b4a_mmkt",
+          "Condenação B4A/MMKT": "condenacao_b4a_mmkt",
+          "Procedente Favoravel B4A/MMKT": "procedente_favoravel_b4a_mmkt",
+          "Improcedente Desfavoravel B4A/MMKT": "improcedente_desfavoravel_b4a_mmkt"
+        }
+      },
+      "relacoes": []
+    },
+    "4443297481": {
+      "monday": "Processos Trabalhista",
+      "sunday_board_id": null,
+      "sunday_name": null,
+      "dominio": "juridico",
+      "confianca": "ALTA",
+      "nota": "TARGET A CRIAR MANUALMENTE.",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status1",
+          "titulo": "Status",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status0",
+          "titulo": "Tipo de Processo",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto8",
+          "titulo": "Parte Ré",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto",
+          "titulo": "Nº.: de Processo",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "local",
+          "titulo": "Local de Origem",
+          "tipo": "location",
+          "estrategia": "transformacao",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto6",
+          "titulo": "Situação Atual",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros",
+          "titulo": "Valor da Causa",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data",
+          "titulo": "Data de Distribuição",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status",
+          "titulo": "Risco",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros1",
+          "titulo": "Depósito/Pagamento",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros9",
+          "titulo": "Provisão",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto88",
+          "titulo": "Vara de Origem",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "f_rmula",
+          "titulo": "Saved",
+          "tipo": "formula",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "formula (expressão do Sunday)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1__1",
+          "titulo": "Forma de Contratação",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status1": {
+          "Em andamento": "em_andamento",
+          "Encerrado": "encerrado"
+        },
+        "status0": {
+          "Judicial - Tributária": "judicial_tributaria",
+          "Judicial - Trabalhista": "judicial_trabalhista",
+          "Judicial - Cível": "judicial_civel",
+          "Administrativo": "administrativo",
+          "Criminal": "criminal",
+          "Judicial - Consumidor": "judicial_consumidor",
+          "Administrativo - Regulatório": "administrativo_regulatorio"
+        },
+        "status": {
+          "Possível": "possivel",
+          "Remoto": "remoto",
+          "Provável": "provavel"
+        },
+        "status_1__1": {
+          "Terceirizado": "terceirizado",
+          "CLT": "clt",
+          "PJ": "pj",
+          "Estagiário": "estagiario",
+          "N/A": "n_a"
+        }
+      },
+      "relacoes": []
+    },
+    "5563754463": {
+      "monday": "KPI - Processos Consumidores",
+      "sunday_board_id": null,
+      "sunday_name": null,
+      "dominio": "juridico",
+      "confianca": "ALTA",
+      "nota": "TARGET A CRIAR MANUALMENTE (KPI).",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status",
+          "titulo": "Estado",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1",
+          "titulo": "Ré",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data",
+          "titulo": "Data Ajuizamento",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto_longo",
+          "titulo": "Número do Processo",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_14",
+          "titulo": "Causa 1",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "dup__of_causa_19",
+          "titulo": "Causa 2",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "dup__of_causa_2",
+          "titulo": "Causa 3",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_160",
+          "titulo": "Situação",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data2",
+          "titulo": "Data da Decisão",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_11",
+          "titulo": "Resultado",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros",
+          "titulo": "Valor da Cusa",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros15",
+          "titulo": "Provisão",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros_1",
+          "titulo": "Valor da Condenação",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros0",
+          "titulo": "Valor Pago",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "n_meros1",
+          "titulo": "Saving",
+          "tipo": "numbers",
+          "estrategia": "direto",
+          "alvo_sunday": "number",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status": {
+          "AL": "al",
+          "ES": "es",
+          "RJ": "rj",
+          "AC": "ac",
+          "AP": "ap",
+          "SP": "sp",
+          "AM": "am",
+          "MG": "mg",
+          "PI": "pi",
+          "BA": "ba",
+          "DF": "df",
+          "MT": "mt",
+          "RS": "rs",
+          "MS": "ms",
+          "SC": "sc",
+          "GO": "go",
+          "TO": "to",
+          "SE": "se",
+          "CE": "ce",
+          "MA": "ma",
+          "PA": "pa",
+          "PR": "pr",
+          "PB": "pb",
+          "PE": "pe",
+          "RN": "rn",
+          "RO": "ro",
+          "RR": "rr"
+        },
+        "status_1": {
+          "B4A & MMKT": "b4a_mmkt",
+          "B4A": "b4a",
+          "MMKT": "mmkt"
+        },
+        "status_14": {
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas na Experiência": "problemas_na_experiencia",
+          "Problemas no pagamento": "problemas_no_pagamento",
+          "Problemas com Entrega": "problemas_com_entrega",
+          "Problemas com Cancelamento": "problemas_com_cancelamento"
+        },
+        "dup__of_causa_19": {
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas com o Pagamento": "problemas_com_o_pagamento",
+          "Problemas com a Experiência": "problemas_com_a_experiencia",
+          "Problemas com o Cancelamento": "problemas_com_o_cancelamento",
+          "Problemas na Entrega": "problemas_na_entrega"
+        },
+        "dup__of_causa_2": {
+          "Renovação Automática": "renovacao_automatica",
+          "Problemas com o Pagamento": "problemas_com_o_pagamento",
+          "Problemas na Experiência": "problemas_na_experiencia",
+          "Problemas no Cancelamento": "problemas_no_cancelamento",
+          "Problemas na Entrega": "problemas_na_entrega"
+        },
+        "status_160": {
+          "Arquivado": "arquivado",
+          "Ativo": "ativo"
+        },
+        "status_11": {
+          "Em andamento": "em_andamento",
+          "Improcedência": "improcedencia",
+          "Condenação": "condenacao",
+          "Em Recurso (Nosso)": "em_recurso_nosso",
+          "Acordo": "acordo"
+        }
+      },
+      "relacoes": []
+    },
+    "5301515799": {
+      "monday": "Controle Assinaturas Contratos",
+      "sunday_board_id": "77",
+      "sunday_name": "Legal - Controle de Assinaturas - Jan & Luciano",
+      "dominio": "contratos",
+      "confianca": "MEDIA",
+      "nota": "Candidato natural (mesmo domínio/filas), mas schema a completar.",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "subelementos",
+          "titulo": "Subelementos",
+          "tipo": "subtasks",
+          "estrategia": "derivado_pelo_codigo",
+          "alvo_sunday": "subitens nativos (parent_item_id)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status",
+          "titulo": "Status",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": true
+        },
+        {
+          "monday_column_id": "priority",
+          "titulo": "Priority",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data",
+          "titulo": "Data de Inclusão (na Plataforma)",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data2",
+          "titulo": "Até quando assinar",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data0",
+          "titulo": "Data de Assinatura",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "link",
+          "titulo": "Link Contrato Assinado (SOMENTE se envolver o Jan)",
+          "tipo": "link",
+          "estrategia": "direto",
+          "alvo_sunday": "link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "controle_de_tempo",
+          "titulo": "Controle de tempo",
+          "tipo": "time_tracking",
+          "estrategia": "transformacao",
+          "alvo_sunday": "number (horas acumuladas)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto",
+          "titulo": "Nome da Plataforma",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "long_text_mkvnwp6d",
+          "titulo": "Link para assinatura",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto6",
+          "titulo": "Assunto",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1",
+          "titulo": "Quem Assina",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "pessoas",
+          "titulo": "Pessoas",
+          "tipo": "people",
+          "estrategia": "transformacao",
+          "alvo_sunday": "people (owner) via de-para de usuários",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status_1__1",
+          "titulo": "Tipo",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "board_relation_mkqxj7gv",
+          "titulo": "link to Notificações Carol - Assinaturas Jan",
+          "tipo": "board_relation",
+          "estrategia": "transformacao",
+          "alvo_sunday": "board_relation (values) + mapa de IDs",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "board_relation_mm5ap90f",
+          "titulo": "Contrato relacionado",
+          "tipo": "board_relation",
+          "estrategia": "transformacao",
+          "alvo_sunday": "board_relation (values) + mapa de IDs",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status": {
+          "Aguardando Assinatura": "aguardando_assinatura",
+          "Assinado": "assinado",
+          "Recusado": "recusado",
+          "Aguardando outros": "aguardando_outros",
+          "Bloqueado - aguardando providencia": "bloqueado_aguardando_providencia"
+        },
+        "priority": {
+          "Urgente  ⚠️️": "urgente",
+          "Normal": "normal"
+        },
+        "status_1": {
+          "Luciano": "luciano",
+          "Jan": "jan"
+        },
+        "status_1__1": {
+          "Contratos MMKT": "contratos_mmkt",
+          "Contratos B4A": "contratos_b4a",
+          "Contratos Itaro": "contratos_itaro",
+          "Contratos RV BVI": "contratos_rv_bvi",
+          "Contratos B2B": "contratos_b2b",
+          "NDA": "nda",
+          "Contratos Societários": "contratos_societarios",
+          "Contratos Influencers (Queens)": "contratos_influencers_queens",
+          "Contratos Jan": "contratos_jan",
+          "Contratos Aurora": "contratos_aurora",
+          "Pedidos Marcas Próprias": "pedidos_marcas_proprias",
+          "RH": "rh"
+        }
+      },
+      "relacoes": [
+        {
+          "coluna": "link to Notificações Carol - Assinaturas Jan",
+          "monday_target_board": null,
+          "sunday_target_esperado": null,
+          "source_board_id_configurado": null,
+          "config_ok": null,
+          "nota": "Coluna board_relation fora das relações usadas pelo código (avaliar)."
+        },
+        {
+          "coluna": "Contrato relacionado",
+          "monday_target_board": "5385471914",
+          "sunday_target_esperado": null,
+          "source_board_id_configurado": null,
+          "config_ok": null,
+          "nota": null
+        }
+      ]
+    },
+    "5385471914": {
+      "monday": "Contratos",
+      "sunday_board_id": null,
+      "sunday_name": null,
+      "dominio": "contratos",
+      "confianca": "ALTA",
+      "nota": "TARGET A CRIAR MANUALMENTE (Contratos; alvo de relações e subitens).",
+      "colunas": [
+        {
+          "monday_column_id": "name",
+          "titulo": "Name",
+          "tipo": "name",
+          "estrategia": "direto",
+          "alvo_sunday": "name (campo de sistema)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "subelementos",
+          "titulo": "Subelementos",
+          "tipo": "subtasks",
+          "estrategia": "derivado_pelo_codigo",
+          "alvo_sunday": "subitens nativos (parent_item_id)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status1",
+          "titulo": "Empresa",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto8",
+          "titulo": "CNPJ outra Parte",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto",
+          "titulo": "Tipo de Contrato",
+          "tipo": "text",
+          "estrategia": "direto",
+          "alvo_sunday": "text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data",
+          "titulo": "Data do Contrato",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "data0",
+          "titulo": "Término",
+          "tipo": "date",
+          "estrategia": "direto",
+          "alvo_sunday": "date",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "arquivos",
+          "titulo": "Contrato",
+          "tipo": "file",
+          "estrategia": "transformacao",
+          "alvo_sunday": "attachments/link",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "status",
+          "titulo": "Vigência",
+          "tipo": "status",
+          "estrategia": "configurar_manualmente",
+          "alvo_sunday": "status (coluna custom com options 1:1)",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "texto_longo",
+          "titulo": "Observações",
+          "tipo": "long_text",
+          "estrategia": "direto",
+          "alvo_sunday": "long_text",
+          "existe_no_destino": false
+        },
+        {
+          "monday_column_id": "pessoas3",
+          "titulo": "Responsável",
+          "tipo": "people",
+          "estrategia": "transformacao",
+          "alvo_sunday": "people (owner) via de-para de usuários",
+          "existe_no_destino": false
+        }
+      ],
+      "status_mappings": {
+        "status1": {
+          "B4A & MMKT": "b4a_mmkt",
+          "Itaro": "itaro",
+          "B4A": "b4a",
+          "MMKT": "mmkt",
+          "Aurora": "aurora",
+          "RV BVI": "rv_bvi",
+          "Jan": "jan"
+        },
+        "status": {
+          "Vigente": "vigente",
+          "Não Vigente": "nao_vigente"
+        }
+      },
+      "relacoes": []
+    }
+  }
+}

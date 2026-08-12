@@ -1,0 +1,182 @@
+{
+  "comment": "De-para técnico Monday->Sunday (identidades hasheadas sha256(email)[:16]); sunday_user_id preenchido na Fase 3 via GET /users/directory.",
+  "users": [
+    {
+      "monday_user_id": "25725057",
+      "identity_hash": "d6a88952ac96e826",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "25725059",
+      "identity_hash": "9a593a067cdea8cd",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "25725061",
+      "identity_hash": "8e57acda5d5fef16",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "27292631",
+      "identity_hash": "f5fdd8c15efa95d3",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "27478192",
+      "identity_hash": "f6cddac816f821e0",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "28813026",
+      "identity_hash": "d82a27d62b15cc12",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "29810477",
+      "identity_hash": "58ce4b1acf69b934",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "31575886",
+      "identity_hash": "83973a1f673421c4",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "35107307",
+      "identity_hash": "250cad79add861e3",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "36779250",
+      "identity_hash": "0a718ffb6290cba1",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "38021661",
+      "identity_hash": "8c9510bcff9feee9",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "38523193",
+      "identity_hash": "4ca4b7daa9d8ce2a",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "38523244",
+      "identity_hash": "3325d3dd603c8a2f",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "38531326",
+      "identity_hash": "39299e56d03e9b9d",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "38531474",
+      "identity_hash": "a8833ff66e902af2",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "38531570",
+      "identity_hash": "097814910f7b5507",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "41859639",
+      "identity_hash": "1d3c5a7bb94276b8",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "41896683",
+      "identity_hash": "0f830ba178554c08",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "45949544",
+      "identity_hash": "a4bc5c011d69616c",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "57201523",
+      "identity_hash": "5fcaaca6b61a1edc",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "58508548",
+      "identity_hash": "86f657a3f69acf25",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "63090071",
+      "identity_hash": "bf750ae109945623",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "63509999",
+      "identity_hash": "2896fabdad8d9a75",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "67617712",
+      "identity_hash": "5b98544eacb7d918",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "70060264",
+      "identity_hash": "f950d11e767cfcda",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "71554569",
+      "identity_hash": "ca9a73ff46addafd",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "77022516",
+      "identity_hash": "a1e57a585bb34e40",
+      "enabled": true
+    },
+    {
+      "monday_user_id": "96341788",
+      "identity_hash": "99cf47053305970e",
+      "enabled": true
+    }
+  ],
+  "monday_ids_sem_cadastro": [
+    "25983565",
+    "27035576",
+    "27035835",
+    "28168431",
+    "29774751",
+    "31846678",
+    "37411527",
+    "37596125",
+    "37599316",
+    "37858413",
+    "38521600",
+    "38521616",
+    "38523196",
+    "38523252",
+    "38524055",
+    "38531379",
+    "38531815",
+    "41851972",
+    "47450678",
+    "57813765",
+    "60004831",
+    "60701987",
+    "60702015",
+    "60702029",
+    "60733931",
+    "60733950",
+    "60946882",
+    "65581935",
+    "68413338",
+    "72437881"
+  ],
+  "active_sem_match_sunday": [
+    "25725059",
+    "28813026",
+    "35107307"
+  ]
+}
