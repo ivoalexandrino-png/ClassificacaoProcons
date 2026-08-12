@@ -1,20 +1,8 @@
 """Executor da Fase 3 (Onda 1 / Onda 2) — PLAN por padrão, APPLY fail-closed.
 
 Consome EXCLUSIVAMENTE o plano da engine canônica (`migration.dry_run` +
-`migration.disposition_rules`); não há segunda engine. Nesta fase o modo APPLY
-existe, é testado com mocks, mas NUNCA é executado contra o Sunday real.
-
-Garantias:
-- PLAN não faz nenhuma escrita (nem no ledger persistente).
-- APPLY exige: `mode="apply"` + `confirm_writes=True` + env
-  `SUNDAY_MIGRATION_ALLOW_APPLY=1` + gate fail-closed 100% OK + snapshot
-  revalidado — qualquer divergência aborta ANTES da primeira escrita.
-- Dispositions: só CREATE cria item; ADOPT/ABSORB/EXCLUDE_TEST nunca criam e
-  jamais degradam para CREATE por fallback.
-- Idempotência dupla: ledger (`monday_board_id:monday_item_id`) + coluna
-  Monday ID já existente no Sunday.
-- Secrets: apenas `SUNDAY_API_URL_TEST`/`SUNDAY_API_TOKEN_TEST` (sem fallback
-  para os originais); valores nunca impressos/persistidos.
+`migration.disposition_rules`); não há segunda engine. APPLY exige confirmação
+explícita, env, gate 100% OK e revalidação de snapshot antes da 1ª escrita.
 """
 
 from __future__ import annotations
@@ -471,6 +459,19 @@ class ApplyReport:
     succeeded: list[str] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
     not_attempted: list[str] = field(default_factory=list)
+    write_stats: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ApplyMigrationContext:
+    """Contexto opcional para APPLY real (campos mapeados + verificação por item)."""
+
+    inventory: MondayBoardInventory
+    board_plan: object
+    sunday_snapshot: object
+    apply_sources: dict[str, object]
+    monday_id_column_id: str
+    target_group_id: str
 
 
 def apply_plan(
@@ -481,13 +482,10 @@ def apply_plan(
     snapshot_revalidator: Callable[[], str] | None = None,
     ledger_path: str | Path = DEFAULT_LEDGER_PATH,
     fail_fast: bool = True,
+    migration_context: ApplyMigrationContext | None = None,
     now: Callable[[], str] = lambda: datetime.now(UTC).isoformat(),
 ) -> ApplyReport:
-    """Executa o plano (FUTURO). Fail-closed: aborta antes da 1ª escrita.
-
-    Ordem por item: raiz → campos de sistema → values → status → comments →
-    anexos → subitens → ledger. Relações ficam para a segunda passada global.
-    """
+    """Executa o plano. Fail-closed: aborta antes da 1ª escrita se gate/snapshot falhar."""
     if plan.mode != "apply":
         raise ExecutorAbort("Plano não foi gerado em modo apply (default é plan).")
     if not confirm_writes:
@@ -507,6 +505,16 @@ def apply_plan(
         )
 
     report = ApplyReport()
+    write_stats = None
+    if migration_context is not None:
+        from classificacao_procons.migration.apply_writer import (
+            ApplyWriteStats,
+            apply_create_item,
+            build_sunday_monday_id_index,
+        )
+
+        write_stats = ApplyWriteStats()
+
     pending = list(plan.operations)
     for index, operation in enumerate(pending):
         if operation.action in ("already_migrated", "exclude_test", "absorb"):
@@ -524,19 +532,57 @@ def apply_plan(
                 break
             continue
         try:
-            if operation.action == "adopt":
+            if migration_context is not None and operation.action == "create":
+                live_index = build_sunday_monday_id_index(
+                    client,
+                    board_id=plan.sunday_board_id,
+                    monday_id_column_id=migration_context.monday_id_column_id,
+                )
+                ledger_key = f"{plan.monday_board_id}:{operation.monday_item_id}"
+                if (
+                    load_persistent_ledger(ledger_path)
+                    .get(ledger_key, {})
+                    .get("migration_status")
+                    == "migrated"
+                    or operation.monday_item_id in live_index
+                ):
+                    report.succeeded.append(operation.monday_item_id)
+                    continue
+                apply_source = migration_context.apply_sources.get(operation.monday_item_id)
+                if apply_source is None:
+                    raise RuntimeError(
+                        f"Source Monday ausente para item {operation.monday_item_id}.",
+                    )
+                sunday_item_id = apply_create_item(
+                    client=client,
+                    plan=plan,
+                    operation=operation,
+                    inventory=migration_context.inventory,
+                    board_plan=migration_context.board_plan,
+                    sunday_snapshot=migration_context.sunday_snapshot,
+                    apply_source=apply_source,
+                    monday_id_column_id=migration_context.monday_id_column_id,
+                    target_group_id=migration_context.target_group_id,
+                    stats=write_stats,
+                )
+            elif operation.action == "adopt":
                 sunday_item_id = operation.adopt_sunday_item_id
                 if not sunday_item_id:
                     raise ExecutorAbort(
                         f"ADOPT sem sunday_item_id ({operation.monday_item_id}) — "
                         "nunca degradar para CREATE.",
                     )
-            else:  # create
-                created = client.create_item(
-                    plan.sunday_board_id,
-                    f"[migracao] {operation.monday_item_id}",
-                )
-                sunday_item_id = created.id
+            else:  # create (modo teste/mock) ou adopt já resolvido acima
+                if operation.action == "create" and migration_context is None:
+                    created = client.create_item(
+                        plan.sunday_board_id,
+                        f"[migracao] {operation.monday_item_id}",
+                    )
+                    sunday_item_id = created.id
+                elif operation.action == "adopt":
+                    pass  # sunday_item_id já definido
+                else:
+                    raise RuntimeError(f"Ação não suportada: {operation.action}")
             _record_ledger(
                 plan, operation, sunday_item_id=sunday_item_id,
                 ledger_path=ledger_path, now=now,
@@ -551,6 +597,17 @@ def apply_plan(
                     op.monday_item_id for op in pending[index + 1:]
                 )
                 break
+    if write_stats is not None:
+        report.write_stats = {
+            "items_created": write_stats.items_created,
+            "system_fields": write_stats.system_fields,
+            "custom_values": write_stats.custom_values,
+            "status": write_stats.status_writes,
+            "comments": write_stats.comments,
+            "attachments": write_stats.attachments,
+            "relations": write_stats.relations,
+            "subitems": write_stats.subitems,
+        }
     return report
 
 

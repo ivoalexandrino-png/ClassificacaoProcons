@@ -347,6 +347,30 @@ def test_relation_second_pass_resolved_by_ledger():
     assert plan.relations_unresolved == []
 
 
+def test_apply_blocks_when_gate_incomplete(monkeypatch):
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    inventory = MondayBoardInventory(
+        board_id=CONTROLE,
+        name="Controle",
+        groups={"g": "Assinados"},
+        columns=(),
+        items=(
+            MondayItemDigest(
+                item_id="10", group_id="g", created_at=RECENT, updated_at=RECENT,
+                relation_targets={"board_relation_mm5ap90f": ("77000",)},
+            ),
+        ),
+    )
+    plan = _plan_for(inventory, mode="apply",
+                     schema_checks=[GateCheck("schema_live_verificado", True)])
+    assert plan.gate_ok is False
+    with pytest.raises(ExecutorAbort, match="Gate fail-closed"):
+        apply_plan(
+            plan, client=SpyClient(), confirm_writes=True,
+            snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        )
+
+
 def test_unresolved_relation_blocks_apply(monkeypatch):
     monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
     inventory = MondayBoardInventory(
