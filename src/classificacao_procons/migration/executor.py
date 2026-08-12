@@ -11,7 +11,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -77,6 +77,23 @@ def snapshot_fingerprint(inventory: MondayBoardInventory) -> str:
     """Hash estável do snapshot (ids + updated_at) para o guard de concorrência."""
     basis = sorted((item.item_id, item.updated_at or "") for item in inventory.items)
     return hashlib.sha256(json.dumps(basis).encode()).hexdigest()[:24]
+
+
+def scope_inventory_to_item(
+    inventory: MondayBoardInventory,
+    monday_item_id: str,
+) -> MondayBoardInventory:
+    """Retorna escopo de um único item sem escolher silenciosamente o primeiro."""
+    item_id = str(monday_item_id).strip()
+    if not item_id:
+        raise ExecutorAbort("item_id é obrigatório para escopo explícito.")
+    matches = tuple(item for item in inventory.items if item.item_id == item_id)
+    if len(matches) != 1:
+        raise ExecutorAbort(
+            f"Item {item_id} no board {inventory.board_id}: "
+            f"esperado 1 resultado, obtido {len(matches)}.",
+        )
+    return replace(inventory, items=matches)
 
 
 # ------------------------------------------------------------------- ledger IO

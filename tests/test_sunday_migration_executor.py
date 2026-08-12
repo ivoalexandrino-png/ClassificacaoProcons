@@ -21,6 +21,7 @@ from classificacao_procons.migration.executor import (
     import_legacy_ledger_if_needed,
     load_persistent_ledger,
     persist_ledger_record,
+    scope_inventory_to_item,
     snapshot_fingerprint,
     sunday_config_from_test_env,
 )
@@ -108,6 +109,33 @@ def test_plan_never_writes_anywhere(tmp_path):
     assert plan.mode == "plan"
     assert not ledger_path.exists()  # PLAN não cria/altera ledger persistente
     assert plan.counts() == {"create": 3}
+
+
+def test_item_scope_returns_exactly_requested_item():
+    scoped = scope_inventory_to_item(_kpi_inventory(), "2")
+    plan = _plan_for(scoped)
+
+    assert [item.item_id for item in scoped.items] == ["2"]
+    assert scoped.board_id == KPI_BOARD
+    assert [operation.monday_item_id for operation in plan.operations] == ["2"]
+
+
+@pytest.mark.parametrize("item_id", ["", "404"])
+def test_item_scope_aborts_when_exactly_one_item_is_not_found(item_id):
+    with pytest.raises(ExecutorAbort, match="esperado 1 resultado|obrigatório"):
+        scope_inventory_to_item(_kpi_inventory(), item_id)
+
+
+def test_item_scope_aborts_when_source_contains_duplicate_id():
+    duplicate = _kpi_inventory(
+        (
+            MondayItemDigest(item_id="2", group_id="g2023", created_at=RECENT, updated_at=RECENT),
+            MondayItemDigest(item_id="2", group_id="g2023", created_at=RECENT, updated_at=RECENT),
+        ),
+    )
+
+    with pytest.raises(ExecutorAbort, match="esperado 1 resultado, obtido 2"):
+        scope_inventory_to_item(duplicate, "2")
 
 
 def test_plan_is_default_and_apply_requires_explicit_mode():

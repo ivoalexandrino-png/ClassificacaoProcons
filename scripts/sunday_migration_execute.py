@@ -32,6 +32,7 @@ from classificacao_procons.migration.executor import (
     build_execution_plan,
     build_sunday_schema_checks,
     load_persistent_ledger,
+    scope_inventory_to_item,
     snapshot_fingerprint,
     sunday_config_from_test_env,
 )
@@ -50,9 +51,6 @@ from classificacao_procons.monday.client import get_api_token_from_env
 DEFAULT_SUNDAY_SNAPSHOT = "docs/sunday-ws22-schema-snapshot-2026-08-11.json"
 EXPECTED_KPI_FINGERPRINT = "a4de634dbe6b545ade7a0442"
 KPI_MONDAY_BOARD = "5563754463"
-KPI_SUNDAY_BOARD = "86"
-KPI_TARGET_GROUP_ID = "255"
-KPI_MONDAY_ID_COLUMN_ID = "554"
 KPI_EXPECTED_ROWS = 31
 
 
@@ -63,8 +61,34 @@ def _find_monday_id_column(snapshot) -> str:
     raise ExecutorAbort("Coluna Monday ID ausente no schema live do Sunday.")
 
 
-def _validate_plan_payload(payload: dict) -> None:
+def _find_target_group_id(snapshot, group_name: str | None) -> str:
+    if not group_name:
+        raise ExecutorAbort("CREATE sem grupo Sunday alvo explícito.")
+    matches = [
+        group_id
+        for group_id, name in snapshot.groups.items()
+        if name.strip().casefold() == group_name.strip().casefold()
+    ]
+    if len(matches) != 1:
+        raise ExecutorAbort(
+            f"Grupo Sunday {group_name!r}: esperado 1 resultado, obtido {len(matches)}.",
+        )
+    return matches[0]
+
+
+def _validate_plan_payload(payload: dict, *, item_id: str | None = None) -> None:
     counts = payload.get("counts", {})
+    if item_id:
+        operations = payload.get("operations", [])
+        if (
+            len(operations) != 1
+            or operations[0].get("monday_item_id") != item_id
+            or counts.get("create") != 1
+        ):
+            raise ExecutorAbort("APPLY por item exige exatamente um CREATE no escopo informado.")
+        if not payload.get("gate_ok"):
+            raise ExecutorAbort("Gate fail-closed reprovado no PLAN.")
+        return
     if counts.get("create") != KPI_EXPECTED_ROWS:
         raise ExecutorAbort(f"CREATE esperado {KPI_EXPECTED_ROWS}, obtido {counts}.")
     for action in ("adopt", "absorb", "exclude_test", "blocked"):
@@ -85,6 +109,10 @@ def main() -> int:
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
     parser.add_argument("--mode", default="plan", choices=("plan", "apply"))
     parser.add_argument("--max-items", required=True, type=int)
+    parser.add_argument(
+        "--item-id",
+        help="restringe PLAN/APPLY a exatamente um monday_item_id do board e wave informados",
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -129,6 +157,8 @@ def main() -> int:
             if not token:
                 raise ExecutorAbort("MONDAY_API_TOKEN ausente e sem --monday-snapshot.")
             inventory = fetch_board_inventory(token, args.board)
+        if args.item_id:
+            inventory = scope_inventory_to_item(inventory, args.item_id)
         inventory_holder["inventory"] = inventory
         return snapshot_fingerprint(inventory)
 
@@ -142,9 +172,19 @@ def main() -> int:
             return 2
         print(f"Lendo snapshot atual do Monday board {args.board} (somente leitura)…")
         inventory = fetch_board_inventory(token, args.board)
+    if args.item_id:
+        try:
+            inventory = scope_inventory_to_item(inventory, args.item_id)
+        except ExecutorAbort as exc:
+            print(f"ABORT: {exc}")
+            return 2
     inventory_holder["inventory"] = inventory
 
-    if len(inventory.items) != KPI_EXPECTED_ROWS and args.board == KPI_MONDAY_BOARD:
+    if (
+        not args.item_id
+        and len(inventory.items) != KPI_EXPECTED_ROWS
+        and args.board == KPI_MONDAY_BOARD
+    ):
         print(
             f"ABORT: Monday source rows={len(inventory.items)} "
             f"(esperado {KPI_EXPECTED_ROWS}).",
@@ -152,7 +192,11 @@ def main() -> int:
         return 3
 
     fingerprint = snapshot_fingerprint(inventory)
-    if args.board == KPI_MONDAY_BOARD and fingerprint != EXPECTED_KPI_FINGERPRINT:
+    if (
+        not args.item_id
+        and args.board == KPI_MONDAY_BOARD
+        and fingerprint != EXPECTED_KPI_FINGERPRINT
+    ):
         print(
             f"ABORT: fingerprint Monday divergente ({fingerprint} != "
             f"{EXPECTED_KPI_FINGERPRINT}).",
@@ -179,17 +223,18 @@ def main() -> int:
         sunday_snapshots = load_snapshot_file(args.sunday_snapshot)
 
     if args.mode == "apply" and client is not None:
-        sunday_items = client.list_items(KPI_SUNDAY_BOARD).items
-        if len(sunday_items) != 0:
-            print(f"ABORT: Sunday board {KPI_SUNDAY_BOARD} items={len(sunday_items)} (esperado 0).")
+        sunday_board = BOARD_ALLOWLIST[args.board]
+        sunday_items = client.list_items(sunday_board).items
+        if not args.item_id and args.board == KPI_MONDAY_BOARD and len(sunday_items) != 0:
+            print(f"ABORT: Sunday board {sunday_board} items={len(sunday_items)} (esperado 0).")
             return 3
-        monday_id_column_id = _find_monday_id_column(sunday_snapshots[KPI_SUNDAY_BOARD])
+        monday_id_column_id = _find_monday_id_column(sunday_snapshots[sunday_board])
         live_index = build_sunday_monday_id_index(
             client,
-            board_id=KPI_SUNDAY_BOARD,
+            board_id=sunday_board,
             monday_id_column_id=monday_id_column_id,
         )
-        if live_index:
+        if not args.item_id and args.board == KPI_MONDAY_BOARD and live_index:
             print(f"ABORT: Monday IDs já existentes no Sunday: {len(live_index)}.")
             return 3
         ledger = load_persistent_ledger(args.ledger)
@@ -230,6 +275,14 @@ def main() -> int:
         sunday_monday_id_index=monday_id_index or None,
         sunday_schema_checks=schema_checks,
     )
+    if args.item_id and (
+        len(plan.operations) != 1 or plan.operations[0].monday_item_id != args.item_id
+    ):
+        print(
+            f"ABORT: item {args.item_id} não pertence ao board {args.board} "
+            f"na wave WAVE_{args.wave}.",
+        )
+        return 3
 
     Path(args.out).write_text(
         json.dumps(plan.to_payload(), ensure_ascii=False, indent=2), encoding="utf-8",
@@ -248,7 +301,7 @@ def main() -> int:
         return 0
 
     try:
-        _validate_plan_payload(payload)
+        _validate_plan_payload(payload, item_id=args.item_id)
     except ExecutorAbort as exc:
         print(f"\nABORT: {exc}")
         return 3
@@ -257,6 +310,10 @@ def main() -> int:
         print("ABORT: client Sunday ausente.")
         return 3
 
+    operation = plan.operations[0] if len(plan.operations) == 1 else None
+    if args.item_id and operation is None:
+        print("ABORT: escopo de item não produziu operação única.")
+        return 3
     sunday_snapshot = sunday_snapshots[BOARD_ALLOWLIST[args.board]]
     board_plan = build_board_plan(
         inventory,
@@ -267,7 +324,11 @@ def main() -> int:
     if not monday_token:
         print("ABORT: MONDAY_API_TOKEN ausente para APPLY.")
         return 2
-    apply_sources = fetch_monday_apply_sources(monday_token, args.board)
+    apply_sources = fetch_monday_apply_sources(
+        monday_token,
+        args.board,
+        item_ids={args.item_id} if args.item_id else None,
+    )
     if len(apply_sources) != len(inventory.items):
         print(
             f"ABORT: apply_sources={len(apply_sources)} != "
@@ -281,7 +342,10 @@ def main() -> int:
         sunday_snapshot=sunday_snapshot,
         apply_sources=apply_sources,
         monday_id_column_id=_find_monday_id_column(sunday_snapshot),
-        target_group_id=KPI_TARGET_GROUP_ID,
+        target_group_id=_find_target_group_id(
+            sunday_snapshot,
+            operation.target_group if operation else "Itens",
+        ),
     )
 
     print("\nIniciando APPLY (fail-fast)…")
@@ -306,7 +370,7 @@ def main() -> int:
         board_plan=board_plan,
         apply_sources=apply_sources,
         monday_id_column_id=migration_context.monday_id_column_id,
-        target_group_id=KPI_TARGET_GROUP_ID,
+        target_group_id=migration_context.target_group_id,
     )
 
     post_plan = build_execution_plan(
@@ -330,7 +394,10 @@ def main() -> int:
         "monday_board_id": args.board,
         "sunday_board_id": plan.sunday_board_id,
         "succeeded": apply_result.succeeded,
-        "failed": [{"monday_item_id": item_id, "error": err} for item_id, err in apply_result.failed],
+        "failed": [
+            {"monday_item_id": item_id, "error": err}
+            for item_id, err in apply_result.failed
+        ],
         "not_attempted": apply_result.not_attempted,
         "writes": apply_result.write_stats,
         "field_checks_total": field_report.total,
