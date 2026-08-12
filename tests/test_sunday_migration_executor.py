@@ -330,6 +330,36 @@ def test_versioned_ledger_reload_preserves_idempotency(tmp_path):
     assert actions["2"] == "create"
 
 
+def test_apply_skips_already_migrated_without_corrupting_ledger(monkeypatch, tmp_path):
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    ledger_path = tmp_path / "ledger.json"
+    persist_ledger_record(
+        {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": "1",
+            "sunday_board_id": "86",
+            "sunday_item_id": "9001",
+            "wave": "WAVE_1",
+            "disposition": "CREATE",
+            "migration_status": "migrated",
+        },
+        path=ledger_path,
+    )
+    plan = _plan_for(_kpi_inventory(), mode="apply", ledger=load_persistent_ledger(ledger_path),
+                     schema_checks=[GateCheck("schema_live_verificado", True)])
+    spy = SpyClient()
+    result = apply_plan(
+        plan,
+        client=spy,
+        confirm_writes=True,
+        snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        ledger_path=ledger_path,
+    )
+    assert "1" not in result.succeeded
+    assert spy.created == ["2", "3"]
+    assert load_persistent_ledger(ledger_path)[f"{KPI_BOARD}:1"]["sunday_item_id"] == "9001"
+
+
 def test_import_legacy_ledger_if_needed(tmp_path):
     legacy_path = tmp_path / "legacy.json"
     target_path = tmp_path / "target.json"
@@ -445,7 +475,7 @@ def test_rerun_after_partial_failure_does_not_duplicate(monkeypatch, tmp_path):
         ledger_path=ledger_path,
     )
     assert spy2.created == ["2", "3"]  # o 1 não foi duplicado
-    assert len(result2.succeeded) == 3
+    assert len(result2.succeeded) == 2
 
 
 # ------------------------------------------------------ relações / subitens

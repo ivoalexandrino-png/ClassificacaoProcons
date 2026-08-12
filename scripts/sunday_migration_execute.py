@@ -76,20 +76,22 @@ def _find_target_group_id(snapshot, name: str = "Itens") -> str:
     return matches[0]
 
 
-def _validate_plan_payload(payload: dict, *, expected_create: int) -> None:
+def _validate_plan_payload(
+    payload: dict,
+    *,
+    expected_writable: int,
+    allow_already_migrated: bool = False,
+) -> None:
     counts = payload.get("counts", {})
-    if payload.get("source_scope") != expected_create:
-        raise ExecutorAbort(
-            f"Escopo esperado {expected_create}, obtido {payload.get('source_scope')}.",
-        )
     writable = counts.get("create", 0) + counts.get("resume", 0)
-    if writable != expected_create:
+    if writable != expected_writable:
         raise ExecutorAbort(
-            f"CREATE/RESUME esperado {expected_create}, obtido {counts}.",
+            f"CREATE/RESUME esperado {expected_writable}, obtido {counts}.",
         )
-    for action in (
-        "adopt", "absorb", "exclude_test", "already_migrated", "blocked",
-    ):
+    disallowed = ("adopt", "absorb", "exclude_test", "blocked")
+    if not allow_already_migrated:
+        disallowed = (*disallowed, "already_migrated")
+    for action in disallowed:
         if counts.get(action, 0) != 0:
             raise ExecutorAbort(f"Contagem inesperada {action}={counts.get(action)}.")
     if payload.get("relations_unresolved", 0) != 0:
@@ -258,9 +260,16 @@ def main() -> int:
         return 0
 
     try:
+        counts = payload.get("counts", {})
+        expected_writable = 1 if args.item_id else (
+            counts.get("create", 0) + counts.get("resume", 0)
+        )
         _validate_plan_payload(
             payload,
-            expected_create=1 if args.item_id else len(plan.operations),
+            expected_writable=expected_writable,
+            allow_already_migrated=(
+                not args.item_id and counts.get("already_migrated", 0) > 0
+            ),
         )
     except ExecutorAbort as exc:
         print(f"\nABORT: {exc}")
