@@ -231,7 +231,7 @@ def test_should_classify_ready_item():
         status_labels={"status": "Aguardando Assinatura"},
     )
     report, _plans, _pulled = _run((item,))
-    assert report.items[0].classification == "READY"
+    assert report.items[0].classification == "WAVE_1_READY"
 
 
 def test_should_classify_manual_when_user_not_mapped():
@@ -245,16 +245,51 @@ def test_should_classify_manual_when_user_not_mapped():
     assert result.reasons == ("MISSING_USER_MAPPING",)
 
     report_ok, _plans, _pulled = _run((item,), users={"777"})
-    assert report_ok.items[0].classification == "READY"
+    assert report_ok.items[0].classification == "WAVE_1_READY"
 
 
-def test_should_classify_skip_out_of_recorte():
+def test_should_classify_wave2_historical_out_of_onda1():
     item = MondayItemDigest(
         item_id="1", group_id="g_done", created_at=OLD, updated_at=OLD,
         status_labels={"status": "Assinado"},
     )
     report, _plans, _pulled = _run((item,))
-    assert report.items[0].classification == "SKIP"
+    result = report.items[0]
+    # Fora da Onda 1 não é descarte: backfill obrigatório da Onda 2.
+    assert result.classification == "WAVE_2_HISTORICAL"
+    assert result.reasons == ("HISTORICAL_BACKFILL",)
+    assert result.wave == "onda2"
+    payload = report.to_payload()
+    assert payload["onda2_backfill_obrigatorio"] == 1
+    assert payload["meta_final"] == "1/1 itens no Sunday (duas ondas)"
+
+
+def test_should_include_full_board_exception_in_wave1():
+    from classificacao_procons.migration.models import MondayBoardInventory
+
+    kpi = MondayBoardInventory(
+        board_id="5563754463",
+        name="KPI - Processos Consumidores",
+        groups={"g2018": "2018"},
+        columns=(),
+        items=(
+            MondayItemDigest(item_id="1", group_id="g2018", created_at=OLD, updated_at=OLD),
+        ),
+    )
+    selected, _done = select_recorte(kpi, cutoff=CUTOFF)
+    assert "1" in selected  # KPI integral na Onda 1 (exceção aprovada)
+
+
+def test_should_conserve_total_across_waves():
+    open_item = MondayItemDigest(item_id="1", group_id="g_jan", created_at=RECENT,
+                                 updated_at=RECENT)
+    old_done = MondayItemDigest(item_id="2", group_id="g_done", created_at=OLD,
+                                updated_at=OLD, status_labels={"status": "Assinado"})
+    report, _plans, _pulled = _run((open_item, old_done))
+    counts = report.counts()
+    assert sum(counts.values()) == 2  # nenhum item some do escopo total
+    assert counts["WAVE_1_READY"] == 1
+    assert counts["WAVE_2_HISTORICAL"] == 1
 
 
 def test_should_classify_error_when_relation_target_missing():
@@ -308,7 +343,7 @@ def test_should_pull_in_relation_target_outside_recorte():
     report, _plans, pulled = run_dry_run(inventories, {}, cutoff=CUTOFF)
     assert pulled == {"5385471914": 1}
     target_result = next(r for r in report.items if r.monday_item_id == "50")
-    assert target_result.classification != "SKIP"
+    assert target_result.classification != "WAVE_2_HISTORICAL"
 
 
 def test_should_aggregate_report_without_item_content():
@@ -319,7 +354,7 @@ def test_should_aggregate_report_without_item_content():
     report, _plans, _pulled = _run((item,))
     payload = report.to_payload()
     dumped = json.dumps(payload, ensure_ascii=False)
-    assert payload["counts"]["READY"] == 1
+    assert payload["counts"]["WAVE_1_READY"] == 1
     assert payload["flags"]["file_materialization"] == 1
     # relatório agregado não carrega nomes/textos — só chaves técnicas.
     for forbidden in ("cpf", "name", "body", "consumidor"):
@@ -355,7 +390,7 @@ def test_should_key_ledger_records_for_o1_idempotency():
 
 def test_should_report_counts_and_percentages():
     report = DryRunReport(cutoff_iso="2025-08-11", scenario="pos_checklist")
-    assert report.to_payload()["total_no_recorte"] == 0  # vazio não divide por zero
+    assert report.to_payload()["onda1_total"] == 0  # vazio não divide por zero
 
 
 # ------------------------------------------------- dry-run nunca escreve nada
@@ -411,7 +446,7 @@ def test_should_never_call_write_methods_in_dry_run_pipeline():
     report, _plans, _pulled = run_dry_run(
         {"5301515799": _controle_inventory((item,))}, snapshots, cutoff=CUTOFF,
     )
-    assert report.counts()["READY"] == 1
+    assert report.counts()["WAVE_1_READY"] == 1
     assert spy.read_calls == ["get_board:77", "list_columns:77", "list_groups:77"]
 
 

@@ -75,6 +75,10 @@ WAVE1_RELATION_TARGETS: dict[tuple[str, str], str] = {
     ("5301515799", "contrato relacionado"): "5385471914",
 }
 
+# Boards que entram INTEGRALMENTE na Onda 1 (exceções aprovadas ao recorte
+# operacional): KPI é pequeno e é dado de referência (decisão de 2026-08-11).
+WAVE1_FULL_BOARDS: frozenset[str] = frozenset({"5563754463"})
+
 # Grupos que significam "concluído" (semântica real de cada board — grupos de
 # arquivo por ano, assinados/recusados e encerrados).
 _DONE_GROUP_PATTERNS = (

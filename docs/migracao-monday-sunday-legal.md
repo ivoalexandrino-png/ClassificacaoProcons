@@ -1942,3 +1942,70 @@ de relação para ela).
 - **Nesta fase nada foi escrito** em Sunday/Monday. Próximo passo é humano: executar
   este checklist no app do Sunday; depois faremos leitura + `--refresh-sunday` + dry-run
   final antes da Fase 3.
+
+---
+
+## Escopo definitivo da migração — DECISÃO DO USUÁRIO (2026-08-12)
+
+> O Monday será descontinuado. **Escopo final: TODOS os 4.391 itens dos 8 boards da
+> Onda 1** — nenhum item permanece exclusivamente no Monday ao término do projeto.
+> Esta seção substitui qualquer leitura anterior do recorte como "escopo"; o recorte
+> passa a ser somente o plano de cutover. Origem: decisão explícita do usuário
+> (registrada nesta data), encerrando a divergência entre cenários levantada na
+> reconciliação de escopo.
+
+### Duas ondas
+
+- **Onda 1 — cutover operacional** (referência atual: **2.091 itens**): abertos/não
+  concluídos + últimos 12 meses + pull-ins de relação + KPI integral (31). Codificado
+  em `migration/mappings.py` (`WAVE1_FULL_BOARDS`) e `migration/dry_run.py`.
+- **Onda 2 — backfill histórico** (referência atual: **2.300 itens**): todos os
+  demais, obrigatórios. Meta final: **4.391/4.391** no Sunday.
+- Contratos: 1.119 no total (963 na Onda 1); Controle: 1.607 no total (553 na
+  Onda 1) — **Controle NÃO é greenfield**.
+
+### Regra fundamental (sem descarte, sem invenção)
+
+Nenhum item histórico é descartado por data anterior ao cutoff, conclusão, ausência
+de data/vigência/responsável ou grupo histórico. **Dados ausentes permanecem
+ausentes** — a migração nunca inventa valores (Data do Contrato/Término vazios
+migram vazios; Vigência sem base não é inferida; grupo Monday alimenta Tipo conforme
+o mapping aprovado; "Contratos Encerrados" → Vigência = Não Vigente pela regra
+validada).
+
+### Classificação do dry-run (implementada)
+
+`WAVE_1_READY` · `WAVE_2_HISTORICAL` (reason `HISTORICAL_BACKFILL`; `wave="onda2"`;
+contabilizado como obrigatório para a Onda 2) · `MANUAL` · `ERROR`. O relatório
+agregado passa a reportar `onda1_total`, `onda2_backfill_obrigatorio` e
+`meta_final`. Números reais (inventário de 2026-08-11):
+
+| Cenário | WAVE_1_READY | MANUAL | ERROR | WAVE_2_HISTORICAL |
+|---|---|---|---|---|
+| Estado atual | 0 | 2.091 (checklist pendente) | 0 | 2.300 |
+| Pós-checklist + de-para aprovado | **2.091 (100% da Onda 1)** | 0 | 0 | 2.300 (Onda 2) |
+
+### Arquitetura de duas ondas sem duplicação (validada)
+
+1. **Idempotência**: ledger `data/monday-sunday-map.json` indexado por
+   `monday_board_id:monday_item_id` + coluna **Monday ID** em cada item migrado — o
+   executor consulta o ledger (O(1)) antes de criar; reexecução e Onda 2 nunca
+   duplicam; o mapa é reconstruível lendo o Sunday.
+2. **Relações entre ondas**: (a) fonte na Onda 1 → alvo sempre presente na Onda 1
+   (pull-in garante); (b) fonte na Onda 2 → alvo da Onda 1 resolvido pelo ledger
+   (`sunday_item_id` já existente); (c) fonte e alvo na Onda 2 → mesma ordem por
+   board da Onda 1 (alvos antes das origens). Relações são gravadas em **segunda
+   passada**, depois que os dois lados existem.
+3. **Arquivos/updates históricos**: o mesmo executor da Onda 1 roda na Onda 2 (item
+   + values + comments + anexos por item); nada no client/dry-run é específico de
+   onda.
+
+### Alterações de código desta decisão
+
+`migration/models.py` (novas classificações + campo `wave` + reason
+`HISTORICAL_BACKFILL`), `migration/mappings.py` (`WAVE1_FULL_BOARDS` com o KPI),
+`migration/dry_run.py` (seleção da Onda 1 com boards integrais; itens fora viram
+`WAVE_2_HISTORICAL`; payload com totais por onda), `scripts/sunday_migration_dry_run.py`
+(saída por onda) e testes (33 no módulo, incluindo conservação do total —
+`sum(counts) == total analisado`). Nenhuma migração executada; Monday e Sunday
+intocados.

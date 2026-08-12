@@ -167,7 +167,12 @@ def main() -> int:
         payload = output[scenario]
         print(f"\n== {scenario} ==")
         print(json.dumps(payload["counts"], ensure_ascii=False))
-        print("percentuais:", json.dumps(payload["percentuais_sobre_recorte"]))
+        print(
+            f"onda1={payload['onda1_total']}  "
+            f"onda2_backfill_obrigatorio={payload['onda2_backfill_obrigatorio']}  "
+            f"meta={payload['meta_final']}",
+        )
+        print("percentuais (onda 1):", json.dumps(payload["percentuais_sobre_onda1"]))
         print("manual por motivo:", json.dumps(payload["manual_por_motivo"]))
     return 0
 

@@ -1,14 +1,16 @@
-"""Motor de dry-run da migração Monday → Sunday (Fase 2 — SEM escrita).
+"""Motor de dry-run da migração Monday → Sunday (SEM escrita).
 
-Classifica cada item do recorte em READY / MANUAL / SKIP / ERROR contra o estado
-real do Sunday, em dois cenários:
+Escopo definitivo (decisão do usuário, 2026-08-12): **migração total em duas
+ondas** — nenhum item é descartado. Classificações:
 
-- `estado_atual`: como o Sunday está hoje (sem os boards/colunas do checklist);
-- `pos_checklist`: assumindo o checklist de configuração manual executado
-  (boards criados, colunas/status/relations configurados) e o de-para de
-  usuários aprovado — cenário que mede o trabalho REALMENTE manual por item.
+- `WAVE_1_READY`: item da Onda 1 (cutover operacional: abertos + 12 meses +
+  pull-ins + boards integrais aprovados) pronto para migração automática;
+- `WAVE_2_HISTORICAL`: item obrigatório da Onda 2 (backfill histórico), com
+  reason `HISTORICAL_BACKFILL` — nunca descarte definitivo;
+- `MANUAL` / `ERROR`: bloqueios reais (em qualquer onda).
 
-O relatório agregado é sanitizado: ids técnicos, contagens, motivos e
+Cenários: `estado_atual` (Sunday como está) e `pos_checklist` (schema/checklist
+prontos). O relatório agregado é sanitizado: ids técnicos, contagens, motivos e
 percentuais — nunca conteúdo de itens.
 """
 
@@ -18,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from classificacao_procons.migration.mappings import (
+    WAVE1_FULL_BOARDS,
     build_board_plan,
     find_main_status_column,
     item_is_concluded,
@@ -43,7 +46,12 @@ class DryRunReport:
     items: list[ItemDryRunResult] = field(default_factory=list)
 
     def counts(self) -> dict[Classification, int]:
-        result: dict[Classification, int] = {"READY": 0, "MANUAL": 0, "SKIP": 0, "ERROR": 0}
+        result: dict[Classification, int] = {
+            "WAVE_1_READY": 0,
+            "WAVE_2_HISTORICAL": 0,
+            "MANUAL": 0,
+            "ERROR": 0,
+        }
         for item in self.items:
             result[item.classification] += 1
         return result
@@ -61,7 +69,8 @@ class DryRunReport:
         result: dict[str, dict[Classification, int]] = {}
         for item in self.items:
             board = result.setdefault(
-                item.monday_board_id, {"READY": 0, "MANUAL": 0, "SKIP": 0, "ERROR": 0},
+                item.monday_board_id,
+                {"WAVE_1_READY": 0, "WAVE_2_HISTORICAL": 0, "MANUAL": 0, "ERROR": 0},
             )
             board[item.classification] += 1
         return result
@@ -74,20 +83,27 @@ class DryRunReport:
         return result
 
     def to_payload(self) -> dict:
-        """Relatório agregado sanitizado (sem conteúdo de itens)."""
+        """Relatório agregado sanitizado (sem conteúdo de itens).
+
+        Escopo total = Onda 1 + Onda 2: itens `WAVE_2_HISTORICAL` são
+        contabilizados como OBRIGATÓRIOS para a Onda 2 (backfill), nunca como
+        descarte. Percentuais de prontidão são calculados sobre a Onda 1.
+        """
         counts = self.counts()
         total = sum(counts.values())
-        in_scope = total - counts["SKIP"]
+        onda1 = counts["WAVE_1_READY"] + counts["MANUAL"] + counts["ERROR"]
         return {
             "scenario": self.scenario,
             "cutoff": self.cutoff_iso,
             "total_analisado": total,
-            "total_no_recorte": in_scope,
+            "onda1_total": onda1,
+            "onda2_backfill_obrigatorio": counts["WAVE_2_HISTORICAL"],
+            "meta_final": f"{total}/{total} itens no Sunday (duas ondas)",
             "counts": counts,
-            "percentuais_sobre_recorte": {
-                key: (round(100 * value / in_scope, 1) if in_scope else 0.0)
+            "percentuais_sobre_onda1": {
+                key: (round(100 * value / onda1, 1) if onda1 else 0.0)
                 for key, value in counts.items()
-                if key != "SKIP"
+                if key != "WAVE_2_HISTORICAL"
             },
             "manual_por_motivo": self.manual_by_reason(),
             "por_board": self.by_board(),
@@ -114,15 +130,17 @@ def select_recorte(
     *,
     cutoff: datetime,
 ) -> tuple[set[str], dict[str, bool]]:
-    """Aplica o recorte: abertos (sempre) + criados nos últimos 12 meses.
+    """Seleciona a ONDA 1 (cutover operacional): abertos + últimos 12 meses.
 
-    Depois expande com os alvos de relação (um item migrado não pode apontar
-    para um item inexistente no Sunday — dependência puxa o alvo para dentro).
-    Retorna (ids no recorte, mapa id→concluído).
+    Boards em `WAVE1_FULL_BOARDS` (exceções aprovadas, ex.: KPI) entram
+    integralmente. O que fica de fora NÃO é descartado: é Onda 2 (backfill
+    histórico obrigatório). Depois o chamador expande com os alvos de relação
+    (pull-in). Retorna (ids na Onda 1, mapa id→concluído).
     """
     main_status = find_main_status_column(inventory)
     concluded: dict[str, bool] = {}
     selected: set[str] = set()
+    full_board = inventory.board_id in WAVE1_FULL_BOARDS
     for item in inventory.items:
         group_title = inventory.groups.get(item.group_id or "")
         is_done = item_is_concluded(
@@ -133,7 +151,7 @@ def select_recorte(
         concluded[item.item_id] = is_done
         created = _parse_iso(item.created_at)
         recent = created is not None and created >= cutoff
-        if not is_done or recent:
+        if full_board or not is_done or recent:
             selected.add(item.item_id)
     return selected, concluded
 
@@ -186,10 +204,13 @@ def classify_item(
 ) -> ItemDryRunResult:
     """Classifica um item (sanitizado) num cenário do dry-run."""
     if not in_recorte:
+        # Fora da Onda 1 ≠ descarte: backfill histórico OBRIGATÓRIO na Onda 2.
         return ItemDryRunResult(
             monday_board_id=plan.monday_board_id,
             monday_item_id=item.item_id,
-            classification="SKIP",
+            classification="WAVE_2_HISTORICAL",
+            reasons=("HISTORICAL_BACKFILL",),
+            wave="onda2",
         )
     reasons: list[ManualReason] = []
     flags: list[str] = []
@@ -247,13 +268,14 @@ def classify_item(
     elif reasons:
         classification = "MANUAL"
     else:
-        classification = "READY"
+        classification = "WAVE_1_READY"
     return ItemDryRunResult(
         monday_board_id=plan.monday_board_id,
         monday_item_id=item.item_id,
         classification=classification,
         reasons=tuple(dict.fromkeys(reasons)),
         flags=tuple(dict.fromkeys(flags)),
+        wave="onda1",
     )
 
 

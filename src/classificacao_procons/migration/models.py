@@ -18,7 +18,10 @@ Strategy = Literal[
     "derivado_pelo_codigo",
 ]
 
-Classification = Literal["READY", "MANUAL", "SKIP", "ERROR"]
+# Escopo definitivo (decisão do usuário, 2026-08-12): migração TOTAL em duas ondas.
+# Nenhum item é descartado — o que não entra na Onda 1 (cutover operacional) é
+# obrigatório na Onda 2 (backfill histórico): 4.391/4.391 itens no Sunday ao final.
+Classification = Literal["WAVE_1_READY", "WAVE_2_HISTORICAL", "MANUAL", "ERROR"]
 
 ManualReason = Literal[
     "MISSING_TARGET_COLUMN",
@@ -28,6 +31,7 @@ ManualReason = Literal[
     "UNSUPPORTED_FIELD",
     "FILE_REQUIRES_MATERIALIZATION",
     "AMBIGUOUS_MAPPING",
+    "HISTORICAL_BACKFILL",
     "OTHER",
 ]
 
@@ -153,6 +157,7 @@ class ItemDryRunResult:
     classification: Classification
     reasons: tuple[ManualReason, ...] = ()
     flags: tuple[str, ...] = ()  # avisos não bloqueantes (ex.: file_materialization)
+    wave: Literal["onda1", "onda2"] = "onda1"
 
 
 @dataclass(frozen=True)
