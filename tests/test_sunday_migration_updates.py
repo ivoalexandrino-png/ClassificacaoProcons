@@ -122,7 +122,7 @@ def test_comment_readback_retries_until_marker_is_visible():
     )
 
     assert len(client.created) == 1
-    assert client.reads_after_create == 3
+    assert client.reads_after_create == 4  # 3 tentativas + validação final
     assert stats.comments == 1
 
 
