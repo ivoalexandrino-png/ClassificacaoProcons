@@ -19,6 +19,7 @@ credentials/
 *.json
 !pyproject.toml
 !.cursor/environment.json
+!docs/migration/monday-sunday-ledger.json
 
 # Downloads locais
 downloads/

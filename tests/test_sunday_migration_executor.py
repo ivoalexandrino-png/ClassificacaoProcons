@@ -9,6 +9,8 @@ import pytest
 from classificacao_procons.migration.dry_run import run_dry_run
 from classificacao_procons.migration.executor import (
     BOARD_ALLOWLIST,
+    DEFAULT_LEDGER_PATH,
+    LEGACY_LEDGER_PATH,
     ExecutorAbort,
     GateCheck,
     apply_plan,
@@ -16,6 +18,7 @@ from classificacao_procons.migration.executor import (
     build_execution_plan,
     build_sunday_schema_checks,
     comment_idempotency_marker,
+    import_legacy_ledger_if_needed,
     load_persistent_ledger,
     persist_ledger_record,
     snapshot_fingerprint,
@@ -227,11 +230,66 @@ def test_many_to_one_ledger_supported(tmp_path):
     )
     persist_ledger_record(
         {"monday_board_id": AUDIENCIAS, "monday_item_id": "B", "sunday_item_id": "7043",
-         "migration_status": "migrated"}, path=ledger_path,
+         "migration_status": "migrated", "disposition": "ABSORB",
+         "canonical_monday_item_id": "A"}, path=ledger_path,
     )
     records = load_persistent_ledger(ledger_path)
     linked = [r for r in records.values() if r["sunday_item_id"] == "7043"]
     assert len(linked) == 2  # N Monday → 1 Sunday preservado
+    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 1
+    assert "description" in payload
+
+
+def test_versioned_ledger_reload_preserves_idempotency(tmp_path):
+    ledger_path = tmp_path / "ledger.json"
+    persist_ledger_record(
+        {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": "1",
+            "sunday_board_id": "86",
+            "sunday_item_id": "9001",
+            "wave": "WAVE_1",
+            "disposition": "CREATE",
+            "migration_status": "migrated",
+        },
+        path=ledger_path,
+    )
+    reloaded = load_persistent_ledger(ledger_path)
+    plan = _plan_for(_kpi_inventory(), ledger=reloaded)
+    actions = {op.monday_item_id: op.action for op in plan.operations}
+    assert actions["1"] == "already_migrated"
+    assert actions["2"] == "create"
+
+
+def test_import_legacy_ledger_if_needed(tmp_path):
+    legacy_path = tmp_path / "legacy.json"
+    target_path = tmp_path / "target.json"
+    legacy_path.write_text(
+        json.dumps(
+            {
+                "records": {
+                    f"{KPI_BOARD}:99": {
+                        "monday_board_id": KPI_BOARD,
+                        "monday_item_id": "99",
+                        "sunday_board_id": "86",
+                        "sunday_item_id": "7000",
+                        "migration_status": "migrated",
+                    },
+                },
+            },
+        ),
+        encoding="utf-8",
+    )
+    assert import_legacy_ledger_if_needed(target_path, legacy_path=legacy_path) is True
+    records = load_persistent_ledger(target_path)
+    assert records[f"{KPI_BOARD}:99"]["sunday_item_id"] == "7000"
+    assert import_legacy_ledger_if_needed(target_path, legacy_path=legacy_path) is False
+
+
+def test_default_ledger_path_is_versioned():
+    assert DEFAULT_LEDGER_PATH == "docs/migration/monday-sunday-ledger.json"
+    assert LEGACY_LEDGER_PATH == "data/monday-sunday-map.json"
 
 
 # --------------------------------------------------------------------- users

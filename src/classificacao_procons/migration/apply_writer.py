@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from classificacao_procons.migration.executor import (
+    DEFAULT_LEDGER_PATH,
     ExecutionPlan,
     PlannedOperation,
     load_persistent_ledger,
@@ -222,7 +223,7 @@ def apply_create_item(
     """Cria um item Sunday (CREATE) com campos mapeados e verificação."""
     write_stats = stats or ApplyWriteStats()
     ledger_key = f"{plan.monday_board_id}:{operation.monday_item_id}"
-    records = load_persistent_ledger("data/monday-sunday-map.json")
+    records = load_persistent_ledger(DEFAULT_LEDGER_PATH)
     if records.get(ledger_key, {}).get("migration_status") == "migrated":
         existing = records[ledger_key].get("sunday_item_id")
         if existing:

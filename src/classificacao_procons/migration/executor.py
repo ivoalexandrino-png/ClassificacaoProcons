@@ -35,7 +35,12 @@ from classificacao_procons.sunday.http import SundayConfig
 ENV_ALLOW_APPLY = "SUNDAY_MIGRATION_ALLOW_APPLY"
 ENV_TEST_URL = "SUNDAY_API_URL_TEST"
 ENV_TEST_TOKEN = "SUNDAY_API_TOKEN_TEST"
-DEFAULT_LEDGER_PATH = "data/monday-sunday-map.json"
+DEFAULT_LEDGER_PATH = "docs/migration/monday-sunday-ledger.json"
+LEGACY_LEDGER_PATH = "data/monday-sunday-map.json"
+LEDGER_SCHEMA_VERSION = 1
+LEDGER_DESCRIPTION = (
+    "Ledger técnico da migração Monday→Sunday (somente IDs/metadados; sem PII/conteúdo)."
+)
 COMMENT_MARKER_PREFIX = "[monday-migracao:"
 ATTACHMENT_MARKER_PREFIX = "monday-asset-"
 
@@ -77,25 +82,72 @@ def snapshot_fingerprint(inventory: MondayBoardInventory) -> str:
 # ------------------------------------------------------------------- ledger IO
 
 
+def _empty_ledger_payload() -> dict:
+    return {
+        "schema_version": LEDGER_SCHEMA_VERSION,
+        "description": LEDGER_DESCRIPTION,
+        "records": {},
+    }
+
+
+def _read_ledger_payload(path: Path) -> dict:
+    if not path.exists():
+        return _empty_ledger_payload()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return _empty_ledger_payload()
+    if "records" not in payload:
+        payload = {"records": payload}
+    payload.setdefault("schema_version", LEDGER_SCHEMA_VERSION)
+    payload.setdefault("description", LEDGER_DESCRIPTION)
+    return payload
+
+
+def import_legacy_ledger_if_needed(
+    path: str | Path = DEFAULT_LEDGER_PATH,
+    *,
+    legacy_path: str | Path = LEGACY_LEDGER_PATH,
+) -> bool:
+    """Copia records do ledger legado gitignored para o path versionado (uma vez)."""
+    ledger_path = Path(path)
+    if ledger_path.exists() and _read_ledger_payload(ledger_path).get("records"):
+        return False
+    legacy = Path(legacy_path)
+    if not legacy.exists():
+        return False
+    legacy_records = _read_ledger_payload(legacy).get("records", {})
+    if not legacy_records:
+        return False
+    payload = _empty_ledger_payload()
+    payload["records"] = legacy_records
+    payload["imported_from"] = str(legacy_path)
+    payload["imported_at"] = datetime.now(UTC).isoformat()
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
+
+
 def load_persistent_ledger(path: str | Path = DEFAULT_LEDGER_PATH) -> dict[str, dict]:
     ledger_path = Path(path)
+    if ledger_path == Path(DEFAULT_LEDGER_PATH):
+        import_legacy_ledger_if_needed(ledger_path)
     if not ledger_path.exists():
         return {}
-    payload = json.loads(ledger_path.read_text(encoding="utf-8"))
-    return payload.get("records", {}) if isinstance(payload, dict) else {}
+    return _read_ledger_payload(ledger_path).get("records", {})
 
 
 def persist_ledger_record(record: dict, path: str | Path = DEFAULT_LEDGER_PATH) -> None:
     """Grava UMA entrada confirmada (escrita atômica tmp+rename)."""
     ledger_path = Path(path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    records = load_persistent_ledger(ledger_path)
+    payload = _read_ledger_payload(ledger_path) if ledger_path.exists() else _empty_ledger_payload()
+    records = payload.get("records", {})
     key = f"{record['monday_board_id']}:{record['monday_item_id']}"
     records[key] = record
+    payload["records"] = records
+    payload["updated_at"] = datetime.now(UTC).isoformat()
     tmp = ledger_path.with_suffix(".tmp")
-    tmp.write_text(
-        json.dumps({"records": records}, ensure_ascii=False, indent=2), encoding="utf-8",
-    )
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(ledger_path)
 
 

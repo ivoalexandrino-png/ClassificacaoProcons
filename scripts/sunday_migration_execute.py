@@ -88,7 +88,7 @@ def main() -> int:
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
-    parser.add_argument("--ledger", default="data/monday-sunday-map.json")
+    parser.add_argument("--ledger", default="docs/migration/monday-sunday-ledger.json")
     parser.add_argument("--out", default="/tmp/sunday-migration-plan.json")
     parser.add_argument(
         "--confirm-writes",
