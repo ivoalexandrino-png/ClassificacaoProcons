@@ -11,6 +11,7 @@ from classificacao_procons.migration.executor import (
     BOARD_ALLOWLIST,
     DEFAULT_LEDGER_PATH,
     LEGACY_LEDGER_PATH,
+    ApplyMigrationContext,
     ExecutorAbort,
     GateCheck,
     apply_plan,
@@ -28,6 +29,7 @@ from classificacao_procons.migration.models import (
     MondayBoardInventory,
     MondayColumnInfo,
     MondayItemDigest,
+    MondayUpdateDigest,
 )
 from classificacao_procons.migration.user_mapping import UserMappingPolicy
 
@@ -410,10 +412,10 @@ def test_ledger_idempotency_skips_already_migrated():
     assert actions["2"] == "create"
 
 
-def test_monday_id_idempotency_skips_existing_sunday_item():
+def test_monday_id_without_ledger_is_resumed_without_recreation():
     plan = _plan_for(_kpi_inventory(), monday_id_index={"2": "6000"})
     actions = {op.monday_item_id: op.action for op in plan.operations}
-    assert actions["2"] == "already_migrated"
+    assert actions["2"] == "resume"
 
 
 def test_rerun_after_partial_failure_does_not_duplicate(monkeypatch, tmp_path):
@@ -553,6 +555,166 @@ def test_comment_and_attachment_idempotency_markers():
     assert marker == "[monday-migracao:123:u9]"
     name = attachment_idempotency_name("555", "contrato.pdf")
     assert name.startswith("monday-asset-555")
+
+
+def test_plan_reports_exact_item_update_count():
+    updates = tuple(
+        MondayUpdateDigest(
+            update_id=f"u{index}",
+            created_at=RECENT,
+            has_author=True,
+            classification="text_update_with_author",
+            is_migratable=True,
+        )
+        for index in range(3)
+    )
+    item = MondayItemDigest(
+        item_id="1",
+        group_id="g2023",
+        created_at=RECENT,
+        updated_at=RECENT,
+        has_updates=True,
+        source_updates_count=3,
+        updates_count=3,
+        update_diagnostics=updates,
+    )
+    plan = _plan_for(_kpi_inventory((item,)))
+
+    assert plan.operations[0].comments_to_create == 3
+    assert plan.to_payload()["source_updates"] == 3
+    assert plan.to_payload()["updates_migraveis"] == 3
+    assert plan.to_payload()["comments_to_create"] == 3
+
+
+def test_legacy_snapshot_update_boolean_blocks_apply_as_inexact():
+    item = MondayItemDigest(
+        item_id="1",
+        group_id="g2023",
+        created_at=RECENT,
+        updated_at=RECENT,
+        has_updates=True,
+        updates_count=1,
+        updates_count_is_exact=False,
+    )
+    plan = _plan_for(
+        _kpi_inventory((item,)),
+        mode="apply",
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+
+    assert plan.to_payload()["comments_count_exact"] is False
+    assert {check.name: check.ok for check in plan.gate}["snapshot_valido"] is False
+
+
+def test_comment_failure_prevents_ledger_and_stops_next_item(
+    monkeypatch,
+    tmp_path,
+):
+    from classificacao_procons.migration import apply_writer
+
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    monkeypatch.setattr(apply_writer, "build_sunday_monday_id_index", lambda *a, **k: {})
+    monkeypatch.setattr(
+        apply_writer,
+        "apply_create_item",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("mandatory comment failed")),
+    )
+    inventory = _kpi_inventory()
+    plan = _plan_for(
+        inventory,
+        mode="apply",
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    ledger_path = tmp_path / "ledger.json"
+    context = ApplyMigrationContext(
+        inventory=inventory,
+        board_plan=object(),
+        sunday_snapshot=object(),
+        apply_sources={item.item_id: object() for item in inventory.items},
+        monday_id_column_id="monday-id",
+        target_group_id="group-id",
+    )
+
+    result = apply_plan(
+        plan,
+        client=SpyClient(),
+        confirm_writes=True,
+        snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        ledger_path=ledger_path,
+        migration_context=context,
+    )
+
+    assert result.failed == [("1", "mandatory comment failed")]
+    assert result.not_attempted == ["2", "3"]
+    assert not ledger_path.exists()
+
+
+def test_partial_item_retry_completes_comments_before_ledger(monkeypatch, tmp_path):
+    from classificacao_procons.migration import apply_writer
+
+    monkeypatch.setenv("SUNDAY_MIGRATION_ALLOW_APPLY", "1")
+    monkeypatch.setattr(
+        apply_writer,
+        "build_sunday_monday_id_index",
+        lambda *a, **k: {"1": "sunday-existing"},
+    )
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        apply_writer,
+        "migrate_monday_updates",
+        lambda **kwargs: calls.append(
+            (kwargs["monday_item_id"], kwargs["sunday_item_id"]),
+        ),
+    )
+    inventory = _kpi_inventory((
+        MondayItemDigest(
+            item_id="1",
+            group_id="g2023",
+            created_at=RECENT,
+            updated_at=RECENT,
+            source_updates_count=1,
+            updates_count=1,
+            has_updates=True,
+            update_diagnostics=(
+                MondayUpdateDigest(
+                    update_id="u1",
+                    created_at=RECENT,
+                    has_author=True,
+                    classification="text_update_with_author",
+                    is_migratable=True,
+                ),
+            ),
+        ),
+    ))
+    plan = _plan_for(
+        inventory,
+        mode="apply",
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    ledger_path = tmp_path / "ledger.json"
+    context = ApplyMigrationContext(
+        inventory=inventory,
+        board_plan=object(),
+        sunday_snapshot=object(),
+        apply_sources={"1": type("Source", (), {"updates": (object(),)})()},
+        monday_id_column_id="monday-id",
+        target_group_id="group-id",
+    )
+
+    result = apply_plan(
+        plan,
+        client=SpyClient(),
+        confirm_writes=True,
+        snapshot_revalidator=lambda: plan.snapshot_fingerprint,
+        ledger_path=ledger_path,
+        migration_context=context,
+    )
+
+    assert result.succeeded == ["1"]
+    assert calls == [("1", "sunday-existing")]
+    assert load_persistent_ledger(ledger_path)[f"{KPI_BOARD}:1"]["sunday_item_id"] == (
+        "sunday-existing"
+    )
 
 
 def test_schema_checks_require_monday_id_column():

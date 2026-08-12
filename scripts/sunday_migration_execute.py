@@ -20,6 +20,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from classificacao_procons.migration.apply_writer import (
+    build_sunday_comment_marker_index,
     build_sunday_monday_id_index,
     fetch_monday_apply_sources,
     verify_applied_board,
@@ -81,8 +82,11 @@ def _validate_plan_payload(payload: dict, *, expected_create: int) -> None:
         raise ExecutorAbort(
             f"Escopo esperado {expected_create}, obtido {payload.get('source_scope')}.",
         )
-    if counts.get("create") != expected_create:
-        raise ExecutorAbort(f"CREATE esperado {expected_create}, obtido {counts}.")
+    writable = counts.get("create", 0) + counts.get("resume", 0)
+    if writable != expected_create:
+        raise ExecutorAbort(
+            f"CREATE/RESUME esperado {expected_create}, obtido {counts}.",
+        )
     for action in (
         "adopt", "absorb", "exclude_test", "already_migrated", "blocked",
     ):
@@ -198,6 +202,7 @@ def main() -> int:
         sunday_snapshots = load_snapshot_file(args.sunday_snapshot)
 
     monday_id_index = {}
+    sunday_comment_markers = {}
     if client is not None and sunday_snapshots:
         monday_id_column_id = _find_monday_id_column(
             sunday_snapshots[BOARD_ALLOWLIST[args.board]],
@@ -206,6 +211,11 @@ def main() -> int:
             client,
             board_id=BOARD_ALLOWLIST[args.board],
             monday_id_column_id=monday_id_column_id,
+        )
+        sunday_comment_markers = build_sunday_comment_marker_index(
+            client,
+            monday_id_index=monday_id_index,
+            inventory=inventory,
         )
 
     policy = load_user_mapping_policy()
@@ -225,6 +235,7 @@ def main() -> int:
         user_policy=policy,
         persistent_ledger=load_persistent_ledger(args.ledger),
         sunday_monday_id_index=monday_id_index or None,
+        sunday_comment_markers=sunday_comment_markers or None,
         sunday_schema_checks=schema_checks,
     )
 
@@ -235,7 +246,9 @@ def main() -> int:
     print(f"\nPLAN gravado em {args.out}")
     print(json.dumps({k: payload[k] for k in (
         "monday_board_id", "sunday_board_id", "wave", "mode", "snapshot", "counts",
-        "comments_to_create", "attachments_to_link", "relations_to_create",
+        "source_updates", "updates_migraveis", "comments_to_create",
+        "comments_already_present", "comments_excluded",
+        "attachments_to_link", "relations_to_create",
         "relations_unresolved", "gate_ok",
     )}, ensure_ascii=False, indent=2))
     for check in payload["gate"]:
@@ -261,7 +274,7 @@ def main() -> int:
     selected_ids = {
         operation.monday_item_id
         for operation in plan.operations
-        if operation.action == "create"
+        if operation.action in ("create", "resume")
     }
     scoped_items = tuple(item for item in inventory.items if item.item_id in selected_ids)
     if len(scoped_items) != len(selected_ids):
@@ -340,6 +353,15 @@ def main() -> int:
             board_id=plan.sunday_board_id,
             monday_id_column_id=migration_context.monday_id_column_id,
         ),
+        sunday_comment_markers=build_sunday_comment_marker_index(
+            client,
+            monday_id_index=build_sunday_monday_id_index(
+                client,
+                board_id=plan.sunday_board_id,
+                monday_id_column_id=migration_context.monday_id_column_id,
+            ),
+            inventory=inventory_holder["inventory"],  # type: ignore[arg-type]
+        ),
         sunday_schema_checks=schema_checks,
     )
     post_payload = post_plan.to_payload()
@@ -348,7 +370,10 @@ def main() -> int:
         "monday_board_id": args.board,
         "sunday_board_id": plan.sunday_board_id,
         "succeeded": apply_result.succeeded,
-        "failed": [{"monday_item_id": item_id, "error": err} for item_id, err in apply_result.failed],
+        "failed": [
+            {"monday_item_id": item_id, "error": err}
+            for item_id, err in apply_result.failed
+        ],
         "not_attempted": apply_result.not_attempted,
         "writes": apply_result.write_stats,
         "field_checks_total": field_report.total,

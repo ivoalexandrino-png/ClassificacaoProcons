@@ -59,6 +59,18 @@ class MondayColumnInfo:
 
 
 @dataclass(frozen=True)
+class MondayUpdateDigest:
+    """Metadados sanitizados de um update; o conteúdo nunca entra no PLAN."""
+
+    update_id: str
+    created_at: str | None
+    has_author: bool
+    classification: str
+    is_migratable: bool
+    exclusion_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class MondayItemDigest:
     """Resumo sanitizado de um item do Monday (sem qualquer conteúdo pessoal)."""
 
@@ -71,6 +83,10 @@ class MondayItemDigest:
     file_count: int = 0
     file_bytes: int = 0
     has_updates: bool = False
+    source_updates_count: int = 0
+    updates_count: int = 0
+    updates_count_is_exact: bool = True
+    update_diagnostics: tuple[MondayUpdateDigest, ...] = ()
     subitem_count: int = 0
     relation_targets: dict[str, tuple[str, ...]] = field(default_factory=dict)
 

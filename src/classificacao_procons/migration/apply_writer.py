@@ -9,10 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from classificacao_procons.migration.executor import (
-    DEFAULT_LEDGER_PATH,
     ExecutionPlan,
     PlannedOperation,
-    load_persistent_ledger,
+    comment_idempotency_marker,
 )
 from classificacao_procons.migration.mappings import (
     find_main_status_column,
@@ -43,6 +42,32 @@ query ($ids: [ID!], $cursor: String, $limit: Int!) {
 }
 """
 
+_APPLY_UPDATES_QUERY = """
+query ($ids: [ID!], $limit: Int!, $page: Int!) {
+  items(ids: $ids) {
+    id
+    updates(limit: $limit, page: $page) {
+      id
+      body
+      text_body
+      created_at
+      creator { name }
+    }
+  }
+}
+"""
+
+UPDATES_PAGE_SIZE = 100
+READ_BACK_ATTEMPTS = 3
+
+
+@dataclass(frozen=True)
+class MondayUpdateSource:
+    update_id: str
+    body: str
+    author_name: str | None = None
+    created_at: str | None = None
+
 
 @dataclass(frozen=True)
 class MondayApplySource:
@@ -50,6 +75,7 @@ class MondayApplySource:
     name: str
     group_id: str | None
     values_by_column_id: dict[str, str | None]  # text ou label de status
+    updates: tuple[MondayUpdateSource, ...] = ()
 
 
 @dataclass
@@ -59,6 +85,7 @@ class ApplyWriteStats:
     custom_values: int = 0
     status_writes: int = 0
     comments: int = 0
+    comments_skipped: int = 0
     attachments: int = 0
     relations: int = 0
     subitems: int = 0
@@ -123,7 +150,78 @@ def fetch_monday_apply_sources(
         cursor = page.get("cursor")
         if not cursor:
             break
-    return sources
+    if not sources:
+        return sources
+    updates_by_item = _fetch_monday_updates(api_token, set(sources))
+    return {
+        item_id: MondayApplySource(
+            item_id=source.item_id,
+            name=source.name,
+            group_id=source.group_id,
+            values_by_column_id=source.values_by_column_id,
+            updates=updates_by_item[item_id],
+        )
+        for item_id, source in sources.items()
+    }
+
+
+def _fetch_monday_updates(
+    api_token: str,
+    item_ids: set[str],
+) -> dict[str, tuple[MondayUpdateSource, ...]]:
+    result: dict[str, list[MondayUpdateSource]] = {
+        item_id: [] for item_id in sorted(item_ids)
+    }
+    ordered_ids = sorted(item_ids)
+    for offset in range(0, len(ordered_ids), 100):
+        batch = ordered_ids[offset : offset + 100]
+        page_number = 1
+        while True:
+            rows = _graphql_request(
+                api_token=api_token,
+                query=_APPLY_UPDATES_QUERY,
+                variables={
+                    "ids": batch,
+                    "limit": UPDATES_PAGE_SIZE,
+                    "page": page_number,
+                },
+            ).get("items", [])
+            by_id = {str(row.get("id")): row for row in rows}
+            missing = set(batch) - set(by_id)
+            if missing:
+                raise RuntimeError(
+                    f"Leitura de updates incompleta para {len(missing)} item(ns).",
+                )
+            page_full = False
+            for item_id in batch:
+                updates = by_id[item_id].get("updates") or []
+                page_full = page_full or len(updates) == UPDATES_PAGE_SIZE
+                for update in updates:
+                    update_id = str(update.get("id") or "").strip()
+                    body = str(
+                        update.get("text_body") or update.get("body") or "",
+                    ).strip()
+                    if not update_id or not body:
+                        continue
+                    creator = update.get("creator")
+                    author = (
+                        str(creator.get("name") or "").strip()
+                        if isinstance(creator, dict)
+                        else ""
+                    )
+                    created_at = str(update.get("created_at") or "").strip()
+                    result[item_id].append(
+                        MondayUpdateSource(
+                            update_id=update_id,
+                            body=body,
+                            author_name=author or None,
+                            created_at=created_at or None,
+                        ),
+                    )
+            if not page_full:
+                break
+            page_number += 1
+    return {item_id: tuple(updates) for item_id, updates in result.items()}
 
 
 def build_sunday_monday_id_index(
@@ -142,6 +240,37 @@ def build_sunday_monday_id_index(
     return index
 
 
+def build_sunday_comment_marker_index(
+    client,
+    *,
+    monday_id_index: dict[str, str],
+    inventory: MondayBoardInventory,
+) -> dict[str, set[str]]:
+    """Lê somente markers esperados, sem reter conteúdo dos comments Sunday."""
+    diagnostics_by_item = {
+        item.item_id: item.update_diagnostics for item in inventory.items
+    }
+    result: dict[str, set[str]] = {}
+    for monday_item_id, sunday_item_id in monday_id_index.items():
+        expected = {
+            comment_idempotency_marker(monday_item_id, update.update_id)
+            for update in diagnostics_by_item.get(monday_item_id, ())
+            if update.is_migratable
+        }
+        if not expected:
+            result[monday_item_id] = set()
+            continue
+        existing: set[str] = set()
+        for comment in client.list_comments(sunday_item_id):
+            existing.update(
+                line.strip()
+                for line in comment.body.splitlines()
+                if line.strip() in expected
+            )
+        result[monday_item_id] = existing
+    return result
+
+
 def derive_system_status_key(inventory: MondayBoardInventory, item_id: str) -> str:
     """Status de sistema Sunday (`done` vs `to_do`) pela semântica F2.1."""
     item = next((row for row in inventory.items if row.item_id == item_id), None)
@@ -156,6 +285,88 @@ def derive_system_status_key(inventory: MondayBoardInventory, item_id: str) -> s
     ):
         return "done"
     return "to_do"
+
+
+def format_monday_update_comment(
+    monday_item_id: str,
+    update: MondayUpdateSource,
+) -> str:
+    """Preserva conteúdo e só declara autor/data quando a origem os forneceu."""
+    metadata = ["Histórico importado do Monday"]
+    if update.author_name:
+        metadata.append(f"autor original: {' '.join(update.author_name.split())}")
+    if update.created_at:
+        metadata.append(f"data original: {' '.join(update.created_at.split())}")
+    marker = comment_idempotency_marker(monday_item_id, update.update_id)
+    return f"[{' · '.join(metadata)}]\n\n{update.body}\n\n{marker}"
+
+
+def _comment_marker_present(client, sunday_item_id: str, marker: str) -> bool:
+    return any(
+        marker in {line.strip() for line in comment.body.splitlines()}
+        for comment in client.list_comments(sunday_item_id)
+    )
+
+
+def migrate_monday_updates(
+    *,
+    client,
+    sunday_item_id: str,
+    monday_item_id: str,
+    updates: tuple[MondayUpdateSource, ...],
+    expected_update_ids: tuple[str, ...],
+    stats: ApplyWriteStats,
+) -> None:
+    """Cria comments idempotentes e exige confirmação por releitura."""
+    expected_ids = tuple(sorted(expected_update_ids))
+    actual_ids = tuple(sorted(update.update_id for update in updates))
+    if actual_ids != expected_ids:
+        raise RuntimeError(
+            f"Updates mudaram para item {monday_item_id}: "
+            f"PLAN={len(expected_ids)}, APPLY={len(actual_ids)}.",
+        )
+    for update in sorted(
+        updates,
+        key=lambda source: (source.created_at or "", source.update_id),
+    ):
+        marker = comment_idempotency_marker(monday_item_id, update.update_id)
+        if _comment_marker_present(client, sunday_item_id, marker):
+            stats.comments_skipped += 1
+            continue
+        client.add_comment(
+            sunday_item_id,
+            format_monday_update_comment(monday_item_id, update),
+        )
+        for _attempt in range(READ_BACK_ATTEMPTS):
+            if _comment_marker_present(client, sunday_item_id, marker):
+                stats.comments += 1
+                break
+        else:
+            raise RuntimeError(
+                f"Comment {marker} não persistiu após releitura do item "
+                f"{sunday_item_id}.",
+            )
+    missing_markers = [
+        comment_idempotency_marker(monday_item_id, update_id)
+        for update_id in expected_ids
+        if not _comment_marker_present(
+            client,
+            sunday_item_id,
+            comment_idempotency_marker(monday_item_id, update_id),
+        )
+    ]
+    if missing_markers:
+        raise RuntimeError(
+            f"Validação final encontrou {len(missing_markers)} comment(s) ausente(s) "
+            f"no item {sunday_item_id}.",
+        )
+
+
+def _verify_created_item_visible(client, board_id: str, item_id: str) -> None:
+    for _attempt in range(READ_BACK_ATTEMPTS):
+        if client.get_item(board_id, item_id) is not None:
+            return
+    raise RuntimeError(f"Item {item_id} não encontrado após CREATE.")
 
 
 def _column_plan_by_monday_id(board_plan: BoardPlan) -> dict[str, object]:
@@ -222,13 +433,6 @@ def apply_create_item(
 ) -> str:
     """Cria um item Sunday (CREATE) com campos mapeados e verificação."""
     write_stats = stats or ApplyWriteStats()
-    ledger_key = f"{plan.monday_board_id}:{operation.monday_item_id}"
-    records = load_persistent_ledger(DEFAULT_LEDGER_PATH)
-    if records.get(ledger_key, {}).get("migration_status") == "migrated":
-        existing = records[ledger_key].get("sunday_item_id")
-        if existing:
-            return str(existing)
-
     created = client.create_item(
         plan.sunday_board_id,
         apply_source.name or f"Item {operation.monday_item_id}",
@@ -236,6 +440,7 @@ def apply_create_item(
     )
     sunday_item_id = created.id
     write_stats.items_created += 1
+    _verify_created_item_visible(client, plan.sunday_board_id, sunday_item_id)
 
     monday_id_value = format_monday_id_column_value(
         plan.monday_board_id, operation.monday_item_id,
@@ -307,15 +512,24 @@ def apply_create_item(
         if monday_column.type == "status":
             write_stats.status_writes += 1
 
-    persisted = client.get_item(plan.sunday_board_id, sunday_item_id)
-    if persisted is None:
-        raise RuntimeError(f"Item {sunday_item_id} não encontrado após CREATE.")
     stored_monday_id = client.get_value(sunday_item_id, monday_id_column_id)
     if stored_monday_id != monday_id_value:
         raise RuntimeError(
             f"Monday ID não persistiu para item {operation.monday_item_id}: "
             f"{stored_monday_id!r} != {monday_id_value!r}",
         )
+    migrate_monday_updates(
+        client=client,
+        sunday_item_id=sunday_item_id,
+        monday_item_id=operation.monday_item_id,
+        updates=apply_source.updates,
+        expected_update_ids=tuple(
+            update.update_id
+            for update in operation.update_diagnostics
+            if update.is_migratable
+        ),
+        stats=write_stats,
+    )
     return sunday_item_id
 
 
