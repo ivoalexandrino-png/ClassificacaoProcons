@@ -16,16 +16,26 @@ percentuais — nunca conteúdo de itens.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 
+from classificacao_procons.migration.accounting import SourceAccounting
+from classificacao_procons.migration.board_disposition import (
+    BoardDispositionDryRun,
+    MondaySourceRow,
+    run_board_disposition_dry_run,
+)
+from classificacao_procons.migration.disposition_rules import board_disposition_rules
+from classificacao_procons.migration.dispositions import ALL_DISPOSITIONS, Disposition
 from classificacao_procons.migration.mappings import (
+    WAVE1_DOMAINS,
     WAVE1_FULL_BOARDS,
     build_board_plan,
     find_main_status_column,
     group_rule,
     item_is_concluded,
     sunday_board_by_monday_map,
+    validate_wave1_targets,
 )
 from classificacao_procons.migration.models import (
     BoardPlan,
@@ -44,11 +54,43 @@ from classificacao_procons.migration.user_mapping import (
 RECORTE_MONTHS = 12
 
 
+@dataclass(frozen=True)
+class BoardDryRunStats:
+    """Estatísticas agregadas por board (wave + disposição)."""
+
+    monday_board_id: str
+    board_name: str
+    sunday_board_id: str | None
+    source_total: int
+    wave_1: int
+    wave_2: int
+    dispositions: dict[str, int]
+    sunday_native: int = 0
+
+    def as_row(self) -> dict[str, object]:
+        return {
+            "board": self.board_name,
+            "monday_board_id": self.monday_board_id,
+            "sunday_board_id": self.sunday_board_id,
+            "source_total": self.source_total,
+            "WAVE_1": self.wave_1,
+            "WAVE_2": self.wave_2,
+            **{d.value: self.dispositions.get(d.value, 0) for d in ALL_DISPOSITIONS},
+            "SUNDAY_NATIVE": self.sunday_native,
+        }
+
+
 @dataclass
 class DryRunReport:
     cutoff_iso: str
     scenario: str
     items: list[ItemDryRunResult] = field(default_factory=list)
+    source_snapshot_timestamp: str = ""
+    source_snapshot_total: int = 0
+    source_count_by_board: dict[str, int] = field(default_factory=dict)
+    board_stats: list[BoardDryRunStats] = field(default_factory=list)
+    sunday_native_total: int = 0
+    disposition_runs: dict[str, BoardDispositionDryRun] = field(default_factory=dict)
 
     def counts(self) -> dict[Classification, int]:
         result: dict[Classification, int] = {
@@ -87,6 +129,52 @@ class DryRunReport:
                 result[flag] = result.get(flag, 0) + 1
         return result
 
+    def disposition_counts(self) -> dict[Disposition, int]:
+        counts: dict[Disposition, int] = {d: 0 for d in ALL_DISPOSITIONS}
+        for item in self.items:
+            if item.disposition is not None:
+                counts[item.disposition] += 1
+        return counts
+
+    def source_accounting(self) -> SourceAccounting:
+        counts: dict[Disposition, int] = {disposition: 0 for disposition in ALL_DISPOSITIONS}
+        for item in self.items:
+            if item.disposition is not None:
+                counts[item.disposition] += 1
+        return SourceAccounting(
+            source_snapshot_timestamp=self.source_snapshot_timestamp,
+            source_snapshot_total=self.source_snapshot_total,
+            counts=counts,
+            sunday_native_count=self.sunday_native_total,
+        )
+
+    def build_board_stats(self) -> list[BoardDryRunStats]:
+        stats: list[BoardDryRunStats] = []
+        for board_id, count in self.source_count_by_board.items():
+            board_items = [item for item in self.items if item.monday_board_id == board_id]
+            disp_counts: dict[str, int] = {d.value: 0 for d in ALL_DISPOSITIONS}
+            for item in board_items:
+                if item.disposition is not None:
+                    disp_counts[item.disposition.value] += 1
+            meta = WAVE1_DOMAINS.get(board_id, {"name": board_id})
+            sunday_id = sunday_board_by_monday_map().get(board_id)
+            native = 0
+            if board_id in self.disposition_runs:
+                native = len(self.disposition_runs[board_id].ledger.natives)
+            stats.append(
+                BoardDryRunStats(
+                    monday_board_id=board_id,
+                    board_name=meta["name"],
+                    sunday_board_id=sunday_id,
+                    source_total=count,
+                    wave_1=sum(1 for item in board_items if item.wave == "WAVE_1"),
+                    wave_2=sum(1 for item in board_items if item.wave == "WAVE_2"),
+                    dispositions=disp_counts,
+                    sunday_native=native,
+                ),
+            )
+        return stats
+
     def to_payload(self) -> dict:
         """Relatório agregado sanitizado (sem conteúdo de itens).
 
@@ -97,6 +185,7 @@ class DryRunReport:
         counts = self.counts()
         total = sum(counts.values())
         onda1 = counts["WAVE_1_READY"] + counts["MANUAL"] + counts["ERROR"]
+        accounting = self.source_accounting()
         return {
             "scenario": self.scenario,
             "cutoff": self.cutoff_iso,
@@ -105,6 +194,11 @@ class DryRunReport:
             "onda2_backfill_obrigatorio": counts["WAVE_2_HISTORICAL"],
             "meta_final": f"{total}/{total} itens no Sunday (duas ondas)",
             "counts": counts,
+            "dispositions": {d.value: accounting.counts.get(d, 0) for d in ALL_DISPOSITIONS},
+            "source_accounting": accounting.as_dict(),
+            "source_count_by_board": self.source_count_by_board,
+            "board_stats": [row.as_row() for row in self.build_board_stats()],
+            "sunday_native_total": self.sunday_native_total,
             "percentuais_sobre_onda1": {
                 key: (round(100 * value / onda1, 1) if onda1 else 0.0)
                 for key, value in counts.items()
@@ -308,6 +402,20 @@ def classify_item(
     )
 
 
+def _resolve_item_disposition(
+    wave_result: ItemDryRunResult,
+    board_disposition: Disposition,
+) -> Disposition:
+    """Combina classificação de onda com disposição do board."""
+    if wave_result.classification == "ERROR":
+        return Disposition.ERROR
+    if wave_result.classification == "MANUAL":
+        if board_disposition in {Disposition.MANUAL, Disposition.ERROR}:
+            return board_disposition
+        return Disposition.CREATE
+    return board_disposition
+
+
 def run_dry_run(
     inventories: dict[str, MondayBoardInventory],
     sunday_snapshots: dict[str, SundayBoardSnapshot],
@@ -319,11 +427,14 @@ def run_dry_run(
 ) -> tuple[DryRunReport, dict[str, BoardPlan], dict[str, int]]:
     """Executa o dry-run completo. NUNCA chama métodos de escrita.
 
-    Recebe dados prontos (inventários Monday e snapshots Sunday) — a coleta é
-    responsabilidade do chamador, o que garante por construção que este motor
-    não faz nenhuma chamada HTTP.
+    Integra classificação de onda (WAVE_1/WAVE_2 + bloqueios) com disposição
+    por board (CREATE/ADOPT/ABSORB/EXCLUDE_TEST/…). Recebe inventários prontos.
     """
+    if validate_wave1_targets():
+        raise ValueError("WAVE1_TARGETS incompleto: board sem sunday_board_id.")
+
     resolved_cutoff = cutoff or default_cutoff()
+    snapshot_ts = datetime.now(UTC).isoformat()
     board_map = sunday_board_by_monday_map()
     plans = {
         board_id: build_board_plan(
@@ -333,6 +444,7 @@ def run_dry_run(
         )
         for board_id, inventory in inventories.items()
     }
+
     selections = {}
     for board_id, inventory in inventories.items():
         selected, _concluded = select_recorte(inventory, cutoff=resolved_cutoff)
@@ -343,20 +455,61 @@ def run_dry_run(
         board_id: {item.item_id for item in inventory.items}
         for board_id, inventory in inventories.items()
     }
-    report = DryRunReport(cutoff_iso=resolved_cutoff.isoformat(), scenario=scenario)
+
+    disposition_runs: dict[str, BoardDispositionDryRun] = {}
+    disposition_by_item: dict[tuple[str, str], Disposition] = {}
+    sunday_native_total = 0
+    for board_id, inventory in inventories.items():
+        plan = plans[board_id]
+        rows = [MondaySourceRow(monday_item_id=item.item_id) for item in inventory.items]
+        rules = board_disposition_rules(
+            board_id,
+            sunday_board_id=plan.sunday_board_id,
+        )
+        board_run = run_board_disposition_dry_run(
+            rows=rows,
+            rules=rules,
+            source_snapshot_timestamp=snapshot_ts,
+        )
+        disposition_runs[board_id] = board_run
+        sunday_native_total += len(board_run.ledger.natives)
+        for entry in board_run.ledger.entries:
+            disposition_by_item[(board_id, entry.monday_item_id)] = entry.disposition
+
+    source_count_by_board = {
+        board_id: len(inventory.items) for board_id, inventory in inventories.items()
+    }
+    source_snapshot_total = sum(source_count_by_board.values())
+
+    report = DryRunReport(
+        cutoff_iso=resolved_cutoff.isoformat(),
+        scenario=scenario,
+        source_snapshot_timestamp=snapshot_ts,
+        source_snapshot_total=source_snapshot_total,
+        source_count_by_board=source_count_by_board,
+        sunday_native_total=sunday_native_total,
+        disposition_runs=disposition_runs,
+    )
+
     for board_id, inventory in inventories.items():
         plan = plans[board_id]
         for item in inventory.items:
-            report.items.append(
-                classify_item(
-                    item,
-                    plan=plan,
-                    in_recorte=item.item_id in selections[board_id],
-                    scenario=scenario,
-                    known_target_items=known_target_items,
-                    users_mapped=users_mapped,
-                    user_policy=user_policy,
-                    group_title=inventory.groups.get(item.group_id or ""),
-                ),
+            wave_result = classify_item(
+                item,
+                plan=plan,
+                in_recorte=item.item_id in selections[board_id],
+                scenario=scenario,
+                known_target_items=known_target_items,
+                users_mapped=users_mapped,
+                user_policy=user_policy,
+                group_title=inventory.groups.get(item.group_id or ""),
             )
+            board_disp = disposition_by_item.get(
+                (board_id, item.item_id),
+                Disposition.CREATE,
+            )
+            disposition = _resolve_item_disposition(wave_result, board_disp)
+            report.items.append(replace(wave_result, disposition=disposition))
+
+    report.board_stats = report.build_board_stats()
     return report, plans, pulled

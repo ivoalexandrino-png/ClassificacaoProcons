@@ -32,37 +32,40 @@ WAVE1_DOMAINS: dict[str, dict[str, str]] = {
     "5385471914": {"name": "Contratos", "domain": "contratos"},
 }
 
-# Destinos no Sunday (workspace 22). Só há candidato real para 2 boards (F0.13);
-# os demais são TARGET A CRIAR MANUALMENTE (None). Confiança avaliada por
-# estrutura, não por nome.
+# Destinos no Sunday (workspace 22) — mapeamento definitivo F2.5 (8 boards).
 WAVE1_TARGETS: dict[str, tuple[str | None, str | None, Confidence, str]] = {
+    "4944254220": ("82", "Legal - Procons", "ALTA", "Board Sunday 82 confirmado F2.5."),
+    "3961072966": ("83", "Legal - Prazos", "ALTA", "Board Sunday 83 confirmado F2.5."),
     "4443295406": (
         "72",
         "Legal - Audiências",
         "MEDIA",
-        "Candidato natural, mas só tem as 5 colunas de sistema — schema a completar.",
+        "Board Sunday 72; regras de disposição aprovadas (ADOPT/ABSORB/…).",
+    ),
+    "5343921475": (
+        "84",
+        "Legal - Processos Judiciais",
+        "ALTA",
+        "Quadro-mestre; alvo de relações Prazos/Audiências.",
+    ),
+    "4443297481": ("85", "Legal - Processos Trabalhista", "ALTA", "Board Sunday 85 F2.5."),
+    "5563754463": (
+        "86",
+        "Legal - KPI Processos Consumidores",
+        "ALTA",
+        "Board Sunday 86; exceção integral na Onda 1.",
     ),
     "5301515799": (
         "77",
         "Legal - Controle de Assinaturas - Jan & Luciano",
         "MEDIA",
-        "Candidato natural (mesmo domínio/filas), mas schema a completar.",
+        "Board Sunday 77; não greenfield.",
     ),
-    "4944254220": (None, None, "ALTA", "TARGET A CRIAR MANUALMENTE (board Procons)."),
-    "3961072966": (None, None, "ALTA", "TARGET A CRIAR MANUALMENTE (board Prazos)."),
-    "5343921475": (
-        None,
-        None,
-        "ALTA",
-        "TARGET A CRIAR MANUALMENTE (quadro-mestre; alvo de relações).",
-    ),
-    "4443297481": (None, None, "ALTA", "TARGET A CRIAR MANUALMENTE."),
-    "5563754463": (None, None, "ALTA", "TARGET A CRIAR MANUALMENTE (KPI)."),
     "5385471914": (
-        None,
-        None,
+        "87",
+        "Legal - Contratos",
         "ALTA",
-        "TARGET A CRIAR MANUALMENTE (Contratos; alvo de relações e subitens).",
+        "Board Sunday 87; Tipo derivado dos grupos; alvo de relações Controle.",
     ),
 }
 
@@ -73,6 +76,14 @@ WAVE1_RELATION_TARGETS: dict[tuple[str, str], str] = {
     ("3961072966", "processos consumidores"): "5343921475",
     ("4443295406", "processos judiciais"): "5343921475",
     ("5301515799", "contrato relacionado"): "5385471914",
+}
+
+# Relações por column_id (inequívoco; duas colunas homônimas em Audiências).
+WAVE1_RELATION_BY_COLUMN_ID: dict[tuple[str, str], str] = {
+    ("3961072966", "conectar_quadros"): "5343921475",
+    ("4443295406", "conectar_quadros__1"): "5343921475",
+    ("4443295406", "conectar_quadros8__1"): "5343921475",
+    ("5301515799", "board_relation_mm5ap90f"): "5385471914",
 }
 
 # Boards que entram INTEGRALMENTE na Onda 1 (exceções aprovadas ao recorte
@@ -379,6 +390,27 @@ def build_status_mappings(
     return mappings
 
 
+def validate_wave1_targets() -> list[str]:
+    """Retorna board_ids da Onda 1 sem sunday_board_id (deve ser vazio)."""
+    return [
+        board_id
+        for board_id, target in WAVE1_TARGETS.items()
+        if not target[0]
+    ]
+
+
+def validate_group_rules_coverage(
+    inventories: dict[str, MondayBoardInventory],
+) -> dict[str, list[str]]:
+    """Grupos presentes no inventário sem regra explícita (deve ser vazio)."""
+    missing: dict[str, list[str]] = {}
+    for board_id, inventory in inventories.items():
+        for group_id, title in inventory.groups.items():
+            if group_rule(board_id, title) is None:
+                missing.setdefault(board_id, []).append(f"{group_id}:{title}")
+    return missing
+
+
 def build_relation_plans(
     inventory: MondayBoardInventory,
     target: SundayBoardSnapshot | None,
@@ -388,7 +420,9 @@ def build_relation_plans(
     for column in inventory.columns:
         if column.type != "board_relation":
             continue
-        monday_target = WAVE1_RELATION_TARGETS.get(
+        monday_target = WAVE1_RELATION_BY_COLUMN_ID.get(
+            (inventory.board_id, column.id),
+        ) or WAVE1_RELATION_TARGETS.get(
             (inventory.board_id, _normalize(column.title)),
         )
         expected_sunday = sunday_board_by_monday.get(monday_target or "", None)

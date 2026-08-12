@@ -21,7 +21,11 @@ from classificacao_procons.migration.disposition_ledger import (
 )
 from classificacao_procons.migration.dispositions import Disposition
 from classificacao_procons.migration.dry_run import run_dry_run
-from classificacao_procons.migration.mappings import WAVE1_TARGETS, group_rule
+from classificacao_procons.migration.mappings import (
+    WAVE1_TARGETS,
+    group_rule,
+    validate_wave1_targets,
+)
 from classificacao_procons.migration.models import MondayBoardInventory, MondayItemDigest
 from classificacao_procons.migration.user_mapping import (
     UserMappingPolicy,
@@ -239,10 +243,12 @@ class TestGenericBoardRules:
 
 
 class TestUserMappingPolicy:
-    def test_should_load_28_active_and_30_deactivated_from_json(self) -> None:
+    def test_should_load_25_3_30_from_json(self) -> None:
         policy = load_user_mapping_policy("docs/monday-user-identities-2026-08-11.json")
-        assert len(policy.known_active_ids) == 28
+        assert len(policy.exact_match_ids) == 25
+        assert len(policy.active_unmatched_ids) == 3
         assert len(policy.deactivated_ids) == 30
+        assert len(policy.known_active_ids) == 28
 
     def test_should_assign_exact_match_without_manual(self, user_policy_25_3_30) -> None:
         assert classify_monday_user("exact-0", user_policy_25_3_30) == "exact"
@@ -263,6 +269,12 @@ class TestUserMappingPolicy:
     def test_should_manual_only_for_unknown_user(self, user_policy_25_3_30) -> None:
         assert classify_monday_user("brand-new", user_policy_25_3_30) == "unknown"
         assert people_assignment_requires_manual("brand-new", user_policy_25_3_30)
+
+    def test_should_only_three_approved_active_unmatched_bypass_manual(self) -> None:
+        policy = load_user_mapping_policy("docs/monday-user-identities-2026-08-11.json")
+        for uid in policy.active_unmatched_ids:
+            assert not people_assignment_requires_manual(uid, policy)
+        assert people_assignment_requires_manual("99999999999", policy)
 
     def test_should_not_manual_deactivated_in_global_dry_run(
         self, user_policy_25_3_30,
@@ -293,7 +305,35 @@ class TestUserMappingPolicy:
 class TestGlobalEngineRegression:
     def test_should_keep_wave1_targets_for_eight_boards(self) -> None:
         assert len(WAVE1_TARGETS) == 8
+        assert validate_wave1_targets() == []
 
     def test_should_keep_group_rules_for_known_groups(self) -> None:
         assert group_rule("5301515799", "Assinados") == ("preservar", "terminal")
         assert group_rule("4443295406", "audiencias (procons e processos)") is not None
+
+    def test_should_integrate_dispositions_in_global_dry_run(self) -> None:
+        from classificacao_procons.migration.models import MondayBoardInventory, MondayItemDigest
+
+        inventory = MondayBoardInventory(
+            board_id="4443295406",
+            name="Audiências",
+            groups={"g1": "audiencias (procons e processos)"},
+            columns=(),
+            items=(
+                MondayItemDigest(
+                    item_id="11322933382",
+                    group_id="g1",
+                    created_at="2026-01-10T00:00:00Z",
+                    updated_at="2026-01-10T00:00:00Z",
+                ),
+            ),
+        )
+        report, _plans, _pulled = run_dry_run(
+            {"4443295406": inventory},
+            {"72": None},
+            user_policy=load_user_mapping_policy(),
+        )
+        item = report.items[0]
+        assert item.disposition is Disposition.ADOPT
+        assert item.wave == "WAVE_1"
+        assert report.source_accounting().is_conserved

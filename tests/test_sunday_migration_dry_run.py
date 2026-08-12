@@ -107,7 +107,13 @@ def test_should_map_wave1_boards_with_explicit_targets():
     board_map = sunday_board_by_monday_map()
     assert board_map["4443295406"] == "72"
     assert board_map["5301515799"] == "77"
-    assert board_map["4944254220"] is None  # TARGET A CRIAR MANUALMENTE
+    assert board_map["4944254220"] == "82"
+    assert board_map["3961072966"] == "83"
+    assert board_map["5343921475"] == "84"
+    assert board_map["4443297481"] == "85"
+    assert board_map["5563754463"] == "86"
+    assert board_map["5385471914"] == "87"
+    assert all(board_map[board_id] for board_id in board_map)
 
 
 def test_should_plan_columns_by_real_type_rules():
