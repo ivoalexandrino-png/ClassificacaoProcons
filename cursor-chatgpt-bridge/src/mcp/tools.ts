@@ -5,7 +5,7 @@ import {
   agentIdSchema, changesSchema, conversationSchema, followupSchema, projectSchema, runIdSchema, startAgentSchema
 } from "./schemas.js";
 
-const textResult = (data: unknown) => ({
+const textResult = (data: Record<string, unknown>) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
   structuredContent: data
 });
