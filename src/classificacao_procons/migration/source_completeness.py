@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from classificacao_procons.migration.apply_writer import MondayApplySource
+from classificacao_procons.migration.column_transforms import is_file_to_link_mapping
 from classificacao_procons.migration.models import BoardPlan, MondayBoardInventory
 from classificacao_procons.migration.source_audit import (
     APPLY_WRITER_SKIP_TYPES,
@@ -110,6 +111,23 @@ def check_source_completeness_for_sources(
 
             if status in {"MAPPED_DIRECT", "MAPPED_TRANSFORM"}:
                 if monday_column.type in APPLY_WRITER_SKIP_TYPES:
+                    if is_file_to_link_mapping(inventory.board_id, monday_column.id):
+                        expected = derive_expected_sunday_value(
+                            monday_column=monday_column,
+                            source_text=source_text,
+                            board_plan=board_plan,
+                        )
+                        if expected is None:
+                            issues.append(
+                                SourceCompletenessIssue(
+                                    monday_item_id=item_id,
+                                    monday_column_id=monday_column.id,
+                                    field_name=monday_column.title,
+                                    issue="TRANSFORMATION_ERROR",
+                                    detail="FILE_TO_LINK sem URL utilizável",
+                                ),
+                            )
+                        continue
                     issues.append(
                         SourceCompletenessIssue(
                             monday_item_id=item_id,

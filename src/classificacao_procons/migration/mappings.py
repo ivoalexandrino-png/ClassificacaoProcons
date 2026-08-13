@@ -11,6 +11,10 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from classificacao_procons.migration.column_transforms import (
+    get_explicit_column_mapping,
+    resolve_sunday_column_from_explicit_mapping,
+)
 from classificacao_procons.migration.models import (
     BoardPlan,
     ColumnPlan,
@@ -224,13 +228,6 @@ MAIN_STATUS_TITLE_OVERRIDES: dict[str, str] = {
     "5385471914": "vigencia",
 }
 
-# De-para explícito Monday column_id → label Sunday quando o rótulo difere
-# (truncamento, Houve vs Teve, etc.). Chave normalizada via _normalize().
-COLUMN_LABEL_OVERRIDES: dict[tuple[str, str], str] = {
-    # Procons: Sunday col 609 label truncado "ouve Cancelamento de Assinatura?"
-    ("4944254220", "color_mknz9dwg"): "ouve cancelamento de assinatura?",
-}
-
 
 def _normalize(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text.casefold())
@@ -352,15 +349,33 @@ def build_column_plans(
     target_by_label = {
         _normalize(column.label): column for column in (target.columns if target else ())
     }
+    sunday_columns_by_id = {
+        column.id: column for column in (target.columns if target else ())
+    }
     for column in inventory.columns:
         strategy, sunday_target, note = _TYPE_STRATEGY.get(
             column.type, ("configurar_manualmente", None, f"Tipo {column.type} sem regra."),
         )
-        override_label = COLUMN_LABEL_OVERRIDES.get((inventory.board_id, column.id))
-        if override_label and target:
-            existing = target_by_label.get(_normalize(override_label))
+        explicit = get_explicit_column_mapping(inventory.board_id, column.id)
+        if explicit is not None and target is not None:
+            sunday_col_id, exists = resolve_sunday_column_from_explicit_mapping(
+                monday_board_id=inventory.board_id,
+                monday_column_id=column.id,
+                sunday_columns_by_id=sunday_columns_by_id,
+            )
+            if explicit.transform == "file_to_link":
+                strategy = "transformacao"
+                note = "FILE_TO_LINK: Monday file URL → Sunday link column (sem upload)"
+                sunday_target = "link"
+            elif explicit.transform == "status":
+                strategy = "configurar_manualmente"
+                note = explicit.documentation_label or note
+                sunday_target = "status"
+            existing = sunday_columns_by_id.get(sunday_col_id or "")
         else:
             existing = target_by_label.get(_normalize(column.title)) if target else None
+            sunday_col_id = existing.id if existing else None
+            exists = existing is not None
         plans.append(
             ColumnPlan(
                 monday_column_id=column.id,
@@ -368,8 +383,8 @@ def build_column_plans(
                 monday_type=column.type,
                 strategy=strategy,  # type: ignore[arg-type]
                 sunday_target=sunday_target,
-                sunday_column_id=existing.id if existing else None,
-                exists_in_target=existing is not None,
+                sunday_column_id=sunday_col_id if explicit else (existing.id if existing else None),
+                exists_in_target=exists if explicit else (existing is not None),
                 note=note,
             ),
         )

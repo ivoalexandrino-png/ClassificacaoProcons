@@ -157,6 +157,11 @@ def main() -> int:
         help="repair: allowlist CSV de nomes de coluna Monday a reparar",
     )
     parser.add_argument(
+        "--confirm-writes",
+        action="store_true",
+        help="obrigatório (junto com env) para qualquer APPLY",
+    )
+    parser.add_argument(
         "--apply-report-out",
         default="/tmp/sunday-migration-apply-report.json",
         help="relatório sanitizado do APPLY",
@@ -217,8 +222,6 @@ def main() -> int:
         sunday_board = BOARD_ALLOWLIST[args.board]
         sunday_snapshots = snapshot_from_live_client(client, [sunday_board])
         snapshot = sunday_snapshots[sunday_board]
-        monday_id_column_id = _find_monday_id_column(snapshot)
-        target_group_id = _find_target_group_id(snapshot)
         ledger = load_persistent_ledger(args.ledger)
         migrated_ids = {
             str(record["monday_item_id"])
@@ -227,9 +230,13 @@ def main() -> int:
             and record.get("migration_status") == "migrated"
         }
         scope_ids = requested_item_ids or frozenset(migrated_ids)
-        if args.max_items and len(scope_ids) > args.max_items:
+        if args.max_items and requested_item_ids is None and len(scope_ids) > args.max_items:
             scope_ids = frozenset(sorted(scope_ids)[: args.max_items])
         apply_sources = fetch_monday_apply_sources(token, args.board, item_ids=scope_ids)
+        audit_completed_at = os.environ.get(
+            "MIGRATION_AUDIT_COMPLETED_AT",
+            "2026-08-13T01:21:00+00:00",
+        )
         try:
             repair_plan = build_repair_plan(
                 monday_board_id=args.board,
@@ -238,12 +245,10 @@ def main() -> int:
                 sunday_snapshot=snapshot,
                 apply_sources=apply_sources,
                 client=client,
-                monday_id_column_id=monday_id_column_id,
-                target_group_id=target_group_id,
                 ledger_records=ledger,
-                item_ids=requested_item_ids,
-                field_filter=field_filter,
+                item_ids=requested_item_ids if requested_item_ids else scope_ids,
                 max_items=args.max_items if requested_item_ids is None else None,
+                audit_completed_at=audit_completed_at,
             )
         except RepairPlanAbort as exc:
             print(f"ABORT: {exc}")
@@ -260,10 +265,14 @@ def main() -> int:
                     "monday_board_id",
                     "sunday_board_id",
                     "mode",
+                    "items_scope",
                     "items_to_repair",
-                    "field_writes",
-                    "file_links",
-                    "comment_repairs",
+                    "status_writes",
+                    "notificacao_link_writes",
+                    "docs_sac_link_writes",
+                    "total_link_writes",
+                    "total_writes",
+                    "already_correct",
                     "blocked",
                 )
             },

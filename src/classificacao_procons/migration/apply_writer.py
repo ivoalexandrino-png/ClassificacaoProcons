@@ -8,6 +8,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from classificacao_procons.migration.column_transforms import (
+    derive_file_to_link_value,
+    get_explicit_column_mapping,
+    is_file_to_link_mapping,
+)
 from classificacao_procons.migration.executor import (
     ExecutionPlan,
     PlannedOperation,
@@ -415,6 +420,12 @@ def _sunday_value_for_monday_column(
         return text[:10] if len(text) >= 10 else text
     if monday_column.type in {"text", "long_text", "link", "email", "location"}:
         return text
+    explicit = get_explicit_column_mapping(board_plan.monday_board_id, monday_column.id)
+    if explicit is not None and explicit.transform == "file_to_link":
+        return derive_file_to_link_value(
+            source_text=text,
+            display_text=explicit.link_display_text or monday_column.title,
+        )
     return None
 
 
@@ -476,6 +487,33 @@ def apply_create_item(
     column_plans = _column_plan_by_monday_id(board_plan)
     sunday_columns = _sunday_column_by_id(sunday_snapshot)
     for monday_column in inventory.columns:
+        if is_file_to_link_mapping(plan.monday_board_id, monday_column.id):
+            plan_column = column_plans.get(monday_column.id)
+            if plan_column is None or not plan_column.exists_in_target:
+                continue
+            sunday_column_id = plan_column.sunday_column_id
+            if not sunday_column_id:
+                continue
+            sunday_column = sunday_columns.get(sunday_column_id)
+            if sunday_column is None or sunday_column.is_system:
+                continue
+            text = apply_source.values_by_column_id.get(monday_column.id)
+            value = _sunday_value_for_monday_column(
+                monday_column=monday_column,
+                text=text,
+                board_plan=board_plan,
+            )
+            if value is None:
+                continue
+            client.set_custom_value(
+                plan.sunday_board_id,
+                sunday_item_id,
+                sunday_column_id,
+                value,
+                verify=True,
+            )
+            write_stats.custom_values += 1
+            continue
         if monday_column.type in {
             "name", "subtasks", "mirror", "lookup", "item_id",
             "creation_log", "last_updated", "people", "file",

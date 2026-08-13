@@ -15,6 +15,12 @@ from classificacao_procons.migration.apply_writer import (
     derive_system_status_key,
     format_monday_id_column_value,
 )
+from classificacao_procons.migration.column_transforms import (
+    derive_file_to_link_value,
+    get_explicit_column_mapping,
+    is_file_to_link_mapping,
+    link_values_equal,
+)
 from classificacao_procons.migration.executor import (
     comment_idempotency_marker,
     load_persistent_ledger,
@@ -155,6 +161,12 @@ def derive_expected_sunday_value(
         return None
     if monday_column.type == "status":
         return _status_key_for_label(board_plan, monday_column.id, text)
+    explicit = get_explicit_column_mapping(board_plan.monday_board_id, monday_column.id)
+    if explicit is not None and explicit.transform == "file_to_link":
+        return derive_file_to_link_value(
+            source_text=text,
+            display_text=explicit.link_display_text or monday_column.title,
+        )
     if monday_column.type == "numbers":
         try:
             return float(text.replace(",", "."))
@@ -408,6 +420,43 @@ def audit_item_fields(
             )
             continue
 
+        if is_file_to_link_mapping(inventory.board_id, monday_column.id):
+            explicit = get_explicit_column_mapping(inventory.board_id, monday_column.id)
+            sunday_column_id = plan_column.sunday_column_id
+            expected = derive_expected_sunday_value(
+                monday_column=monday_column,
+                source_text=source_text,
+                board_plan=board_plan,
+            )
+            actual = (
+                client.get_value(sunday_item_id, sunday_column_id)
+                if sunday_column_id
+                else None
+            )
+            if expected is None:
+                row_result = "TRANSFORMATION_ERROR"
+            elif link_values_equal(expected, actual):
+                row_result = "MATCH"
+            elif _normalize_empty(actual):
+                row_result = "MISSING_TARGET_VALUE"
+            else:
+                row_result = "MISMATCH"
+            result.fields.append(
+                FieldAuditRow(
+                    monday_item_id=source.item_id,
+                    sunday_item_id=sunday_item_id,
+                    monday_column_id=monday_column.id,
+                    field_name=monday_column.title,
+                    mapping_status=mapping_status,
+                    result=row_result,
+                    source_value=source_text,
+                    expected_value=expected,
+                    actual_value=actual,
+                    note=explicit.documentation_label if explicit else "FILE_TO_LINK",
+                ),
+            )
+            continue
+
         if monday_column.type in APPLY_WRITER_SKIP_TYPES:
             result.fields.append(
                 FieldAuditRow(
@@ -473,6 +522,8 @@ def audit_item_fields(
 
 
 def _values_equal(expected: object, actual: object) -> bool:
+    if link_values_equal(expected, actual):
+        return True
     if isinstance(expected, float) and isinstance(actual, (int, float, str)):
         try:
             return abs(expected - float(str(actual).replace(",", "."))) < 1e-6
