@@ -355,6 +355,20 @@ def main() -> int:
         )
         return 3
 
+    from classificacao_procons.migration.source_completeness import (
+        check_source_completeness_for_sources,
+    )
+
+    completeness = check_source_completeness_for_sources(
+        inventory=scoped_inventory,
+        board_plan=board_plan,
+        apply_sources=apply_sources,
+        item_ids=selected_ids,
+    )
+    if not completeness.ok:
+        print(f"ABORT: source completeness guard: {completeness.detail}")
+        return 3
+
     migration_context = ApplyMigrationContext(
         inventory=scoped_inventory,
         board_plan=board_plan,
