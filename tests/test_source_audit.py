@@ -63,6 +63,7 @@ def test_classify_unmapped_when_target_column_missing():
 def test_legacy_checker_could_hide_missing_fields():
     info = explain_legacy_field_checker()
     assert info["could_produce_false_100_percent"] is True
+    assert info["semantic_resolution_unverified_not_counted_as_verified"] is True
     assert "people" in info["skips_apply_writer_types"]
 
 
