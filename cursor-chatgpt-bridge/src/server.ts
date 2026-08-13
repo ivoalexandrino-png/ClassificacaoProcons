@@ -118,7 +118,7 @@ export function createBridgeMcpServer(tools: BridgeTools): McpServer {
   server.registerTool(
     "cursor_project_register",
     {
-      description: "Register or update an explicit project-to-repository mapping.",
+      description: "Register an immutable project-to-repository mapping.",
       inputSchema: registerProjectSchema,
     },
     (input) => callTool(() => tools.registerProject(input)),
@@ -174,6 +174,16 @@ function databaseHealth(store: BridgeStore): "ok" | "error" {
   }
 }
 
+function requestPath(req: IncomingMessage): string | undefined {
+  const rawUrl = req.url ?? "/";
+  if (!rawUrl.startsWith("/")) return undefined;
+  try {
+    return new URL(rawUrl, "http://localhost").pathname;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createHttpServer(options: HttpServerOptions): Server {
   const handler = createMcpHandler(() => createBridgeMcpServer(options.tools));
   const nodeHandler = toNodeHandler(handler, {
@@ -181,8 +191,14 @@ export function createHttpServer(options: HttpServerOptions): Server {
   });
 
   return createServer((req, res) => {
-    const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
-    if (req.method === "GET" && url.pathname === "/health") {
+    const pathname = requestPath(req);
+    if (!pathname) {
+      json(res, 400, {
+        error: { code: "INVALID_INPUT", message: "Malformed request URL", details: {} },
+      });
+      return;
+    }
+    if (req.method === "GET" && pathname === "/health") {
       const database = databaseHealth(options.store);
       json(res, database === "ok" ? 200 : 503, {
         status: database === "ok" ? "ok" : "error",
@@ -192,7 +208,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
       });
       return;
     }
-    if (url.pathname !== "/mcp") {
+    if (pathname !== "/mcp") {
       json(res, 404, {
         error: { code: "NOT_FOUND", message: "Route not found", details: {} },
       });

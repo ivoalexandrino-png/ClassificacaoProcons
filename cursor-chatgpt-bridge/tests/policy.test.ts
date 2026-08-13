@@ -10,6 +10,7 @@ describe("dangerous action policy", () => {
     "kubectl delete namespace payments",
     "drop database customers",
     "rm -rf /",
+    "rm -fr /",
     "rotacionar secrets agora",
   ])("should block dangerous instruction without authorization: %s", (message) => {
     expect(evaluatePolicy(message)).toMatchObject({

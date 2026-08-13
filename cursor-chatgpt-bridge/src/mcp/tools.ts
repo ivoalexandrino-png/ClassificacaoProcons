@@ -79,7 +79,7 @@ export class BridgeTools {
         capabilities: {
           followup: true,
           conversation: true,
-          cancel_run: true,
+          cancel_run: "run_specific",
           local_changes: agent.mode === "local",
         },
       },
@@ -165,11 +165,7 @@ export class BridgeTools {
           );
         }
       } catch (error) {
-        this.logger.warn("cursor_run_refresh_failed", {
-          agent_id: agent.agent_id,
-          run_id: runId,
-          reason: error instanceof Error ? error.message : "unknown",
-        });
+        throw this.asCursorError(error);
       } finally {
         this.locks.release(agent.agent_id, runId);
       }
@@ -193,10 +189,16 @@ export class BridgeTools {
         reason: result.reason ?? "Cancellation is not supported by the Cursor provider",
       };
     }
-    this.store.completeRun(runId, "cancelled", run.response, null);
-    this.store.updateAgent(agent.agent_id, "cancelled");
+    const cancelled = this.store.completeRun(runId, "cancelled", run.response, null);
+    if (cancelled) {
+      this.store.updateAgent(agent.agent_id, "cancelled");
+    }
     this.locks.release(agent.agent_id, runId);
-    return { run_id: runId, supported: true, status: "cancelled" };
+    return {
+      run_id: runId,
+      supported: true,
+      status: this.requireRun(runId).status,
+    };
   }
 
   async getChanges(agentId: string, maxDiffCharacters?: number): Promise<StructuredResponse> {
@@ -256,19 +258,31 @@ export class BridgeTools {
     }
 
     this.locks.replace(agent.agent_id, pendingId, providerRun.runId);
-    const run = this.store.createRun({
-      runId: providerRun.runId,
-      agentId: agent.agent_id,
-      prompt,
-      metadata: {},
-    });
-    this.store.addMessage({
-      agentId: agent.agent_id,
-      runId: providerRun.runId,
-      role: "user",
-      content: prompt,
-    });
-    this.store.updateAgent(agent.agent_id, "running");
+    let run: RunRecord;
+    try {
+      run = this.store.beginRun({
+        runId: providerRun.runId,
+        agentId: agent.agent_id,
+        prompt,
+        metadata: {},
+      });
+    } catch (error) {
+      this.locks.release(agent.agent_id, providerRun.runId);
+      if (providerRun.supportsCancel) {
+        try {
+          await providerRun.cancel();
+        } catch (cancelError) {
+          this.logger.error("cursor_orphan_run_cancel_failed", {
+            agent_id: agent.agent_id,
+            run_id: providerRun.runId,
+            reason: cancelError instanceof Error ? cancelError.message : "unknown",
+          });
+        }
+      }
+      throw new BridgeError("INTERNAL_ERROR", "Unable to persist started Cursor run", {
+        reason: error instanceof Error ? error.message : "unknown",
+      });
+    }
     this.logger.info("cursor_run_started", {
       agent_id: agent.agent_id,
       run_id: providerRun.runId,
@@ -280,13 +294,15 @@ export class BridgeTools {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<RunRecord>((resolve) => {
       timer = setTimeout(() => {
-        this.store.completeRun(
+        const timedOut = this.store.completeRun(
           providerRun.runId,
           "timeout",
           null,
           `Run exceeded ${this.runTimeoutMs} ms; the Cursor run may still be active`,
         );
-        this.store.updateAgent(agent.agent_id, "timeout");
+        if (timedOut) {
+          this.store.updateAgent(agent.agent_id, "timeout");
+        }
         resolve(this.requireRun(providerRun.runId));
       }, this.runTimeoutMs);
     });
@@ -301,8 +317,10 @@ export class BridgeTools {
       return this.persistResult(agent, providerRun, result);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Unknown Cursor run error";
-      this.store.completeRun(providerRun.runId, "error", null, reason);
-      this.store.updateAgent(agent.agent_id, "error");
+      const finalized = this.store.completeRun(providerRun.runId, "error", null, reason);
+      if (finalized) {
+        this.store.updateAgent(agent.agent_id, "error");
+      }
       return this.requireRun(providerRun.runId);
     } finally {
       this.locks.release(agent.agent_id, providerRun.runId);
@@ -314,37 +332,32 @@ export class BridgeTools {
     providerRun: ProviderRun,
     result: ProviderRunResult,
   ): RunRecord {
-    for (const message of result.messages) {
-      this.store.addMessage({
-        agentId: agent.agent_id,
-        runId: providerRun.runId,
-        role: message.role,
-        content: message.content,
-        metadata: message.metadata,
-      });
+    const messages = [...result.messages];
+    if (
+      result.response &&
+      !messages.some(
+        (message) => message.role === "assistant" && message.content === result.response,
+      )
+    ) {
+      messages.push({ role: "assistant", content: result.response });
     }
-    if (result.response) {
-      this.store.addMessage({
-        agentId: agent.agent_id,
-        runId: providerRun.runId,
-        role: "assistant",
-        content: result.response,
-      });
-    }
-    this.store.completeRun(
-      providerRun.runId,
-      result.status,
-      result.response,
-      result.error,
-      result.metadata,
-    );
-    this.store.updateAgent(agent.agent_id, result.status);
-    this.logger.info("cursor_run_completed", {
-      agent_id: agent.agent_id,
-      run_id: providerRun.runId,
+    const finalized = this.store.finalizeRun({
+      runId: providerRun.runId,
       status: result.status,
-      duration_ms: result.metadata.duration_ms,
+      response: result.response,
+      error: result.error,
+      metadata: result.metadata,
+      messages,
     });
+    if (finalized) {
+      this.store.updateAgent(agent.agent_id, result.status);
+      this.logger.info("cursor_run_completed", {
+        agent_id: agent.agent_id,
+        run_id: providerRun.runId,
+        status: result.status,
+        duration_ms: result.metadata.duration_ms,
+      });
+    }
     return this.requireRun(providerRun.runId);
   }
 

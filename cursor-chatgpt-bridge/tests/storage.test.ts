@@ -47,7 +47,7 @@ describe("BridgeStore", () => {
     ]);
   });
 
-  it("should update an existing project without changing its id", () => {
+  it("should keep project mappings immutable after registration", () => {
     store = new BridgeStore(":memory:");
     const original = store.registerProject({
       name: "sunday",
@@ -55,16 +55,57 @@ describe("BridgeStore", () => {
       workingDirectory: "/tmp/a",
       defaultBranch: "main",
     });
-    const updated = store.registerProject({
-      name: "Sunday",
-      repository: "repo-b",
-      workingDirectory: "/tmp/b",
-      defaultBranch: "develop",
-    });
-
-    expect(updated.id).toBe(original.id);
-    expect(updated.repository).toBe("repo-b");
-    expect(updated.default_branch).toBe("develop");
+    expect(
+      store.registerProject({
+        name: "Sunday",
+        repository: "repo-a",
+        workingDirectory: "/tmp/a",
+        defaultBranch: "main",
+      }),
+    ).toEqual(original);
+    expect(() =>
+      store!.registerProject({
+        name: "Sunday",
+        repository: "repo-b",
+        workingDirectory: "/tmp/b",
+        defaultBranch: "develop",
+      }),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_INPUT" }));
     expect(store.listProjects()).toHaveLength(1);
+  });
+
+  it("should finalize a run and its messages exactly once", () => {
+    store = new BridgeStore(":memory:");
+    const project = store.registerProject({
+      name: "sunday",
+      repository: "repo",
+      workingDirectory: "/tmp",
+      defaultBranch: "main",
+    });
+    store.createAgent({
+      agentId: "agent-1",
+      projectId: project.id,
+      mode: "local",
+    });
+    store.beginRun({
+      runId: "run-1",
+      agentId: "agent-1",
+      prompt: "Continue",
+    });
+    const result = {
+      runId: "run-1",
+      status: "completed" as const,
+      response: "Done",
+      error: null,
+      metadata: {},
+      messages: [{ role: "assistant" as const, content: "Done" }],
+    };
+
+    expect(store.finalizeRun(result)).toBe(true);
+    expect(store.finalizeRun(result)).toBe(false);
+    expect(store.getConversation("agent-1", 20).map((item) => item.content)).toEqual([
+      "Continue",
+      "Done",
+    ]);
   });
 });

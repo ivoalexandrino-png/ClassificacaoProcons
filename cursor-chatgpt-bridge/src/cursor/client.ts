@@ -41,7 +41,22 @@ function conversationMessages(turns: ConversationTurn[]): ProviderMessage[] {
       continue;
     }
     for (const step of item.turn.steps) {
-      if (step.type === "toolCall") {
+      if (step.type === "assistantMessage") {
+        messages.push({
+          role: "assistant",
+          content: step.message.text,
+          metadata: { type: "assistantMessage" },
+        });
+      } else if (step.type === "thinkingMessage") {
+        messages.push({
+          role: "system",
+          content: step.message.text,
+          metadata: {
+            type: "thinkingMessage",
+            thinking_duration_ms: step.message.thinkingDurationMs,
+          },
+        });
+      } else {
         messages.push({
           role: "tool",
           content: limitedJson(step.message),

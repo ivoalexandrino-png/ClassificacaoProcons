@@ -15,7 +15,8 @@ const dangerousRules: Array<{ name: string; pattern: RegExp }> = [
   { name: "force_push", pattern: /\bgit\s+push\b[^\n]*(--force|-f)\b|\bforce\s+push\b/i },
   {
     name: "critical_recursive_delete",
-    pattern: /\brm\s+-rf\b.{0,30}(\/|~|\.git|data|database|credentials|secrets)/i,
+    pattern:
+      /\brm\s+-(?:[a-z]*r[a-z]*f|[a-z]*f[a-z]*r)\b.{0,30}(\/|~|\.git|data|database|credentials|secrets)/i,
   },
   {
     name: "credential_change",

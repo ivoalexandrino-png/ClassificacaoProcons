@@ -1,5 +1,5 @@
 import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
+import { request, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
   AgentRuntimeContext,
@@ -88,6 +88,20 @@ describe("HTTP authentication", () => {
       cursor_sdk_configured: true,
       database: "ok",
     });
+  });
+
+  it("should not crash when the Host header is malformed", async () => {
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      const req = request(`${endpoint}/health`, { headers: { host: "]" } }, (response) => {
+        response.resume();
+        response.on("end", () => resolve(response.statusCode));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+
+    expect(status).toBe(200);
+    await expect(fetch(`${endpoint}/health`).then((response) => response.status)).resolves.toBe(200);
   });
 
   it.each([

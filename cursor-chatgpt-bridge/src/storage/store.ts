@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { BridgeError } from "../errors.js";
 import type {
   AgentMode,
   AgentRecord,
@@ -132,20 +133,19 @@ export class BridgeStore {
     const now = new Date().toISOString();
     const existing = this.getProjectByName(input.name);
     if (existing) {
-      this.database
-        .prepare(
-          `UPDATE projects
-           SET repository = ?, working_directory = ?, default_branch = ?, updated_at = ?
-           WHERE id = ?`,
-        )
-        .run(
-          input.repository,
-          input.workingDirectory,
-          input.defaultBranch,
-          now,
-          existing.id,
+      if (
+        existing.repository !== input.repository ||
+        existing.working_directory !== input.workingDirectory ||
+        existing.default_branch !== input.defaultBranch
+      ) {
+        throw new BridgeError(
+          "INVALID_INPUT",
+          "Registered project mappings are immutable",
+          { project: existing.name },
+          409,
         );
-      return this.getProjectById(existing.id)!;
+      }
+      return existing;
     }
     const id = randomUUID();
     this.database
@@ -278,6 +278,25 @@ export class BridgeStore {
     return this.getRun(input.runId)!;
   }
 
+  beginRun(input: {
+    runId: string;
+    agentId: string;
+    prompt: string;
+    metadata?: Record<string, unknown>;
+  }): RunRecord {
+    return this.database.transaction(() => {
+      const run = this.createRun(input);
+      this.addMessage({
+        agentId: input.agentId,
+        runId: input.runId,
+        role: "user",
+        content: input.prompt,
+      });
+      this.updateAgent(input.agentId, "running");
+      return run;
+    })();
+  }
+
   getRun(runId: string): RunRecord | undefined {
     const row = this.database.prepare("SELECT * FROM runs WHERE run_id = ?").get(runId) as
       | DatabaseRow
@@ -309,12 +328,15 @@ export class BridgeStore {
     response: string | null,
     error: string | null,
     metadata?: Record<string, unknown>,
-  ): void {
+  ): boolean {
     const completedAt = status === "timeout" ? null : new Date().toISOString();
-    this.database
+    const allowedCurrentStatuses =
+      status === "timeout" ? "status = 'running'" : "status IN ('running', 'timeout')";
+    const result = this.database
       .prepare(
         `UPDATE runs SET status = ?, response = ?, completed_at = ?, error = ?,
-         metadata = COALESCE(?, metadata) WHERE run_id = ?`,
+         metadata = COALESCE(?, metadata)
+         WHERE run_id = ? AND ${allowedCurrentStatuses}`,
       )
       .run(
         status,
@@ -324,6 +346,43 @@ export class BridgeStore {
         metadata ? JSON.stringify(metadata) : null,
         runId,
       );
+    return result.changes === 1;
+  }
+
+  finalizeRun(input: {
+    runId: string;
+    status: Exclude<RunStatus, "running" | "timeout">;
+    response: string | null;
+    error: string | null;
+    metadata: Record<string, unknown>;
+    messages: Array<{
+      role: MessageRole;
+      content: string;
+      metadata?: Record<string, unknown>;
+    }>;
+  }): boolean {
+    return this.database.transaction(() => {
+      const finalized = this.completeRun(
+        input.runId,
+        input.status,
+        input.response,
+        input.error,
+        input.metadata,
+      );
+      if (!finalized) return false;
+      const run = this.getRun(input.runId);
+      if (!run) return false;
+      for (const message of input.messages) {
+        this.addMessage({
+          agentId: run.agent_id,
+          runId: input.runId,
+          role: message.role,
+          content: message.content,
+          metadata: message.metadata,
+        });
+      }
+      return true;
+    })();
   }
 
   addMessage(input: {

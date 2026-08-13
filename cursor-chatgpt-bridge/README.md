@@ -10,7 +10,7 @@ ChatGPT → remote MCP → bridge → official Cursor SDK → repository
 
 ## What is implemented
 
-- Streamable HTTP MCP endpoint at `POST/GET/DELETE /mcp`, plus optional stdio transport.
+- Stateless Streamable HTTP MCP endpoint at `/mcp`, plus optional stdio transport.
 - Static bearer authentication on every HTTP MCP request.
 - Official Cursor TypeScript SDK for local and cloud agents.
 - Durable SQLite storage for projects, agents, runs, and messages.
@@ -120,12 +120,13 @@ For local Cursor agents, also mount each registered repository at the exact
 | `cursor_get_run` | Read and, when possible, refresh a run |
 | `cursor_cancel_run` | Call real SDK cancellation; never simulate cancellation |
 | `cursor_get_changes` | Return bounded local git status, files, diff stat, diff, and commits |
-| `cursor_project_register` | Register or update a project mapping |
+| `cursor_project_register` | Register an immutable project mapping |
 | `cursor_list_projects` | List registered projects |
 
 Projects must be registered before `cursor_start_agent`. The start request's repository and
 working directory must exactly match the registered project, which prevents a model from silently
-redirecting a known project to another checkout.
+redirecting a known project to another checkout. A project name cannot be rebound after
+registration; register a new name for a deliberate migration.
 
 ## Cursor SDK behavior
 
@@ -141,9 +142,10 @@ This project uses `@cursor/sdk` 1.0.27:
 - `run.cancel()` performs real local or cloud cancellation when `run.supports("cancel")` is true.
 
 Local agents execute filesystem and tool work on the bridge host. Model inference still goes
-through Cursor. Cloud agents execute in a Cursor environment. The bridge stores everything that
-passes through it, but the SDK currently exposes full stored user/assistant message listing only
-for local agents; bridge-local persistence therefore remains the portable conversation source.
+through Cursor. Cloud agents execute in a Cursor environment. The bridge stores prompts, final
+responses, and the assistant, thinking, tool, and shell steps exposed by `run.conversation()`.
+The SDK currently exposes full stored user/assistant message listing only for local agents;
+bridge-local persistence therefore remains the portable conversation source.
 
 ## Security and policy
 
@@ -263,9 +265,9 @@ Tool errors use:
 }
 ```
 
-Stable codes include `UNAUTHORIZED`, `PROJECT_NOT_FOUND`, `AGENT_NOT_FOUND`, `RUN_NOT_FOUND`,
-`AGENT_BUSY`, `CURSOR_API_ERROR`, `RUN_TIMEOUT`, `BLOCKED_BY_POLICY`, `INVALID_INPUT`, and
-`INTERNAL_ERROR`.
+Stable error-envelope codes include `UNAUTHORIZED`, `PROJECT_NOT_FOUND`, `AGENT_NOT_FOUND`,
+`RUN_NOT_FOUND`, `AGENT_BUSY`, `CURSOR_API_ERROR`, `BLOCKED_BY_POLICY`, `INVALID_INPUT`, and
+`INTERNAL_ERROR`. Long-running calls report timeout as run status `timeout`, preserving the run ID.
 
 ## Current limitations
 
@@ -274,6 +276,9 @@ Stable codes include `UNAUTHORIZED`, `PROJECT_NOT_FOUND`, `AGENT_NOT_FOUND`, `RU
   OAuth gateway or Secure MCP Tunnel configuration that injects the bridge token.
 - SQLite and in-process locking target a single bridge replica. Horizontal deployment needs a
   shared database and distributed lock.
+- Cursor run dispatch and SQLite cannot share one atomic transaction. If the process dies after
+  Cursor accepts a prompt but before local persistence commits, that run must be reconciled from
+  Cursor manually.
 - Full git diff inspection is local-only. Cloud results expose Cursor's returned branch/PR
   metadata when available.
 - Untracked files appear in `files`/`git_status`, but their contents are not included in

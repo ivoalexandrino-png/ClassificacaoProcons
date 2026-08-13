@@ -26,6 +26,7 @@ function deferred<T>() {
 
 class MockProvider implements CursorAgentProvider {
   sendCount = 0;
+  getRunError: Error | undefined;
   private runNumber = 0;
   nextResult = deferred<ProviderRunResult>();
   runs = new Map<string, ProviderRun>();
@@ -73,6 +74,7 @@ class MockProvider implements CursorAgentProvider {
     runId: string,
     _context: AgentRuntimeContext,
   ): Promise<ProviderRun> {
+    if (this.getRunError) return Promise.reject(this.getRunError);
     const run = this.runs.get(runId);
     if (!run) return Promise.reject(new Error("missing mock run"));
     return Promise.resolve(run);
@@ -120,7 +122,7 @@ describe("BridgeTools", () => {
       agent: {
         agent_id: "agent-1",
         project: "sunday",
-        capabilities: { followup: true, cancel_run: true },
+        capabilities: { followup: true, cancel_run: "run_specific" },
       },
     });
   });
@@ -138,7 +140,10 @@ describe("BridgeTools", () => {
       status: "completed",
       response: "Tests added",
       error: null,
-      messages: [{ role: "tool", content: "pytest passed" }],
+      messages: [
+        { role: "tool", content: "pytest passed" },
+        { role: "assistant", content: "Tests added" },
+      ],
       metadata: { duration_ms: 50 },
     });
 
@@ -204,6 +209,21 @@ describe("BridgeTools", () => {
       requires_explicit_authorization: true,
     });
     expect(provider.sendCount).toBe(0);
+  });
+
+  it("should propagate provider failures while refreshing a persisted run", async () => {
+    const { tools, provider } = setup();
+    store!.beginRun({
+      runId: "run-stale",
+      agentId: "agent-1",
+      prompt: "Persisted before restart",
+    });
+    provider.getRunError = new Error("Cursor authentication failed");
+
+    await expect(tools.getRun("run-stale")).rejects.toMatchObject({
+      code: "CURSOR_API_ERROR",
+    });
+    expect(store!.getRun("run-stale")?.status).toBe("running");
   });
 
   it("should report missing agents and projects with stable codes", async () => {
