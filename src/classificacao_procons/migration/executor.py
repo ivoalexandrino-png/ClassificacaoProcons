@@ -415,6 +415,7 @@ def build_execution_plan(
     sunday_monday_id_index: dict[str, str] | None = None,
     sunday_comment_markers: dict[str, set[str]] | None = None,
     sunday_schema_checks: list[GateCheck] | None = None,
+    source_completeness_check: GateCheck | None = None,
 ) -> ExecutionPlan:
     """Monta o plano executável a partir do dry-run canônico (zero escrita)."""
     board_id = inventory.board_id
@@ -618,6 +619,8 @@ def build_execution_plan(
         relations_unresolved=[write for write in relations if write.unresolved],
     )
     plan.gate = _build_gate(plan, sunday_schema_checks or [])
+    if source_completeness_check is not None:
+        plan.gate.append(source_completeness_check)
     return plan
 
 
