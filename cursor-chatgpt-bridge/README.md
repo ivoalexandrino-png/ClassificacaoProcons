@@ -34,6 +34,7 @@ curl http://localhost:3000/health
 curl -X POST http://localhost:3000/mcp \
   -H "Authorization: Bearer $CURSOR_BRIDGE_TOKEN" \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}'
 ```
 

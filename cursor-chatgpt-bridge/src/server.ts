@@ -33,7 +33,7 @@ export function createHttpServer(config: Config, provider: CursorAgentProvider) 
       }
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: randomUUID,
-        onsessioninitialized: (id) => transports.set(id, transport!)
+        onsessioninitialized: (id) => { transports.set(id, transport!); }
       });
       transport.onclose = () => {
         if (transport?.sessionId) transports.delete(transport.sessionId);
@@ -47,6 +47,7 @@ export function createHttpServer(config: Config, provider: CursorAgentProvider) 
   app.get("/mcp", (request, response, next) => { void handleMcp(request, response).catch(next); });
   app.delete("/mcp", (request, response, next) => { void handleMcp(request, response).catch(next); });
   app.use((error: unknown, _request: Request, response: Response, _next: express.NextFunction) => {
+    void _next;
     logger.error({ event: "http_request_failed", message: error instanceof Error ? error.message : "Unknown error" });
     response.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Internal server error", details: {} } });
   });

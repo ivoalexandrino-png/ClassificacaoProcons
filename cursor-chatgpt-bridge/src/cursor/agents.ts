@@ -28,7 +28,7 @@ export class BridgeService {
   listProjects(): Project[] { return this.store.listProjects(); }
 
   listAgents(): Array<AgentRecord & { project: Project }> {
-    return this.store.listAgents().map((agent) => ({ agent, project: this.requireProject(agent.projectId) }));
+    return this.store.listAgents().map((agent) => ({ ...agent, project: this.requireProject(agent.projectId) }));
   }
 
   getAgent(agentId: string): AgentRecord & { project: Project; activeRunId?: string } {

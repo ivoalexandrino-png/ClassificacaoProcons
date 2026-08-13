@@ -52,17 +52,17 @@ export class BridgeStore {
   }
 
   listProjects(): Project[] {
-    return this.db.prepare("SELECT * FROM projects ORDER BY name").all().map(this.toProject);
+    return (this.db.prepare("SELECT * FROM projects ORDER BY name").all() as Record<string, unknown>[]).map(this.toProject);
   }
 
   getProjectByName(name: string): Project | undefined {
     const row = this.db.prepare("SELECT * FROM projects WHERE name = ?").get(name);
-    return row ? this.toProject(row) : undefined;
+    return row ? this.toProject(row as Record<string, unknown>) : undefined;
   }
 
   getProject(id: number): Project | undefined {
     const row = this.db.prepare("SELECT * FROM projects WHERE id = ?").get(id);
-    return row ? this.toProject(row) : undefined;
+    return row ? this.toProject(row as Record<string, unknown>) : undefined;
   }
 
   createAgent(agent: AgentRecord): void {
@@ -74,11 +74,11 @@ export class BridgeStore {
 
   getAgent(agentId: string): AgentRecord | undefined {
     const row = this.db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(agentId);
-    return row ? this.toAgent(row) : undefined;
+    return row ? this.toAgent(row as Record<string, unknown>) : undefined;
   }
 
   listAgents(): AgentRecord[] {
-    return this.db.prepare("SELECT * FROM agents ORDER BY last_activity_at DESC").all().map(this.toAgent);
+    return (this.db.prepare("SELECT * FROM agents ORDER BY last_activity_at DESC").all() as Record<string, unknown>[]).map(this.toAgent);
   }
 
   updateAgentStatus(agentId: string, status: AgentRecord["status"]): void {
@@ -94,7 +94,7 @@ export class BridgeStore {
 
   getRun(runId: string): RunRecord | undefined {
     const row = this.db.prepare("SELECT * FROM runs WHERE run_id = ?").get(runId);
-    return row ? this.toRun(row) : undefined;
+    return row ? this.toRun(row as Record<string, unknown>) : undefined;
   }
 
   updateRun(runId: string, update: Pick<RunRecord, "status" | "response" | "completedAt" | "error">): void {
@@ -111,9 +111,9 @@ export class BridgeStore {
   }
 
   getConversation(agentId: string, limit: number): MessageRecord[] {
-    return this.db.prepare(`
+    return (this.db.prepare(`
       SELECT * FROM (SELECT * FROM messages WHERE agent_id = ? ORDER BY id DESC LIMIT ?) ORDER BY id ASC
-    `).all(agentId, limit).map(this.toMessage);
+    `).all(agentId, limit) as Record<string, unknown>[]).map(this.toMessage);
   }
 
   private toProject = (row: Record<string, unknown>): Project => ({
