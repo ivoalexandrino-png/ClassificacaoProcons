@@ -272,8 +272,11 @@ def main() -> int:
                     "docs_sac_link_writes",
                     "total_link_writes",
                     "total_writes",
-                    "already_correct",
+                    "skip_source_empty",
+                    "skip_already_correct",
                     "blocked",
+                    "gate_ok",
+                    "gate_detail",
                 )
             },
             ensure_ascii=False,
