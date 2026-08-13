@@ -114,14 +114,12 @@ def _parse_requested_item_ids(
     if item_id and item_ids:
         raise ExecutorAbort("Use --item-id OU --item-ids, não ambos.")
     if item_ids:
-        parsed = frozenset(
-            value.strip()
-            for value in item_ids.split(",")
-            if value.strip()
-        )
-        if not parsed:
+        raw_values = [value.strip() for value in item_ids.split(",") if value.strip()]
+        if not raw_values:
             raise ExecutorAbort("--item-ids vazio.")
-        return parsed
+        if len(raw_values) != len(set(raw_values)):
+            raise ExecutorAbort("--item-ids contém IDs duplicados.")
+        return frozenset(raw_values)
     if item_id:
         value = item_id.strip()
         if not value:
@@ -307,17 +305,11 @@ def main() -> int:
 
     try:
         counts = payload.get("counts", {})
-        scoped_ids = requested_item_ids
-        if scoped_ids is not None:
-            expected_writable = len(scoped_ids)
-        else:
-            expected_writable = counts.get("create", 0) + counts.get("resume", 0)
+        expected_writable = counts.get("create", 0) + counts.get("resume", 0)
         _validate_plan_payload(
             payload,
             expected_writable=expected_writable,
-            allow_already_migrated=(
-                scoped_ids is None and counts.get("already_migrated", 0) > 0
-            ),
+            allow_already_migrated=counts.get("already_migrated", 0) > 0,
             expected_comments=args.max_comments,
         )
     except ExecutorAbort as exc:
@@ -403,7 +395,6 @@ def main() -> int:
         wave=args.wave,
         max_items=args.max_items,
         item_ids=requested_item_ids,
-        max_comments=args.max_comments,
         mode="plan",
         user_policy=policy,
         persistent_ledger=load_persistent_ledger(args.ledger),

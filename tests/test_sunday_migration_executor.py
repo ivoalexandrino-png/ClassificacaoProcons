@@ -820,7 +820,31 @@ def test_item_ids_rejects_missing_id():
         _plan_for(inventory, item_ids=frozenset({"2", "404"}))
 
 
-def test_item_ids_rejects_already_migrated_in_batch(tmp_path):
+def test_item_ids_allows_multi_already_migrated_batch():
+    inventory = _kpi_inventory()
+    ledger = {
+        f"{KPI_BOARD}:{item_id}": {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": item_id,
+            "sunday_board_id": "86",
+            "sunday_item_id": f"900{item_id}",
+            "migration_status": "migrated",
+        }
+        for item_id in ("2", "3")
+    }
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"2", "3"}),
+        max_items=2,
+        max_comments=0,
+        ledger=ledger,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.counts() == {"already_migrated": 2}
+    assert sum(op.comments_to_create for op in plan.operations) == 0
+
+
+def test_item_ids_mixed_create_and_already_migrated():
     inventory = _kpi_inventory()
     ledger = {
         f"{KPI_BOARD}:2": {
@@ -831,8 +855,147 @@ def test_item_ids_rejects_already_migrated_in_batch(tmp_path):
             "migration_status": "migrated",
         },
     }
-    with pytest.raises(ExecutorAbort, match="already_migrated"):
-        _plan_for(inventory, item_ids=frozenset({"2", "3"}), ledger=ledger)
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"2", "3"}),
+        max_items=2,
+        max_comments=0,
+        ledger=ledger,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.counts() == {"already_migrated": 1, "create": 1}
+
+
+def test_item_ids_rejects_blocked_item_in_allowlist():
+    items = (
+        MondayItemDigest(
+            item_id="1",
+            group_id="g2023",
+            created_at=RECENT,
+            updated_at=RECENT,
+            people_ids=("999",),
+        ),
+        MondayItemDigest(item_id="2", group_id="g2023", created_at=RECENT, updated_at=RECENT),
+    )
+    with pytest.raises(ExecutorAbort, match="blocked"):
+        _plan_for(
+            _kpi_inventory(items),
+            item_ids=frozenset({"1", "2"}),
+            max_items=2,
+            schema_checks=[GateCheck("schema_live_verificado", True)],
+        )
+
+
+def test_item_ids_rejects_item_outside_wave():
+    inventory = _kpi_inventory()
+    with pytest.raises(ExecutorAbort, match="WAVE_2"):
+        _plan_for(inventory, item_ids=frozenset({"1"}), wave=2, max_items=1)
+
+
+def test_item_ids_frozenset_normalizes_duplicate_ids():
+    inventory = _kpi_inventory()
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"2", "2", "3"}),
+        max_items=2,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.requested_item_ids == ("2", "3")
+    assert len(plan.operations) == 2
+
+
+def test_max_comments_zero_for_fully_migrated_allowlist():
+    inventory = _kpi_inventory()
+    ledger = {
+        f"{KPI_BOARD}:1": {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": "1",
+            "sunday_board_id": "86",
+            "sunday_item_id": "9001",
+            "migration_status": "migrated",
+        },
+    }
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"1"}),
+        max_items=1,
+        max_comments=0,
+        ledger=ledger,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.counts() == {"already_migrated": 1}
+
+
+def test_max_comments_counts_only_pending_comments_in_mixed_scope():
+    inventory = MondayBoardInventory(
+        board_id=KPI_BOARD,
+        name="KPI",
+        groups={"g2023": "2023"},
+        columns=(MondayColumnInfo(id="name", title="Name", type="name"),),
+        items=(
+            MondayItemDigest(
+                item_id="1",
+                group_id="g2023",
+                created_at=RECENT,
+                updated_at=RECENT,
+                update_diagnostics=(
+                    MondayUpdateDigest(
+                        update_id="u1",
+                        created_at=RECENT,
+                        has_author=True,
+                        classification="text_update_with_author",
+                        is_migratable=True,
+                    ),
+                ),
+            ),
+            MondayItemDigest(
+                item_id="2",
+                group_id="g2023",
+                created_at=RECENT,
+                updated_at=RECENT,
+            ),
+        ),
+    )
+    ledger = {
+        f"{KPI_BOARD}:2": {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": "2",
+            "sunday_board_id": "86",
+            "sunday_item_id": "9002",
+            "migration_status": "migrated",
+        },
+    }
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"1", "2"}),
+        max_items=2,
+        max_comments=1,
+        ledger=ledger,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.counts() == {"create": 1, "already_migrated": 1}
+    assert sum(op.comments_to_create for op in plan.operations) == 1
+
+
+def test_item_ids_allows_single_already_migrated_item():
+    inventory = _kpi_inventory()
+    ledger = {
+        f"{KPI_BOARD}:1": {
+            "monday_board_id": KPI_BOARD,
+            "monday_item_id": "1",
+            "sunday_board_id": "86",
+            "sunday_item_id": "9001",
+            "migration_status": "migrated",
+        },
+    }
+    plan = _plan_for(
+        inventory,
+        item_ids=frozenset({"1"}),
+        max_items=1,
+        ledger=ledger,
+        schema_checks=[GateCheck("schema_live_verificado", True)],
+    )
+    assert plan.counts() == {"already_migrated": 1}
 
 
 def test_max_comments_requires_exact_total():
@@ -882,27 +1045,6 @@ def test_max_comments_requires_exact_total():
             max_comments=1,
             schema_checks=[GateCheck("schema_live_verificado", True)],
         )
-
-
-def test_item_ids_allows_single_already_migrated_item():
-    inventory = _kpi_inventory()
-    ledger = {
-        f"{KPI_BOARD}:1": {
-            "monday_board_id": KPI_BOARD,
-            "monday_item_id": "1",
-            "sunday_board_id": "86",
-            "sunday_item_id": "9001",
-            "migration_status": "migrated",
-        },
-    }
-    plan = _plan_for(
-        inventory,
-        item_ids=frozenset({"1"}),
-        max_items=1,
-        ledger=ledger,
-        schema_checks=[GateCheck("schema_live_verificado", True)],
-    )
-    assert plan.counts() == {"already_migrated": 1}
 
 
 def test_item_id_and_item_ids_are_mutually_exclusive():
