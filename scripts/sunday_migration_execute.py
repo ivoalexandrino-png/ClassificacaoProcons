@@ -132,7 +132,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", required=True, help="monday_board_id (allowlist)")
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
-    parser.add_argument("--mode", default="plan", choices=("plan", "apply"))
+    parser.add_argument("--mode", default="plan", choices=("plan", "apply", "repair"))
     parser.add_argument("--max-items", required=True, type=int)
     parser.add_argument(
         "--item-id",
@@ -153,9 +153,8 @@ def main() -> int:
     parser.add_argument("--ledger", default="docs/migration/monday-sunday-ledger.json")
     parser.add_argument("--out", default="/tmp/sunday-migration-plan.json")
     parser.add_argument(
-        "--confirm-writes",
-        action="store_true",
-        help="obrigatório (junto com env) para qualquer APPLY",
+        "--fields",
+        help="repair: allowlist CSV de nomes de coluna Monday a reparar",
     )
     parser.add_argument(
         "--apply-report-out",
@@ -172,6 +171,10 @@ def main() -> int:
         print("ABORT: APPLY exige --confirm-writes explícito.")
         return 3
 
+    if args.mode == "repair" and args.confirm_writes:
+        print("ABORT: REPAIR APPLY ainda não implementado; use repair sem --confirm-writes (PLAN).")
+        return 3
+
     if args.mode == "apply" and os.environ.get("SUNDAY_MIGRATION_ALLOW_APPLY") != "1":
         print("ABORT: APPLY exige SUNDAY_MIGRATION_ALLOW_APPLY=1 no ambiente.")
         return 3
@@ -180,11 +183,94 @@ def main() -> int:
         print("ABORT: APPLY exige --refresh-sunday (schema live imediato).")
         return 3
 
+    field_filter: frozenset[str] | None = None
+    if args.fields:
+        raw_fields = [value.strip() for value in args.fields.split(",") if value.strip()]
+        if not raw_fields:
+            raise ExecutorAbort("--fields vazio.")
+        field_filter = frozenset(raw_fields)
+
     try:
         requested_item_ids = _parse_requested_item_ids(args.item_id, args.item_ids)
     except ExecutorAbort as exc:
         print(f"ABORT: {exc}")
         return 3
+
+    if args.mode == "repair":
+        from classificacao_procons.migration.apply_writer import fetch_monday_apply_sources
+        from classificacao_procons.migration.repair_plan import RepairPlanAbort, build_repair_plan
+        from classificacao_procons.sunday.client import SundayClient
+
+        token = get_api_token_from_env()
+        if not token:
+            print("ABORT: MONDAY_API_TOKEN ausente para repair PLAN.")
+            return 2
+        if args.monday_snapshot:
+            monday_payload = json.loads(
+                Path(args.monday_snapshot).read_text(encoding="utf-8"),
+            )
+            repair_inventory = inventory_from_payload(monday_payload["boards"][args.board])
+        else:
+            print(f"Lendo snapshot atual do Monday board {args.board} (somente leitura)…")
+            repair_inventory = fetch_board_inventory(token, args.board)
+        client = SundayClient(sunday_config_from_test_env())
+        sunday_board = BOARD_ALLOWLIST[args.board]
+        sunday_snapshots = snapshot_from_live_client(client, [sunday_board])
+        snapshot = sunday_snapshots[sunday_board]
+        monday_id_column_id = _find_monday_id_column(snapshot)
+        target_group_id = _find_target_group_id(snapshot)
+        ledger = load_persistent_ledger(args.ledger)
+        migrated_ids = {
+            str(record["monday_item_id"])
+            for record in ledger.values()
+            if record.get("monday_board_id") == args.board
+            and record.get("migration_status") == "migrated"
+        }
+        scope_ids = requested_item_ids or frozenset(migrated_ids)
+        if args.max_items and len(scope_ids) > args.max_items:
+            scope_ids = frozenset(sorted(scope_ids)[: args.max_items])
+        apply_sources = fetch_monday_apply_sources(token, args.board, item_ids=scope_ids)
+        try:
+            repair_plan = build_repair_plan(
+                monday_board_id=args.board,
+                sunday_board_id=sunday_board,
+                inventory=repair_inventory,
+                sunday_snapshot=snapshot,
+                apply_sources=apply_sources,
+                client=client,
+                monday_id_column_id=monday_id_column_id,
+                target_group_id=target_group_id,
+                ledger_records=ledger,
+                item_ids=requested_item_ids,
+                field_filter=field_filter,
+                max_items=args.max_items if requested_item_ids is None else None,
+            )
+        except RepairPlanAbort as exc:
+            print(f"ABORT: {exc}")
+            return 3
+        payload = repair_plan.to_payload()
+        Path(args.out).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+        print(f"\nREPAIR PLAN gravado em {args.out}")
+        print(json.dumps(
+            {
+                k: payload[k]
+                for k in (
+                    "monday_board_id",
+                    "sunday_board_id",
+                    "mode",
+                    "items_to_repair",
+                    "field_writes",
+                    "file_links",
+                    "comment_repairs",
+                    "blocked",
+                )
+            },
+            ensure_ascii=False,
+            indent=2,
+        ))
+        return 0
 
     inventory_holder: dict[str, object] = {"inventory": None}
 

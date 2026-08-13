@@ -224,6 +224,13 @@ MAIN_STATUS_TITLE_OVERRIDES: dict[str, str] = {
     "5385471914": "vigencia",
 }
 
+# De-para explícito Monday column_id → label Sunday quando o rótulo difere
+# (truncamento, Houve vs Teve, etc.). Chave normalizada via _normalize().
+COLUMN_LABEL_OVERRIDES: dict[tuple[str, str], str] = {
+    # Procons: Sunday col 609 label truncado "ouve Cancelamento de Assinatura?"
+    ("4944254220", "color_mknz9dwg"): "ouve cancelamento de assinatura?",
+}
+
 
 def _normalize(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text.casefold())
@@ -349,7 +356,11 @@ def build_column_plans(
         strategy, sunday_target, note = _TYPE_STRATEGY.get(
             column.type, ("configurar_manualmente", None, f"Tipo {column.type} sem regra."),
         )
-        existing = target_by_label.get(_normalize(column.title)) if target else None
+        override_label = COLUMN_LABEL_OVERRIDES.get((inventory.board_id, column.id))
+        if override_label and target:
+            existing = target_by_label.get(_normalize(override_label))
+        else:
+            existing = target_by_label.get(_normalize(column.title)) if target else None
         plans.append(
             ColumnPlan(
                 monday_column_id=column.id,
