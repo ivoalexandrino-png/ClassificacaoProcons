@@ -38,6 +38,12 @@ describe("bridge tool service", () => {
       .rejects.toMatchObject<Partial<BridgeError>>({ code: "AGENT_NOT_FOUND" });
   });
 
+  it("should reject a start request for an unknown project", async () => {
+    const { service } = setup();
+    await expect(service.startAgent({ project: "missing", message: "start", mode: "local" }))
+      .rejects.toMatchObject<Partial<BridgeError>>({ code: "PROJECT_NOT_FOUND" });
+  });
+
   it("should reject a second follow-up while the agent is busy", async () => {
     const { service, provider } = setup();
     provider.waitForRun = async () => new Promise(() => undefined);
