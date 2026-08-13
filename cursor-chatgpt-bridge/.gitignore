@@ -1,0 +1,25 @@
+node_modules/
+dist/
+coverage/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# OS / editor
+.DS_Store
+
+# The repository-root .gitignore ignores "*.json" and "data/"; re-include the
+# project files this subproject needs to track.
+!package.json
+!package-lock.json
+!tsconfig.json
+
+# Local bridge database and Cursor SDK local store live under data/.
+!data/
+data/*
+!data/.gitkeep
