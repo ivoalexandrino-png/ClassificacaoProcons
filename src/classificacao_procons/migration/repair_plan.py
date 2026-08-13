@@ -40,14 +40,15 @@ TemporalClassification = Literal[
 
 FieldBlockReason = Literal[
     "SOURCE_CHANGED_AFTER_AUDIT",
-    "SOURCE_EMPTY",
     "TRANSFORMATION_ERROR",
+    "SOURCE_UNAVAILABLE",
 ]
 
 OperationKind = Literal[
     "status_write",
     "link_column_write",
     "skip_already_correct",
+    "skip_source_empty",
     "blocked",
 ]
 
@@ -88,16 +89,16 @@ def should_block_field_for_source_change(
     audited_source_value: str | None,
     live_source_value: str | None,
 ) -> bool:
-    """Bloqueia repair se source mudou após auditoria retroativa."""
-    audited = (audited_source_value or "").strip()
+    """Bloqueia repair se source divergiu do valor auditado."""
+    if audited_source_value is None:
+        return False
+    audited = audited_source_value.strip()
     live = (live_source_value or "").strip()
-    if audited and live and audited != live:
+    if audited != live:
         return True
     audit_ts = _parse_ts(audit_completed_at)
     updated_ts = _parse_ts(source_updated_at)
-    if audit_ts and updated_ts and updated_ts > audit_ts and audited and live != audited:
-        return True
-    return False
+    return bool(audit_ts and updated_ts and updated_ts > audit_ts and audited != live)
 
 
 @dataclass(frozen=True)
@@ -122,13 +123,20 @@ class RepairItemPlan:
     cancelamento_write: bool = False
     notificacao_link_write: bool = False
     docs_sac_link_write: bool = False
-    already_correct: int = 0
+    skip_source_empty: int = 0
+    skip_already_correct: int = 0
     blocked: int = 0
     fields: list[RepairFieldPlan] = field(default_factory=list)
 
     @property
+    def writes(self) -> int:
+        return int(self.cancelamento_write) + int(self.notificacao_link_write) + int(
+            self.docs_sac_link_write,
+        )
+
+    @property
     def has_work(self) -> bool:
-        return self.cancelamento_write or self.notificacao_link_write or self.docs_sac_link_write
+        return self.writes > 0
 
 
 @dataclass
@@ -167,14 +175,19 @@ class RepairPlan:
         return self.status_writes + self.total_link_writes
 
     @property
-    def already_correct(self) -> int:
-        return sum(item.already_correct for item in self.items)
+    def skip_source_empty(self) -> int:
+        return sum(item.skip_source_empty for item in self.items)
+
+    @property
+    def skip_already_correct(self) -> int:
+        return sum(item.skip_already_correct for item in self.items)
 
     @property
     def blocked(self) -> int:
         return sum(item.blocked for item in self.items)
 
     def to_payload(self) -> dict:
+        gate_ok, gate_detail = evaluate_repair_gate(self)
         return {
             "monday_board_id": self.monday_board_id,
             "sunday_board_id": self.sunday_board_id,
@@ -186,17 +199,22 @@ class RepairPlan:
             "docs_sac_link_writes": self.docs_sac_link_writes,
             "total_link_writes": self.total_link_writes,
             "total_writes": self.total_writes,
-            "already_correct": self.already_correct,
+            "skip_source_empty": self.skip_source_empty,
+            "skip_already_correct": self.skip_already_correct,
             "blocked": self.blocked,
+            "gate_ok": gate_ok,
+            "gate_detail": gate_detail,
             "items": [
                 {
                     "monday_item_id": item.monday_item_id,
                     "sunday_item_id": item.sunday_item_id,
                     "temporal": item.temporal,
+                    "writes": item.writes,
                     "cancelamento_write": item.cancelamento_write,
                     "notificacao_link_write": item.notificacao_link_write,
                     "docs_sac_link_write": item.docs_sac_link_write,
-                    "already_correct": item.already_correct,
+                    "skip_source_empty": item.skip_source_empty,
+                    "skip_already_correct": item.skip_already_correct,
                     "blocked": item.blocked,
                     "fields": [
                         {
@@ -221,6 +239,15 @@ class RepairPlanAbort(Exception):
     """Aborta repair quando pré-condição falha (ex.: item ausente no ledger)."""
 
 
+def evaluate_repair_gate(plan: RepairPlan) -> tuple[bool, str]:
+    """Gate fail-closed: BLOCKED reprova; SKIP_* não reprova."""
+    if plan.blocked > 0:
+        return False, f"{plan.blocked} campo(s) BLOCKED — repair APPLY não autorizado"
+    if any(not item.fields and item.blocked for item in plan.items):
+        return False, "item sem source Monday resolvida"
+    return True, "ledger ok; mapping conhecido; sem BLOCKED; writes na allowlist"
+
+
 def _status_key_for_label(board_plan, monday_column_id: str, label: str) -> str | None:
     status_map = board_plan.status_mappings.get(monday_column_id, {})
     key = status_map.get(label)
@@ -231,7 +258,6 @@ def _status_key_for_label(board_plan, monday_column_id: str, label: str) -> str 
 
 def _plan_repair_field(
     *,
-    monday_board_id: str,
     monday_column_id: str,
     field_name: str,
     sunday_column_id: str,
@@ -264,9 +290,8 @@ def _plan_repair_field(
             return RepairFieldPlan(
                 monday_column_id=monday_column_id,
                 field_name=field_name,
-                operation="blocked",
+                operation="skip_source_empty",
                 sunday_column_id=sunday_column_id,
-                block_reason="SOURCE_EMPTY",
             )
         expected = _status_key_for_label(board_plan, monday_column_id, live_source)
         if expected is None:
@@ -301,12 +326,11 @@ def _plan_repair_field(
         return RepairFieldPlan(
             monday_column_id=monday_column_id,
             field_name=field_name,
-            operation="blocked",
+            operation="skip_source_empty",
             sunday_column_id=sunday_column_id,
             link_source_present=False,
             link_target_column=sunday_column_id,
             link_write_required=False,
-            block_reason="SOURCE_EMPTY",
         )
     expected = derive_file_to_link_value(
         source_text=live_source,
@@ -390,13 +414,8 @@ def build_repair_plan(
                 f"Item(ns) ausente(s) no ledger migrado: {sorted(missing)}",
             )
 
-    divergent_only = item_ids is not None
-    if divergent_only:
-        scoped = candidates
-    else:
-        scoped = candidates
-
-    if max_items is not None and not divergent_only:
+    scoped = candidates
+    if max_items is not None and item_ids is None:
         scoped = scoped[:max_items]
 
     repair_columns = (
@@ -415,6 +434,17 @@ def build_repair_plan(
 
         if source is None:
             item_plan.blocked = len(PROCONS_REPAIR_MONDAY_COLUMNS)
+            for column_id in PROCONS_REPAIR_MONDAY_COLUMNS:
+                column = columns_by_id.get(column_id)
+                item_plan.fields.append(
+                    RepairFieldPlan(
+                        monday_column_id=column_id,
+                        field_name=column.title if column else column_id,
+                        operation="blocked",
+                        sunday_column_id="",
+                        block_reason="SOURCE_UNAVAILABLE",
+                    ),
+                )
             plan.items.append(item_plan)
             continue
 
@@ -436,7 +466,6 @@ def build_repair_plan(
             source_text = source.values_by_column_id.get(monday_col_id)
             current = client.get_value(sunday_item_id, sunday_col_id)
             field_plan = _plan_repair_field(
-                monday_board_id=monday_board_id,
                 monday_column_id=monday_col_id,
                 field_name=column.title,
                 sunday_column_id=sunday_col_id,
@@ -452,7 +481,9 @@ def build_repair_plan(
             item_plan.fields.append(field_plan)
 
             if field_plan.operation == "skip_already_correct":
-                item_plan.already_correct += 1
+                item_plan.skip_already_correct += 1
+            elif field_plan.operation == "skip_source_empty":
+                item_plan.skip_source_empty += 1
             elif field_plan.operation == "blocked":
                 item_plan.blocked += 1
             elif field_plan.operation == "status_write":
