@@ -32,6 +32,20 @@ pytest
 
 Nunca commitar `credentials/`. Usar Secret Manager em produção.
 
+## Subprojeto Node: `cursor-chatgpt-bridge/`
+
+Ponte MCP entre ChatGPT e Cursor Agents (TypeScript, independente do pacote Python). Validação própria (Node ≥ 22.13):
+
+```bash
+cd cursor-chatgpt-bridge
+npm install
+npm run lint
+npm test
+npm run build
+```
+
+Testes mockam o `@cursor/sdk` e rodam offline. Detalhes de uso/deploy: `cursor-chatgpt-bridge/README.md`.
+
 ## Cursor Cloud specific instructions
 
 - Python é 3.12; as dependências ficam num virtualenv em `.venv` (o update script o cria e roda `pip install -e ".[dev]"`). Ative com `source .venv/bin/activate` ou chame binários direto (`.venv/bin/pytest`, `.venv/bin/ruff`, `.venv/bin/procon-email`). Os comandos de validação da seção acima assumem o venv ativo.
