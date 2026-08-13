@@ -148,6 +148,9 @@ export class BridgeTools {
     if (record.status === "running" || record.status === "timeout") {
       const agent = this.requireAgent(record.agent_id);
       const project = this.requireProjectById(agent.project_id);
+      if (!this.locks.acquire(agent.agent_id, runId)) {
+        return this.runResponse(record);
+      }
       try {
         const providerRun = await this.provider.getRun(
           agent.agent_id,
@@ -167,6 +170,8 @@ export class BridgeTools {
           run_id: runId,
           reason: error instanceof Error ? error.message : "unknown",
         });
+      } finally {
+        this.locks.release(agent.agent_id, runId);
       }
     }
     return this.runResponse(record);
