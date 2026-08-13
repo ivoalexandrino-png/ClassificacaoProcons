@@ -1,0 +1,17 @@
+# Re-include JSON files ignored by the repository root .gitignore (*.json)
+!*.json
+!**/*.json
+
+node_modules/
+dist/
+coverage/
+
+# Local runtime data (SQLite database); keep the directory via .gitkeep
+!data/
+data/*
+!data/.gitkeep
+
+# Secrets
+.env
+.env.*
+!.env.example
