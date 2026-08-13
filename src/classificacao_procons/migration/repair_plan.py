@@ -20,10 +20,13 @@ from classificacao_procons.migration.column_transforms import (
     PROCONS_NOTIFICACAO_MONDAY_COLUMN,
     PROCONS_NOTIFICACAO_SUNDAY_COLUMN,
     PROCONS_REPAIR_MONDAY_COLUMNS,
+    StatusResolveError,
     derive_file_to_link_value,
     extract_usable_url,
     get_explicit_column_mapping,
     link_values_equal,
+    resolve_sunday_custom_status_write_value,
+    status_custom_values_equal,
 )
 from classificacao_procons.migration.mappings import (
     build_board_plan,
@@ -256,6 +259,16 @@ def _status_key_for_label(board_plan, monday_column_id: str, label: str) -> str 
     return key
 
 
+def _sunday_status_options(
+    sunday_snapshot: SundayBoardSnapshot,
+    sunday_column_id: str,
+) -> list[dict]:
+    for column in sunday_snapshot.columns:
+        if column.id == sunday_column_id:
+            return list((column.settings or {}).get("options", []))
+    return []
+
+
 def _plan_repair_field(
     *,
     monday_column_id: str,
@@ -269,6 +282,7 @@ def _plan_repair_field(
     audited_source_value: str | None,
     kind: Literal["status", "file_to_link"],
     link_display_text: str | None = None,
+    sunday_status_options: list[dict] | None = None,
 ) -> RepairFieldPlan:
     live_source = (source_text or "").strip()
     if should_block_field_for_source_change(
@@ -301,6 +315,21 @@ def _plan_repair_field(
                 operation="blocked",
                 sunday_column_id=sunday_column_id,
                 block_reason="TRANSFORMATION_ERROR",
+            )
+        options = sunday_status_options or []
+        if status_custom_values_equal(
+            semantic_key=expected,
+            actual_value=current_value,
+            column_options=options,
+            monday_label=live_source,
+        ):
+            return RepairFieldPlan(
+                monday_column_id=monday_column_id,
+                field_name=field_name,
+                operation="skip_already_correct",
+                sunday_column_id=sunday_column_id,
+                expected_value=expected,
+                current_value=current_value,
             )
         if expected == current_value or str(expected) == str(current_value):
             return RepairFieldPlan(
@@ -477,6 +506,9 @@ def build_repair_plan(
                 audited_source_value=audited_item.get(monday_col_id),
                 kind=kind,  # type: ignore[arg-type]
                 link_display_text=explicit.link_display_text if explicit else None,
+                sunday_status_options=_sunday_status_options(sunday_snapshot, sunday_col_id)
+                if kind == "status"
+                else None,
             )
             item_plan.fields.append(field_plan)
 
@@ -497,3 +529,180 @@ def build_repair_plan(
         plan.items.append(item_plan)
 
     return plan
+
+
+@dataclass
+class ApplyRepairFieldResult:
+    monday_column_id: str
+    sunday_column_id: str
+    operation: OperationKind
+    applied: bool
+    error: str | None = None
+
+
+@dataclass
+class ApplyRepairItemResult:
+    monday_item_id: str
+    sunday_item_id: str
+    fields: list[ApplyRepairFieldResult] = field(default_factory=list)
+    succeeded: bool = True
+
+
+@dataclass
+class ApplyRepairResult:
+    plan: RepairPlan
+    items: list[ApplyRepairItemResult] = field(default_factory=list)
+    status_writes: int = 0
+    link_writes: int = 0
+    skipped: int = 0
+    failed: bool = False
+
+    def to_payload(self) -> dict:
+        return {
+            "mode": "repair_apply",
+            "monday_board_id": self.plan.monday_board_id,
+            "sunday_board_id": self.plan.sunday_board_id,
+            "status_writes": self.status_writes,
+            "link_writes": self.link_writes,
+            "skipped": self.skipped,
+            "failed": self.failed,
+            "items": [
+                {
+                    "monday_item_id": item.monday_item_id,
+                    "sunday_item_id": item.sunday_item_id,
+                    "succeeded": item.succeeded,
+                    "fields": [
+                        {
+                            "monday_column_id": field.monday_column_id,
+                            "sunday_column_id": field.sunday_column_id,
+                            "operation": field.operation,
+                            "applied": field.applied,
+                            "error": field.error,
+                        }
+                        for field in item.fields
+                    ],
+                }
+                for item in self.items
+            ],
+        }
+
+
+class RepairApplyAbort(Exception):
+    """Aborta repair APPLY (gate, pré-condição ou fail-fast)."""
+
+
+def apply_repair_plan(
+    *,
+    plan: RepairPlan,
+    client,
+    sunday_snapshot: SundayBoardSnapshot,
+    board_plan,
+    inventory: MondayBoardInventory,
+    apply_sources: dict[str, MondayApplySource],
+    fail_fast: bool = True,
+) -> ApplyRepairResult:
+    """Executa repair APPLY idempotente para campos autorizados no PLAN."""
+    gate_ok, gate_detail = evaluate_repair_gate(plan)
+    if not gate_ok:
+        raise RepairApplyAbort(f"Repair gate FAIL: {gate_detail}")
+
+    columns_by_id = {column.id: column for column in inventory.columns}
+    result = ApplyRepairResult(plan=plan)
+
+    for item_plan in plan.items:
+        item_result = ApplyRepairItemResult(
+            monday_item_id=item_plan.monday_item_id,
+            sunday_item_id=item_plan.sunday_item_id,
+        )
+        source = apply_sources.get(item_plan.monday_item_id)
+        sunday_board_id = plan.sunday_board_id
+
+        for field_plan in item_plan.fields:
+            field_result = ApplyRepairFieldResult(
+                monday_column_id=field_plan.monday_column_id,
+                sunday_column_id=field_plan.sunday_column_id,
+                operation=field_plan.operation,
+                applied=False,
+            )
+            item_result.fields.append(field_result)
+
+            if field_plan.operation in {"skip_source_empty", "skip_already_correct", "blocked"}:
+                result.skipped += 1
+                continue
+
+            if field_plan.operation == "status_write":
+                options = _sunday_status_options(
+                    sunday_snapshot,
+                    field_plan.sunday_column_id,
+                )
+                semantic_key = str(field_plan.expected_value)
+                monday_column = columns_by_id.get(field_plan.monday_column_id)
+                monday_label = None
+                if monday_column and source:
+                    monday_label = source.values_by_column_id.get(field_plan.monday_column_id)
+                try:
+                    write_value = resolve_sunday_custom_status_write_value(
+                        column_options=options,
+                        semantic_key=semantic_key,
+                        monday_label=str(monday_label) if monday_label else None,
+                    )
+                except StatusResolveError as exc:
+                    field_result.error = exc.detail
+                    item_result.succeeded = False
+                    result.failed = True
+                    if fail_fast:
+                        result.items.append(item_result)
+                        raise RepairApplyAbort(exc.detail) from exc
+                    continue
+                try:
+                    client.set_custom_value(
+                        sunday_board_id,
+                        item_plan.sunday_item_id,
+                        field_plan.sunday_column_id,
+                        write_value,
+                        verify=True,
+                    )
+                except Exception as exc:
+                    field_result.error = str(exc)
+                    item_result.succeeded = False
+                    result.failed = True
+                    if fail_fast:
+                        result.items.append(item_result)
+                        raise RepairApplyAbort(str(exc)) from exc
+                    continue
+                field_result.applied = True
+                result.status_writes += 1
+                continue
+
+            if field_plan.operation == "link_column_write":
+                expected = field_plan.expected_value
+                if not isinstance(expected, dict):
+                    field_result.error = "LINK payload inválido no PLAN"
+                    item_result.succeeded = False
+                    result.failed = True
+                    if fail_fast:
+                        result.items.append(item_result)
+                        raise RepairApplyAbort(field_result.error)
+                    continue
+                try:
+                    client.set_custom_value(
+                        sunday_board_id,
+                        item_plan.sunday_item_id,
+                        field_plan.sunday_column_id,
+                        expected,
+                        verify=True,
+                    )
+                except Exception as exc:
+                    field_result.error = str(exc)
+                    item_result.succeeded = False
+                    result.failed = True
+                    if fail_fast:
+                        result.items.append(item_result)
+                        raise RepairApplyAbort(str(exc)) from exc
+                    continue
+                field_result.applied = True
+                result.link_writes += 1
+
+        result.items.append(item_result)
+
+    return result

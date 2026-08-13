@@ -20,6 +20,7 @@ from classificacao_procons.migration.column_transforms import (
     get_explicit_column_mapping,
     is_file_to_link_mapping,
     link_values_equal,
+    status_custom_values_equal,
 )
 from classificacao_procons.migration.executor import (
     comment_idempotency_marker,
@@ -497,6 +498,25 @@ def audit_item_fields(
 
         if expected is None:
             row_result = "TRANSFORMATION_ERROR"
+        elif monday_column.type == "status" and isinstance(expected, str):
+            sunday_column = next(
+                (column for column in sunday_snapshot.columns if column.id == sunday_column_id),
+                None,
+            )
+            status_options: list[dict] = []
+            if sunday_column is not None:
+                status_options = list((sunday_column.settings or {}).get("options", []))
+            if status_custom_values_equal(
+                semantic_key=expected,
+                actual_value=actual,
+                column_options=status_options,
+                monday_label=source_text,
+            ):
+                row_result = "MATCH"
+            elif _normalize_empty(actual):
+                row_result = "MISSING_TARGET_VALUE"
+            else:
+                row_result = "MISMATCH"
         elif _values_equal(expected, actual):
             row_result = "MATCH"
         elif _normalize_empty(actual):
