@@ -177,8 +177,9 @@ def main() -> int:
         return 3
 
     if args.mode == "repair" and args.confirm_writes:
-        print("ABORT: REPAIR APPLY ainda não implementado; use repair sem --confirm-writes (PLAN).")
-        return 3
+        if os.environ.get("SUNDAY_MIGRATION_ALLOW_REPAIR") != "1":
+            print("ABORT: REPAIR APPLY exige SUNDAY_MIGRATION_ALLOW_REPAIR=1 no ambiente.")
+            return 3
 
     if args.mode == "apply" and os.environ.get("SUNDAY_MIGRATION_ALLOW_APPLY") != "1":
         print("ABORT: APPLY exige SUNDAY_MIGRATION_ALLOW_APPLY=1 no ambiente.")
@@ -203,7 +204,12 @@ def main() -> int:
 
     if args.mode == "repair":
         from classificacao_procons.migration.apply_writer import fetch_monday_apply_sources
-        from classificacao_procons.migration.repair_plan import RepairPlanAbort, build_repair_plan
+        from classificacao_procons.migration.repair_plan import (
+            RepairApplyAbort,
+            RepairPlanAbort,
+            apply_repair_plan,
+            build_repair_plan,
+        )
         from classificacao_procons.sunday.client import SundayClient
 
         token = get_api_token_from_env()
@@ -258,30 +264,58 @@ def main() -> int:
             json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8",
         )
         print(f"\nREPAIR PLAN gravado em {args.out}")
-        print(json.dumps(
-            {
-                k: payload[k]
-                for k in (
-                    "monday_board_id",
-                    "sunday_board_id",
-                    "mode",
-                    "items_scope",
-                    "items_to_repair",
-                    "status_writes",
-                    "notificacao_link_writes",
-                    "docs_sac_link_writes",
-                    "total_link_writes",
-                    "total_writes",
-                    "skip_source_empty",
-                    "skip_already_correct",
-                    "blocked",
-                    "gate_ok",
-                    "gate_detail",
+        summary = {
+            k: payload[k]
+            for k in (
+                "monday_board_id",
+                "sunday_board_id",
+                "mode",
+                "items_scope",
+                "items_to_repair",
+                "status_writes",
+                "notificacao_link_writes",
+                "docs_sac_link_writes",
+                "total_link_writes",
+                "total_writes",
+                "skip_source_empty",
+                "skip_already_correct",
+                "blocked",
+                "gate_ok",
+                "gate_detail",
+            )
+        }
+        if args.confirm_writes:
+            board_plan = build_board_plan(
+                repair_inventory,
+                snapshot,
+                sunday_board_by_monday_map(),
+            )
+            try:
+                apply_result = apply_repair_plan(
+                    plan=repair_plan,
+                    client=client,
+                    sunday_snapshot=snapshot,
+                    board_plan=board_plan,
+                    inventory=repair_inventory,
+                    apply_sources=apply_sources,
+                    fail_fast=True,
                 )
-            },
-            ensure_ascii=False,
-            indent=2,
-        ))
+            except RepairApplyAbort as exc:
+                print(f"ABORT: {exc}")
+                return 3
+            apply_payload = apply_result.to_payload()
+            Path(args.apply_report_out).write_text(
+                json.dumps(apply_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            print(f"\nREPAIR APPLY concluído; relatório em {args.apply_report_out}")
+            summary["repair_apply"] = {
+                "status_writes": apply_result.status_writes,
+                "link_writes": apply_result.link_writes,
+                "skipped": apply_result.skipped,
+                "failed": apply_result.failed,
+            }
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
 
     inventory_holder: dict[str, object] = {"inventory": None}

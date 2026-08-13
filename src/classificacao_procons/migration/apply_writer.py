@@ -9,9 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from classificacao_procons.migration.column_transforms import (
+    StatusResolveError,
     derive_file_to_link_value,
     get_explicit_column_mapping,
     is_file_to_link_mapping,
+    resolve_sunday_custom_status_write_value,
 )
 from classificacao_procons.migration.executor import (
     ExecutionPlan,
@@ -28,6 +30,7 @@ from classificacao_procons.migration.models import (
     MondayBoardInventory,
     MondayColumnInfo,
     SundayBoardSnapshot,
+    SundayColumnSnapshot,
 )
 from classificacao_procons.monday.client import _graphql_request
 
@@ -429,6 +432,54 @@ def _sunday_value_for_monday_column(
     return None
 
 
+def _custom_status_write_value(
+    *,
+    monday_column: MondayColumnInfo,
+    source_text: str | None,
+    board_plan: BoardPlan,
+    sunday_column: SundayColumnSnapshot,
+) -> str:
+    """Semantic Monday status → option key live exigida pela API Sunday."""
+    semantic_key = _status_key_for_label(board_plan, monday_column.id, source_text)
+    if semantic_key is None:
+        raise ValueError(
+            f"Status {source_text!r} na coluna {monday_column.id} sem mapping aprovado.",
+        )
+    options = list((sunday_column.settings or {}).get("options", []))
+    return resolve_sunday_custom_status_write_value(
+        column_options=options,
+        semantic_key=semantic_key,
+        monday_label=source_text,
+    )
+
+
+def _value_for_custom_column_write(
+    *,
+    monday_column: MondayColumnInfo,
+    source_text: str | None,
+    board_plan: BoardPlan,
+    sunday_column: SundayColumnSnapshot,
+) -> object:
+    """Valor PATCH Sunday para coluna custom (status resolve option key live)."""
+    if monday_column.type == "status" and sunday_column.type == "status":
+        return _custom_status_write_value(
+            monday_column=monday_column,
+            source_text=source_text,
+            board_plan=board_plan,
+            sunday_column=sunday_column,
+        )
+    value = _sunday_value_for_monday_column(
+        monday_column=monday_column,
+        text=source_text,
+        board_plan=board_plan,
+    )
+    if value is None:
+        raise ValueError(
+            f"Valor Sunday não derivável para coluna {monday_column.id}.",
+        )
+    return value
+
+
 def apply_create_item(
     *,
     client,
@@ -532,12 +583,18 @@ def apply_create_item(
         if sunday_column is None or sunday_column.is_system:
             continue
         text = apply_source.values_by_column_id.get(monday_column.id)
-        value = _sunday_value_for_monday_column(
-            monday_column=monday_column,
-            text=text,
-            board_plan=board_plan,
-        )
-        if value is None:
+        try:
+            value = _value_for_custom_column_write(
+                monday_column=monday_column,
+                source_text=text,
+                board_plan=board_plan,
+                sunday_column=sunday_column,
+            )
+        except StatusResolveError as exc:
+            raise RuntimeError(
+                f"Status custom não resolvido ({monday_column.id}): {exc.detail}",
+            ) from exc
+        except ValueError:
             continue
         client.set_custom_value(
             plan.sunday_board_id,
