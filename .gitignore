@@ -20,10 +20,16 @@ credentials/
 !pyproject.toml
 !.cursor/environment.json
 !docs/migration/monday-sunday-ledger.json
+!cursor-chatgpt-bridge/package.json
+!cursor-chatgpt-bridge/package-lock.json
+!cursor-chatgpt-bridge/tsconfig.json
+!cursor-chatgpt-bridge/vitest.config.ts
 
 # Downloads locais
 downloads/
 data/
+!cursor-chatgpt-bridge/data/
+!cursor-chatgpt-bridge/data/.gitkeep
 logs/
 
 .idea/

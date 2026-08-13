@@ -1,0 +1,47 @@
+{
+  "name": "cursor-chatgpt-bridge",
+  "version": "1.0.0",
+  "description": "MCP bridge between ChatGPT and Cursor Agents (@cursor/sdk)",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "cursor-chatgpt-bridge": "./dist/index.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "dev:stdio": "tsx src/index.ts --stdio",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "start:stdio": "node dist/index.js --stdio",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "cursor",
+    "chatgpt",
+    "mcp",
+    "bridge",
+    "agents"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@cursor/sdk": "^1.0.27",
+    "@modelcontextprotocol/express": "^2.0.0",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.17.0",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
