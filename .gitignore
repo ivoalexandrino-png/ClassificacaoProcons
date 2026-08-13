@@ -28,3 +28,14 @@ logs/
 
 .idea/
 .vscode/
+
+# cursor-chatgpt-bridge (Node/TypeScript subproject; needs its own *.json and
+# data/ semantics, overriding the broader Python-repo rules above).
+!cursor-chatgpt-bridge/**/*.json
+!cursor-chatgpt-bridge/data/
+cursor-chatgpt-bridge/data/*.db
+cursor-chatgpt-bridge/data/*.db-*
+!cursor-chatgpt-bridge/data/.gitkeep
+cursor-chatgpt-bridge/node_modules/
+cursor-chatgpt-bridge/dist/
+cursor-chatgpt-bridge/.env
