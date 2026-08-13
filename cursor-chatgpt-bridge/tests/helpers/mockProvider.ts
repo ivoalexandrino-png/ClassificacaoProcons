@@ -3,6 +3,7 @@ import type {
   AgentCapabilities,
   AgentContext,
   CancelRunResult,
+  ConversationEvent,
   CursorAgentProvider,
   ProviderRun,
   SendMessageResult,
@@ -18,6 +19,8 @@ export interface MockProviderOptions {
   /** Artificial delay (ms) before sendMessage/startAgent resolve, to make races meaningful in tests. */
   sendDelayMs?: number;
   cancelSupported?: boolean;
+  /** Conversation events returned by getConversationEvents(); defaults to one tool call + one assistant message. */
+  conversationEvents?: ConversationEvent[];
 }
 
 /**
@@ -102,6 +105,15 @@ export class MockCursorAgentProvider implements CursorAgentProvider {
       supportsCancel: this.options.cancelSupported ?? false,
       supportsStreaming: true,
     });
+  }
+
+  getConversationEvents(_context: AgentContext, _runId: string): Promise<ConversationEvent[]> {
+    return Promise.resolve(
+      this.options.conversationEvents ?? [
+        { role: "tool", content: "tool_call: read_file" },
+        { role: "assistant", content: "Mock result." },
+      ],
+    );
   }
 
   setRun(runId: string, run: ProviderRun): void {

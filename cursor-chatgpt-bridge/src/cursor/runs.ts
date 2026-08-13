@@ -218,14 +218,7 @@ export class RunService {
       completedAt,
       error: run.error ? JSON.stringify(run.error) : null,
     });
-    if (run.result) {
-      this.store.createMessage({
-        agentId: row.agent_id,
-        runId: sendResult.runId,
-        role: "assistant",
-        content: run.result,
-      });
-    }
+    await this.recordConversationEvents(row.agent_id, context, sendResult.runId, run.result);
     this.store.setAgentActiveRun(row.agent_id, null);
     this.store.touchAgent(row.agent_id, finalStatus);
 
@@ -245,6 +238,30 @@ export class RunService {
       started_at: startedAt,
       completed_at: completedAt,
     };
+  }
+
+  /**
+   * Persists the finished run's structured transcript (tool calls +
+   * assistant text) so `cursor_get_conversation` can show more than just the
+   * final result. Falls back to a single assistant message with the plain
+   * result text when the provider can't supply structured events.
+   */
+  private async recordConversationEvents(
+    agentId: string,
+    context: AgentContext,
+    runId: string,
+    fallbackResult: string | undefined,
+  ): Promise<void> {
+    const events = await this.provider.getConversationEvents(context, runId);
+    if (events.length > 0) {
+      for (const event of events) {
+        this.store.createMessage({ agentId, runId, role: event.role, content: event.content });
+      }
+      return;
+    }
+    if (fallbackResult) {
+      this.store.createMessage({ agentId, runId, role: "assistant", content: fallbackResult });
+    }
   }
 
   async getRun(runId: string): Promise<PublicRun> {

@@ -74,6 +74,19 @@ export interface CancelRunResult {
   run?: ProviderRun;
 }
 
+/**
+ * A single step from a finished run's structured transcript (assistant text
+ * or a tool invocation), used to populate `cursor_get_conversation` with
+ * more than just the final result. Deliberately coarse: tool call
+ * argument/result shapes are internal to the SDK and can change, so only a
+ * short, defensive summary is kept — never a raw dump of tool args/results
+ * (which could include large payloads or secrets passed to MCP/shell tools).
+ */
+export interface ConversationEvent {
+  role: "assistant" | "tool" | "system";
+  content: string;
+}
+
 export interface AgentCapabilities {
   mode: ProviderAgentMode;
   workingDirectory?: string;
@@ -111,4 +124,12 @@ export interface CursorAgentProvider {
   cancelRun(context: AgentContext, runId: string): Promise<CancelRunResult>;
 
   getCapabilities(context: AgentContext): Promise<AgentCapabilities>;
+
+  /**
+   * Best-effort structured transcript (assistant text + tool calls) for a
+   * finished run. Returns `[]` when the runtime doesn't support it rather
+   * than throwing — this is a "nice to have" enrichment of the conversation
+   * log, not a required step in any tool's control flow.
+   */
+  getConversationEvents(context: AgentContext, runId: string): Promise<ConversationEvent[]>;
 }

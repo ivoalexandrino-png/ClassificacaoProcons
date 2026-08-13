@@ -153,13 +153,16 @@ export class AgentService {
       this.store.setAgentActiveRun(agentId, run.runId);
     }
     this.store.createMessage({ agentId, runId: run.runId, role: "user", content: input.message });
-    if (run.result) {
-      this.store.createMessage({
-        agentId,
-        runId: run.runId,
-        role: "assistant",
-        content: run.result,
-      });
+    if (status === "completed") {
+      const context = this.agentContext(this.getAgentRowOrThrow(agentId));
+      const events = await this.provider.getConversationEvents(context, run.runId);
+      if (events.length > 0) {
+        for (const event of events) {
+          this.store.createMessage({ agentId, runId: run.runId, role: event.role, content: event.content });
+        }
+      } else if (run.result) {
+        this.store.createMessage({ agentId, runId: run.runId, role: "assistant", content: run.result });
+      }
     }
 
     return {

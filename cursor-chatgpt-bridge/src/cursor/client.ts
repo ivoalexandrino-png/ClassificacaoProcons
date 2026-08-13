@@ -18,6 +18,7 @@ import type {
   AgentCapabilities,
   AgentContext,
   CancelRunResult,
+  ConversationEvent,
   CursorAgentProvider,
   ProviderGitBranch,
   ProviderRun,
@@ -49,6 +50,18 @@ function mapRun(agentId: string, runId: string, run: Run | RunResult): ProviderR
     durationMs: run.durationMs,
     git: branches ? { branches } : undefined,
   };
+}
+
+/**
+ * Tool call `message` shapes are internal to the SDK and explicitly marked
+ * unstable in the docs, so this only reads the one field that's been stable
+ * across the built-in tool union (`type`) and never dumps `args`/`result`.
+ */
+function summarizeToolCall(message: unknown): string {
+  if (typeof message === "object" && message !== null && "type" in message) {
+    return `tool_call: ${String(message.type)}`;
+  }
+  return "tool_call";
 }
 
 /**
@@ -268,6 +281,35 @@ export class CursorSdkAgentProvider implements CursorAgentProvider {
       supportsCancel: true,
       supportsStreaming: true,
     });
+  }
+
+  async getConversationEvents(context: AgentContext, runId: string): Promise<ConversationEvent[]> {
+    try {
+      const run = await Agent.getRun(runId, this.runOptions(context));
+      if (!run.supports("conversation")) return [];
+
+      const turns = await run.conversation();
+      const events: ConversationEvent[] = [];
+      for (const turn of turns) {
+        if (turn.type === "agentConversationTurn") {
+          for (const step of turn.turn.steps) {
+            if (step.type === "assistantMessage") {
+              events.push({ role: "assistant", content: step.message.text });
+            } else if (step.type === "toolCall") {
+              events.push({ role: "tool", content: summarizeToolCall(step.message) });
+            }
+            // thinkingMessage steps are intentionally skipped: internal
+            // reasoning, not the kind of thing a supervisor needs to review.
+          }
+        } else if (turn.type === "shellConversationTurn" && turn.turn.shellCommand) {
+          events.push({ role: "tool", content: `shell: ${turn.turn.shellCommand.command}` });
+        }
+      }
+      return events;
+    } catch {
+      // Best-effort enrichment; never let this break the caller's flow.
+      return [];
+    }
   }
 
   /** Dispose all cached agent handles. Call on process shutdown. */

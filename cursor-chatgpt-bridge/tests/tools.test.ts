@@ -111,7 +111,13 @@ describe("MCP tools", () => {
       arguments: { agent_id: agentId },
     });
     const messages = (conversation.structuredContent as { messages: Array<{ role: string }> }).messages;
-    expect(messages.map((message) => message.role)).toContain("user");
+    const roles = messages.map((message) => message.role);
+    // The mock provider's default conversation events include a tool call
+    // alongside the assistant text, so cursor_get_conversation should
+    // distinguish user/assistant/tool roles, not just report the final text.
+    expect(roles).toContain("user");
+    expect(roles).toContain("tool");
+    expect(roles).toContain("assistant");
   });
 
   it("should send a follow-up and wait for completion", async () => {
