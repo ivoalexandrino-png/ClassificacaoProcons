@@ -10,12 +10,17 @@ from dataclasses import dataclass, field
 
 from classificacao_procons.migration.apply_writer import MondayApplySource
 from classificacao_procons.migration.column_transforms import is_file_to_link_mapping
-from classificacao_procons.migration.models import BoardPlan, MondayBoardInventory
+from classificacao_procons.migration.models import (
+    BoardPlan,
+    MondayBoardInventory,
+    SundayBoardSnapshot,
+)
 from classificacao_procons.migration.source_audit import (
     APPLY_WRITER_SKIP_TYPES,
     classify_mapping_status,
     derive_expected_sunday_value,
 )
+from classificacao_procons.migration.status_coverage import check_status_coverage_for_sources
 
 
 @dataclass(frozen=True)
@@ -55,6 +60,7 @@ def check_source_completeness_for_sources(
     board_plan: BoardPlan,
     apply_sources: dict[str, MondayApplySource],
     item_ids: set[str] | None = None,
+    sunday_snapshot: SundayBoardSnapshot | None = None,
 ) -> SourceCompletenessReport:
     """Valida mapping coverage para colunas source preenchidas (pré-APPLY)."""
     column_plans = {plan.monday_column_id: plan for plan in board_plan.column_plans}
@@ -157,6 +163,25 @@ def check_source_completeness_for_sources(
                         ),
                     )
 
+    if sunday_snapshot is not None:
+        status_report = check_status_coverage_for_sources(
+            inventory=inventory,
+            board_plan=board_plan,
+            sunday_snapshot=sunday_snapshot,
+            apply_sources=apply_sources,
+            item_ids=item_ids,
+        )
+        for status_issue in status_report.issues:
+            issues.append(
+                SourceCompletenessIssue(
+                    monday_item_id=status_issue.monday_item_id,
+                    monday_column_id=status_issue.monday_column_id,
+                    field_name=status_issue.field_name,
+                    issue=status_issue.issue,
+                    detail=status_issue.detail,
+                ),
+            )
+
     return SourceCompletenessReport(ok=not issues, issues=issues)
 
 
@@ -166,11 +191,13 @@ def build_source_completeness_gate_check(
     board_plan: BoardPlan,
     apply_sources: dict[str, MondayApplySource],
     item_ids: set[str] | None = None,
+    sunday_snapshot: SundayBoardSnapshot | None = None,
 ) -> tuple[bool, str]:
     report = check_source_completeness_for_sources(
         inventory=inventory,
         board_plan=board_plan,
         apply_sources=apply_sources,
         item_ids=item_ids,
+        sunday_snapshot=sunday_snapshot,
     )
     return report.ok, report.detail

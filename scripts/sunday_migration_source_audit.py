@@ -75,6 +75,8 @@ def _board_metrics_dict(metrics) -> dict[str, object]:
     return {
         "items_audited": metrics.items_audited,
         "items_100_percent_correct": metrics.items_fully_correct,
+        "items_100_percent_verified": metrics.items_fully_verified,
+        "semantic_resolution_unverified_fields": metrics.semantic_resolution_unverified,
         "items_with_divergence": metrics.items_with_divergence,
         "source_non_empty_fields": metrics.source_non_empty_business_fields,
         "expected_mapped_fields": metrics.expected_mapped_fields,

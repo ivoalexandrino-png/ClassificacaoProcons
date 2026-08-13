@@ -496,6 +496,7 @@ def main() -> int:
         board_plan=board_plan,
         apply_sources=apply_sources,
         item_ids=selected_ids,
+        sunday_snapshot=sunday_snapshot,
     )
     if not completeness.ok:
         print(f"ABORT: source completeness guard: {completeness.detail}")

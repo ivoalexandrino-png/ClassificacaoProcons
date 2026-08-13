@@ -16,11 +16,12 @@ from classificacao_procons.migration.apply_writer import (
     format_monday_id_column_value,
 )
 from classificacao_procons.migration.column_transforms import (
+    StatusResolveError,
     derive_file_to_link_value,
     get_explicit_column_mapping,
     is_file_to_link_mapping,
     link_values_equal,
-    status_custom_values_equal,
+    resolve_sunday_custom_status_option,
 )
 from classificacao_procons.migration.executor import (
     comment_idempotency_marker,
@@ -55,6 +56,7 @@ FieldResult = Literal[
     "TRANSFORMATION_ERROR",
     "INTENTIONALLY_NOT_MIGRATED",
     "OK_EMPTY",
+    "SEMANTIC_RESOLUTION_UNVERIFIED",
 ]
 
 SOURCE_ONLY_TECHNICAL_TYPES = frozenset(
@@ -230,6 +232,18 @@ class ItemAuditResult:
         )
 
     @property
+    def is_fully_verified(self) -> bool:
+        """True apenas sem divergência nem resolução semântica pendente."""
+        blocking = {
+            "MISMATCH",
+            "MISSING_TARGET_VALUE",
+            "UNMAPPED_SOURCE_FIELD",
+            "TRANSFORMATION_ERROR",
+            "SEMANTIC_RESOLUTION_UNVERIFIED",
+        }
+        return all(row.result not in blocking for row in self.fields)
+
+    @property
     def has_divergence(self) -> bool:
         return not self.is_fully_correct
 
@@ -240,7 +254,9 @@ class BoardAuditMetrics:
     sunday_board_id: str
     items_audited: int = 0
     items_fully_correct: int = 0
+    items_fully_verified: int = 0
     items_with_divergence: int = 0
+    semantic_resolution_unverified: int = 0
     source_non_empty_business_fields: int = 0
     expected_mapped_fields: int = 0
     matched: int = 0
@@ -506,17 +522,12 @@ def audit_item_fields(
             status_options: list[dict] = []
             if sunday_column is not None:
                 status_options = list((sunday_column.settings or {}).get("options", []))
-            if status_custom_values_equal(
-                semantic_key=expected,
-                actual_value=actual,
-                column_options=status_options,
-                monday_label=source_text,
-            ):
-                row_result = "MATCH"
-            elif _normalize_empty(actual):
-                row_result = "MISSING_TARGET_VALUE"
-            else:
-                row_result = "MISMATCH"
+            row_result = _audit_status_field_result(
+                expected=expected,
+                actual=actual,
+                source_text=source_text,
+                status_options=status_options,
+            )
         elif _values_equal(expected, actual):
             row_result = "MATCH"
         elif _normalize_empty(actual):
@@ -539,6 +550,34 @@ def audit_item_fields(
         )
 
     return result
+
+
+def _audit_status_field_result(
+    *,
+    expected: str,
+    actual: object,
+    source_text: str | None,
+    status_options: list[dict],
+) -> FieldResult:
+    if _normalize_empty(actual):
+        return "MISSING_TARGET_VALUE"
+
+    actual_str = str(actual)
+    try:
+        resolved = resolve_sunday_custom_status_option(
+            column_options=status_options,
+            semantic_key=expected,
+            monday_label=source_text,
+        )
+        if actual_str == resolved.option_key:
+            return "MATCH"
+        if actual_str == expected:
+            return "MATCH"
+    except StatusResolveError:
+        if actual_str == expected:
+            return "SEMANTIC_RESOLUTION_UNVERIFIED"
+
+    return "MISMATCH"
 
 
 def _values_equal(expected: object, actual: object) -> bool:
@@ -572,6 +611,8 @@ def aggregate_board_metrics(
             metrics.items_fully_correct += 1
         else:
             metrics.items_with_divergence += 1
+        if item.is_fully_verified:
+            metrics.items_fully_verified += 1
         for row in item.fields:
             if row.field_name in {"name", "monday_id", "system_status", "group_id"}:
                 metrics.source_non_empty_business_fields += 1
@@ -607,6 +648,8 @@ def aggregate_board_metrics(
                 metrics.missing_target_values += 1
             elif row.result == "TRANSFORMATION_ERROR":
                 metrics.transformation_errors += 1
+            elif row.result == "SEMANTIC_RESOLUTION_UNVERIFIED":
+                metrics.semantic_resolution_unverified += 1
             elif row.result == "UNMAPPED_SOURCE_FIELD":
                 metrics.unmapped_source_fields += 1
 
@@ -767,5 +810,6 @@ def explain_legacy_field_checker() -> dict[str, object]:
         "skips_unmapped_target_columns": True,
         "skips_source_fields_without_target_column": True,
         "could_produce_false_100_percent": True,
+        "semantic_resolution_unverified_not_counted_as_verified": True,
         "location": "apply_writer.verify_applied_board",
     }
