@@ -217,8 +217,11 @@ def main() -> int:
 
     if args.mode == "ledger-sync-plan":
         from classificacao_procons.migration.ledger_sync import (
+            assess_ledger_state,
             build_ledger_sync_plan,
             discover_live_proven_mappings,
+            resolve_repo_root,
+            validate_apply_ledger_gate,
         )
         from classificacao_procons.sunday.client import SundayClient
 
@@ -238,7 +241,15 @@ def main() -> int:
             live_mappings=live_mappings,
             ledger_path=args.ledger,
         )
-        payload = sync_plan.as_dict()
+        ledger_state = assess_ledger_state(
+            live_mappings=live_mappings,
+            ledger_path=args.ledger,
+            repo_root=resolve_repo_root(),
+        )
+        payload = {
+            **sync_plan.as_dict(),
+            "ledger_state": ledger_state.as_dict(),
+        }
         Path(args.out).write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -625,6 +636,37 @@ def main() -> int:
         target_group_id=_find_target_group_id(sunday_snapshot),
     )
 
+    from classificacao_procons.migration.ledger_sync import (
+        assess_ledger_state,
+        discover_live_proven_mappings,
+        resolve_repo_root,
+        validate_apply_ledger_gate,
+    )
+
+    all_sunday_boards = list(BOARD_ALLOWLIST.values())
+    all_snapshots = snapshot_from_live_client(client, all_sunday_boards)
+    monday_id_column_ids = {
+        board_id: _find_monday_id_column(snapshot)
+        for board_id, snapshot in all_snapshots.items()
+    }
+    live_mappings = discover_live_proven_mappings(
+        client=client,
+        sunday_snapshots=all_snapshots,
+        monday_id_column_ids=monday_id_column_ids,
+    )
+    ledger_gate = assess_ledger_state(
+        live_mappings=live_mappings,
+        ledger_path=args.ledger,
+        repo_root=resolve_repo_root(),
+    )
+    gate_failures = validate_apply_ledger_gate(ledger_gate)
+    if gate_failures:
+        print("ABORT: ledger gate fail-closed:")
+        for failure in gate_failures:
+            print(f"  - {failure}")
+        print(json.dumps(ledger_gate.as_dict(), ensure_ascii=False, indent=2))
+        return 3
+
     print("\nIniciando APPLY (fail-fast)…")
     try:
         apply_result = apply_plan(
@@ -635,6 +677,7 @@ def main() -> int:
             ledger_path=args.ledger,
             fail_fast=True,
             migration_context=migration_context,
+            ledger_gate=ledger_gate,
         )
     except ExecutorAbort as exc:
         print(f"\nABORT: {exc}")
