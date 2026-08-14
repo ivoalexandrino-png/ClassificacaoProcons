@@ -1,8 +1,14 @@
-"""Testes do manifesto canônico e safety model escopado."""
+"""Testes do manifesto canônico v2 e safety model escopado."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from classificacao_procons.migration.apply_writer import MondayApplySource
+from classificacao_procons.migration.column_transforms import (
+    PROCONS_DOCS_SAC_MONDAY_COLUMN,
+    PROCONS_NOTIFICACAO_MONDAY_COLUMN,
+)
 from classificacao_procons.migration.executor import PlannedOperation
 from classificacao_procons.migration.models import (
     BoardPlan,
@@ -19,10 +25,13 @@ from classificacao_procons.migration.operation_manifest import (
     board_global_fingerprint,
     build_scoped_operation_manifest,
     compare_scoped_drift,
+    migration_code_revision,
     migration_schema_fingerprint,
-    operation_manifest_hash,
+    operation_manifest_hash_v1,
+    operation_manifest_hash_v2,
     plan_item_manifest_operations,
     selected_source_fingerprint,
+    summarize_custom_write_breakdown,
     summarize_manifest_accounting,
     validate_scoped_apply_fingerprints,
 )
@@ -42,6 +51,16 @@ def _inventory(*items: MondayItemDigest) -> MondayBoardInventory:
             MondayColumnInfo(id="status_main", title="Status", type="status"),
             MondayColumnInfo(id="text_col", title="Obs", type="text"),
             MondayColumnInfo(id="monday_id_col", title="Monday ID", type="text"),
+            MondayColumnInfo(
+                id=PROCONS_NOTIFICACAO_MONDAY_COLUMN,
+                title="Arquivos",
+                type="file",
+            ),
+            MondayColumnInfo(
+                id=PROCONS_DOCS_SAC_MONDAY_COLUMN,
+                title="Arquivos8",
+                type="file",
+            ),
         ),
         items=items,
     )
@@ -92,6 +111,24 @@ def _board_plan() -> BoardPlan:
                 sunday_column_id="700",
                 exists_in_target=True,
             ),
+            ColumnPlan(
+                monday_column_id=PROCONS_NOTIFICACAO_MONDAY_COLUMN,
+                monday_title="Arquivos",
+                monday_type="file",
+                strategy="transformacao",
+                sunday_target="notificacao_procon",
+                sunday_column_id="598",
+                exists_in_target=True,
+            ),
+            ColumnPlan(
+                monday_column_id=PROCONS_DOCS_SAC_MONDAY_COLUMN,
+                monday_title="Arquivos8",
+                monday_type="file",
+                strategy="transformacao",
+                sunday_target="docs_sac",
+                sunday_column_id="605",
+                exists_in_target=True,
+            ),
         ),
         status_mappings={
             "status_main": {"Aberto": "aberto"},
@@ -120,6 +157,20 @@ def _sunday_snapshot() -> SundayBoardSnapshot:
                 is_system=False,
             ),
             SundayColumnSnapshot(
+                id="598",
+                key="notificacao_procon",
+                label="Notificação Procon",
+                type="link",
+                is_system=False,
+            ),
+            SundayColumnSnapshot(
+                id="605",
+                key="docs_sac",
+                label="Docs SAC",
+                type="link",
+                is_system=False,
+            ),
+            SundayColumnSnapshot(
                 id="999",
                 key="monday_id",
                 label="Monday ID",
@@ -131,15 +182,27 @@ def _sunday_snapshot() -> SundayBoardSnapshot:
     )
 
 
-def _source(item_id: str, *, status: str = "Aberto", text: str = "nota") -> MondayApplySource:
+def _source(
+    item_id: str,
+    *,
+    status: str = "Aberto",
+    text: str = "nota",
+    notificacao_url: str | None = None,
+    docs_url: str | None = None,
+) -> MondayApplySource:
+    values = {
+        "status_main": status,
+        "text_col": text,
+    }
+    if notificacao_url:
+        values[PROCONS_NOTIFICACAO_MONDAY_COLUMN] = notificacao_url
+    if docs_url:
+        values[PROCONS_DOCS_SAC_MONDAY_COLUMN] = docs_url
     return MondayApplySource(
         item_id=item_id,
         name=f"Item {item_id}",
         group_id="g1",
-        values_by_column_id={
-            "status_main": status,
-            "text_col": text,
-        },
+        values_by_column_id=values,
     )
 
 
@@ -281,6 +344,8 @@ def test_schema_fingerprint_changes_when_status_option_changes():
             ),
             snapshot_a.columns[1],
             snapshot_a.columns[2],
+            snapshot_a.columns[3],
+            snapshot_a.columns[4],
         ),
         groups=snapshot_a.groups,
     )
@@ -295,13 +360,12 @@ def test_schema_fingerprint_changes_when_status_option_changes():
     )
 
 
-def test_manifest_hash_changes_when_operation_count_changes():
+def test_manifest_hash_v2_changes_when_operation_count_changes():
     inventory = _inventory(_item(ITEM_A))
     board_plan = _board_plan()
     sunday_snapshot = _sunday_snapshot()
-    operation = _create_operation(ITEM_A)
     manifest_one = build_scoped_operation_manifest(
-        plan_operations=[operation],
+        plan_operations=[_create_operation(ITEM_A)],
         inventory=inventory,
         board_plan=board_plan,
         sunday_snapshot=sunday_snapshot,
@@ -316,9 +380,8 @@ def test_manifest_hash_changes_when_operation_count_changes():
         classification="text_update_without_author",
         is_migratable=True,
     )
-    operation_two = _create_operation(ITEM_A, updates=(update,))
     manifest_two = build_scoped_operation_manifest(
-        plan_operations=[operation_two],
+        plan_operations=[_create_operation(ITEM_A, updates=(update,))],
         inventory=inventory,
         board_plan=board_plan,
         sunday_snapshot=sunday_snapshot,
@@ -326,47 +389,150 @@ def test_manifest_hash_changes_when_operation_count_changes():
         monday_id_column_id="999",
         monday_board_id=PROCONS,
     )
-    assert operation_manifest_hash(manifest_one) != operation_manifest_hash(manifest_two)
+    assert operation_manifest_hash_v2(manifest_one) != operation_manifest_hash_v2(manifest_two)
 
 
-def test_status_subset_not_double_counted_in_operation_total():
+def test_manifest_hash_v2_changes_when_payload_changes_but_op_id_same():
     inventory = _inventory(_item(ITEM_A))
     board_plan = _board_plan()
     sunday_snapshot = _sunday_snapshot()
-    manifest = build_scoped_operation_manifest(
+    manifest_before = build_scoped_operation_manifest(
         plan_operations=[_create_operation(ITEM_A)],
         inventory=inventory,
         board_plan=board_plan,
         sunday_snapshot=sunday_snapshot,
-        apply_sources={ITEM_A: _source(ITEM_A)},
+        apply_sources={ITEM_A: _source(ITEM_A, text="nota-a")},
         monday_id_column_id="999",
         monday_board_id=PROCONS,
     )
-    accounting = summarize_manifest_accounting(manifest)
-    assert accounting.status_within_custom_fields <= accounting.custom_fields_total
-    assert accounting.non_status_custom_fields == (
-        accounting.custom_fields_total - accounting.status_within_custom_fields
+    manifest_after = build_scoped_operation_manifest(
+        plan_operations=[_create_operation(ITEM_A)],
+        inventory=inventory,
+        board_plan=board_plan,
+        sunday_snapshot=sunday_snapshot,
+        apply_sources={ITEM_A: _source(ITEM_A, text="nota-b")},
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
     )
-    assert accounting.operation_total == (
-        accounting.sunday_write_operations + accounting.ledger_entries
-    )
+    text_ops_before = [
+        op
+        for op in manifest_before
+        if op.kind == "CUSTOM_FIELD_WRITE" and op.monday_column_id == "text_col"
+    ]
+    text_ops_after = [
+        op
+        for op in manifest_after
+        if op.kind == "CUSTOM_FIELD_WRITE" and op.monday_column_id == "text_col"
+    ]
+    assert text_ops_before and text_ops_after
+    assert text_ops_before[0].op_id == text_ops_after[0].op_id
+    assert text_ops_before[0].payload_digest != text_ops_after[0].payload_digest
+    assert operation_manifest_hash_v1(manifest_before) == operation_manifest_hash_v1(manifest_after)
+    assert operation_manifest_hash_v2(manifest_before) != operation_manifest_hash_v2(manifest_after)
 
 
-def test_plan_proxy_custom_values_differs_from_manifest_custom_total():
+def test_url_change_changes_manifest_hash_v2():
     inventory = _inventory(_item(ITEM_A))
-    proxy_count = len(inventory.items[0].status_labels)
+    board_plan = _board_plan()
+    sunday_snapshot = _sunday_snapshot()
+    manifest_a = build_scoped_operation_manifest(
+        plan_operations=[_create_operation(ITEM_A)],
+        inventory=inventory,
+        board_plan=board_plan,
+        sunday_snapshot=sunday_snapshot,
+        apply_sources={
+            ITEM_A: _source(
+                ITEM_A,
+                notificacao_url="https://files.example/a.pdf",
+            ),
+        },
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
+    )
+    manifest_b = build_scoped_operation_manifest(
+        plan_operations=[_create_operation(ITEM_A)],
+        inventory=inventory,
+        board_plan=board_plan,
+        sunday_snapshot=sunday_snapshot,
+        apply_sources={
+            ITEM_A: _source(
+                ITEM_A,
+                notificacao_url="https://files.example/b.pdf",
+            ),
+        },
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
+    )
+    assert operation_manifest_hash_v2(manifest_a) != operation_manifest_hash_v2(manifest_b)
+
+
+def test_link_and_status_not_double_counted_in_operation_total():
+    inventory = _inventory(_item(ITEM_A))
     manifest = build_scoped_operation_manifest(
         plan_operations=[_create_operation(ITEM_A)],
         inventory=inventory,
         board_plan=_board_plan(),
         sunday_snapshot=_sunday_snapshot(),
-        apply_sources={ITEM_A: _source(ITEM_A)},
+        apply_sources={
+            ITEM_A: _source(
+                ITEM_A,
+                notificacao_url="https://files.example/a.pdf",
+                docs_url="https://files.example/b.pdf",
+            ),
+        },
         monday_id_column_id="999",
         monday_board_id=PROCONS,
     )
     accounting = summarize_manifest_accounting(manifest)
-    assert proxy_count == 1
-    assert accounting.custom_fields_total > proxy_count
+    breakdown = summarize_custom_write_breakdown(manifest, inventory=inventory)
+    assert accounting.link_writes == breakdown.link
+    assert accounting.status_writes == breakdown.status
+    assert accounting.all_custom_column_writes == (
+        accounting.custom_other_writes + accounting.status_writes + accounting.link_writes
+    )
+    assert accounting.operation_total == (
+        accounting.sunday_write_operations + accounting.ledger_operations
+    )
+    assert accounting.sunday_write_operations == sum(
+        (
+            accounting.item_creates,
+            accounting.system_writes,
+            accounting.custom_other_writes,
+            accounting.status_writes,
+            accounting.link_writes,
+            accounting.comments,
+            accounting.attachments,
+            accounting.relations,
+            accounting.subitems,
+        ),
+    )
+
+
+def test_link_write_has_no_duplicate_custom_field_write():
+    manifest = build_scoped_operation_manifest(
+        plan_operations=[_create_operation(ITEM_A)],
+        inventory=_inventory(_item(ITEM_A)),
+        board_plan=_board_plan(),
+        sunday_snapshot=_sunday_snapshot(),
+        apply_sources={
+            ITEM_A: _source(
+                ITEM_A,
+                notificacao_url="https://files.example/a.pdf",
+            ),
+        },
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
+    )
+    link_ops = [op for op in manifest if op.kind == "LINK_WRITE"]
+    assert len(link_ops) == 1
+    link = link_ops[0]
+    duplicate_custom = [
+        op
+        for op in manifest
+        if op.kind == "CUSTOM_FIELD_WRITE"
+        and op.monday_column_id == link.monday_column_id
+    ]
+    assert duplicate_custom == []
 
 
 def test_system_field_accounting_matches_writer_semantics():
@@ -381,10 +547,13 @@ def test_system_field_accounting_matches_writer_semantics():
     )
     accounting = summarize_manifest_accounting(manifest)
     system_ops = [op for op in manifest if op.kind == "SYSTEM_FIELD_WRITE"]
-    assert accounting.system_fields == len(system_ops) == 2
+    assert accounting.system_writes == len(system_ops) == 2
     assert ("name", "status_sistema") == tuple(
         sorted(op.field_name for op in system_ops),
     )
+    monday_id_ops = [op for op in manifest if op.field_name == "monday_id"]
+    assert len(monday_id_ops) == 1
+    assert monday_id_ops[0].kind == "CUSTOM_FIELD_WRITE"
 
 
 def test_scoped_drift_allows_global_change_when_selected_unchanged():
@@ -430,7 +599,7 @@ def test_scoped_drift_allows_global_change_when_selected_unchanged():
     assert validate_scoped_apply_fingerprints(approved=approved, current=current) == []
 
 
-def test_validate_scoped_apply_aborts_on_manifest_change():
+def test_validate_scoped_apply_aborts_on_manifest_v2_change():
     board_plan = _board_plan()
     sunday_snapshot = _sunday_snapshot()
     inventory = _inventory(_item(ITEM_A))
@@ -458,4 +627,41 @@ def test_validate_scoped_apply_aborts_on_manifest_change():
         monday_board_id=PROCONS,
     )
     failures = validate_scoped_apply_fingerprints(approved=approved, current=current)
-    assert failures
+    assert "operation_manifest_hash_v2 divergente" in failures
+
+
+def test_code_revision_change_invalidates_approval():
+    board_plan = _board_plan()
+    sunday_snapshot = _sunday_snapshot()
+    inventory = _inventory(_item(ITEM_A))
+    sources = {ITEM_A: _source(ITEM_A)}
+    selected = frozenset({ITEM_A})
+    approved = attach_scoped_safety_metadata(
+        inventory=inventory,
+        board_plan=board_plan,
+        sunday_snapshot=sunday_snapshot,
+        apply_sources=sources,
+        plan_operations=[_create_operation(ITEM_A)],
+        selected_item_ids=selected,
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
+    )
+    current = attach_scoped_safety_metadata(
+        inventory=inventory,
+        board_plan=board_plan,
+        sunday_snapshot=sunday_snapshot,
+        apply_sources=sources,
+        plan_operations=[_create_operation(ITEM_A)],
+        selected_item_ids=selected,
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
+    )
+    object.__setattr__(current, "code_revision", "deadbeefdeadbeefdeadbeef")
+    failures = validate_scoped_apply_fingerprints(approved=approved, current=current)
+    assert "code_revision divergente" in failures
+
+
+def test_migration_code_revision_is_stable_for_same_sources():
+    revision_a = migration_code_revision(repo_root=Path(__file__).resolve().parents[1])
+    revision_b = migration_code_revision(repo_root=Path(__file__).resolve().parents[1])
+    assert revision_a == revision_b
