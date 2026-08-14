@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from classificacao_procons.migration.apply_writer import MondayApplySource
 from classificacao_procons.migration.column_transforms import (
     PROCONS_DOCS_SAC_MONDAY_COLUMN,
@@ -671,12 +673,53 @@ def test_migration_code_revision_is_stable_for_same_sources():
 
 def test_migration_runtime_module_paths_cover_execution_engine():
     paths = set(MIGRATION_RUNTIME_MODULE_PATHS)
-    assert "scripts/sunday_migration_execute.py" in paths
-    assert "src/classificacao_procons/migration/apply_writer.py" in paths
-    assert "src/classificacao_procons/migration/executor.py" in paths
-    assert "src/classificacao_procons/migration/operation_manifest.py" in paths
-    assert "src/classificacao_procons/migration/source_completeness.py" in paths
-    assert "src/classificacao_procons/migration/status_coverage.py" in paths
+    expected = {
+        "scripts/sunday_migration_execute.py",
+        "src/classificacao_procons/migration/apply_writer.py",
+        "src/classificacao_procons/migration/executor.py",
+        "src/classificacao_procons/migration/operation_manifest.py",
+        "src/classificacao_procons/migration/source_completeness.py",
+        "src/classificacao_procons/migration/status_coverage.py",
+        "src/classificacao_procons/migration/column_transforms.py",
+        "src/classificacao_procons/migration/mappings.py",
+        "src/classificacao_procons/migration/dry_run.py",
+        "src/classificacao_procons/migration/monday_inventory.py",
+        "src/classificacao_procons/migration/sunday_snapshot.py",
+        "src/classificacao_procons/migration/dispositions.py",
+        "src/classificacao_procons/migration/user_mapping.py",
+        "src/classificacao_procons/migration/ledger_sync.py",
+    }
+    assert expected.issubset(paths)
+
+
+@pytest.mark.parametrize(
+    "module_path",
+    [
+        "src/classificacao_procons/migration/apply_writer.py",
+        "src/classificacao_procons/migration/executor.py",
+        "src/classificacao_procons/migration/operation_manifest.py",
+        "src/classificacao_procons/migration/column_transforms.py",
+        "src/classificacao_procons/migration/mappings.py",
+        "src/classificacao_procons/migration/source_completeness.py",
+        "src/classificacao_procons/migration/status_coverage.py",
+        "src/classificacao_procons/migration/dry_run.py",
+        "src/classificacao_procons/migration/monday_inventory.py",
+        "src/classificacao_procons/migration/sunday_snapshot.py",
+        "src/classificacao_procons/migration/dispositions.py",
+        "src/classificacao_procons/migration/user_mapping.py",
+        "src/classificacao_procons/migration/ledger_sync.py",
+        "scripts/sunday_migration_execute.py",
+    ],
+)
+def test_code_revision_changes_when_runtime_module_changes(module_path: str):
+    repo_root = Path(__file__).resolve().parents[1]
+    current = (repo_root / module_path).read_bytes()
+    revision_before = migration_code_revision(repo_root=repo_root)
+    revision_after = migration_code_revision_for_module_bytes(
+        repo_root=repo_root,
+        module_bytes={module_path: current + b"\n"},
+    )
+    assert revision_before != revision_after
 
 
 def test_code_revision_changes_when_cli_execution_path_changes():

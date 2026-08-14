@@ -154,7 +154,7 @@ def load_persistent_ledger(path: str | Path = DEFAULT_LEDGER_PATH) -> dict[str, 
 
 
 def persist_ledger_record(record: dict, path: str | Path = DEFAULT_LEDGER_PATH) -> None:
-    """Grava UMA entrada confirmada (escrita atômica tmp+rename)."""
+    """Grava UMA entrada no ledger durável (escrita atômica tmp+rename)."""
     ledger_path = Path(path)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     payload = _read_ledger_payload(ledger_path) if ledger_path.exists() else _empty_ledger_payload()
@@ -769,11 +769,32 @@ def build_sunday_schema_checks(
 
 
 @dataclass
+class LedgerWriteReport:
+    """Contabilidade explícita de persistência do ledger durável."""
+
+    expected: int = 0
+    durable_confirmed: int = 0
+    pending_sync: int = 0
+    failed: int = 0
+    failures: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "ledger_expected": self.expected,
+            "ledger_durable_confirmed": self.durable_confirmed,
+            "ledger_pending_sync": self.pending_sync,
+            "ledger_failed": self.failed,
+            "ledger_failures": list(self.failures),
+        }
+
+
+@dataclass
 class ApplyReport:
     succeeded: list[str] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list)
     not_attempted: list[str] = field(default_factory=list)
     write_stats: dict[str, int] = field(default_factory=dict)
+    ledger: LedgerWriteReport = field(default_factory=LedgerWriteReport)
 
 
 @dataclass(frozen=True)
@@ -867,8 +888,15 @@ def apply_plan(
             continue
         if operation.action in ("exclude_test", "absorb"):
             # absorb/exclude registram ledger sem criar item Sunday.
-            _record_ledger(plan, operation, sunday_item_id=None, ledger_path=ledger_path,
-                           now=now)
+            report.ledger.expected += 1
+            _record_ledger(
+                plan,
+                operation,
+                sunday_item_id=None,
+                ledger_path=ledger_path,
+                now=now,
+                ledger_report=report.ledger,
+            )
             report.succeeded.append(operation.monday_item_id)
             continue
         if operation.action == "blocked":
@@ -947,9 +975,14 @@ def apply_plan(
                     pass  # sunday_item_id já definido
                 else:
                     raise RuntimeError(f"Ação não suportada: {operation.action}")
+            report.ledger.expected += 1
             _record_ledger(
-                plan, operation, sunday_item_id=sunday_item_id,
-                ledger_path=ledger_path, now=now,
+                plan,
+                operation,
+                sunday_item_id=sunday_item_id,
+                ledger_path=ledger_path,
+                now=now,
+                ledger_report=report.ledger,
             )
             report.succeeded.append(operation.monday_item_id)
         except ExecutorAbort:
@@ -983,23 +1016,35 @@ def _record_ledger(
     sunday_item_id: str | None,
     ledger_path: str | Path,
     now: Callable[[], str],
+    ledger_report: LedgerWriteReport | None = None,
 ) -> None:
-    persist_ledger_record(
-        {
-            "monday_board_id": plan.monday_board_id,
-            "monday_item_id": operation.monday_item_id,
-            "sunday_board_id": plan.sunday_board_id,
-            "sunday_item_id": sunday_item_id,
-            "wave": operation.wave,
-            "disposition": operation.disposition,
-            "canonical_monday_item_id": operation.canonical_monday_item_id,
-            "reason": operation.blocked_reason,
-            "migration_status": "migrated",
-            "migrated_at": now(),
-            "source_snapshot_timestamp": plan.source_snapshot_timestamp,
-        },
-        path=ledger_path,
-    )
+    record = {
+        "monday_board_id": plan.monday_board_id,
+        "monday_item_id": operation.monday_item_id,
+        "sunday_board_id": plan.sunday_board_id,
+        "sunday_item_id": sunday_item_id,
+        "wave": operation.wave,
+        "disposition": operation.disposition,
+        "canonical_monday_item_id": operation.canonical_monday_item_id,
+        "reason": operation.blocked_reason,
+        "migration_status": "migrated",
+        "migrated_at": now(),
+        "source_snapshot_timestamp": plan.source_snapshot_timestamp,
+    }
+    from classificacao_procons.migration.ledger_sync import verify_ledger_record_persisted
+
+    persist_ledger_record(record, path=ledger_path)
+    if not verify_ledger_record_persisted(record, ledger_path=ledger_path):
+        message = (
+            f"Ledger durable persistence failed for {operation.monday_item_id} "
+            f"at {ledger_path}"
+        )
+        if ledger_report is not None:
+            ledger_report.failed += 1
+            ledger_report.failures.append(message)
+        raise RuntimeError(message)
+    if ledger_report is not None:
+        ledger_report.durable_confirmed += 1
 
 
 def comment_idempotency_marker(monday_item_id: str, update_id: str) -> str:

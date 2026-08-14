@@ -132,7 +132,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--board", required=True, help="monday_board_id (allowlist)")
     parser.add_argument("--wave", required=True, type=int, choices=(1, 2))
-    parser.add_argument("--mode", default="plan", choices=("plan", "apply", "repair"))
+    parser.add_argument("--mode", default="plan", choices=("plan", "apply", "repair", "ledger-sync-plan"))
     parser.add_argument("--max-items", required=True, type=int)
     parser.add_argument(
         "--item-id",
@@ -214,6 +214,38 @@ def main() -> int:
     except ExecutorAbort as exc:
         print(f"ABORT: {exc}")
         return 3
+
+    if args.mode == "ledger-sync-plan":
+        from classificacao_procons.migration.ledger_sync import (
+            build_ledger_sync_plan,
+            discover_live_proven_mappings,
+        )
+        from classificacao_procons.sunday.client import SundayClient
+
+        client = SundayClient(sunday_config_from_test_env())
+        sunday_boards = list(BOARD_ALLOWLIST.values())
+        sunday_snapshots = snapshot_from_live_client(client, sunday_boards)
+        monday_id_column_ids = {
+            sunday_board_id: _find_monday_id_column(snapshot)
+            for sunday_board_id, snapshot in sunday_snapshots.items()
+        }
+        live_mappings = discover_live_proven_mappings(
+            client=client,
+            sunday_snapshots=sunday_snapshots,
+            monday_id_column_ids=monday_id_column_ids,
+        )
+        sync_plan = build_ledger_sync_plan(
+            live_mappings=live_mappings,
+            ledger_path=args.ledger,
+        )
+        payload = sync_plan.as_dict()
+        Path(args.out).write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        print(f"\nLEDGER SYNC PLAN gravado em {args.out}")
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
 
     if args.mode == "repair":
         from classificacao_procons.migration.repair_plan import (
@@ -656,6 +688,7 @@ def main() -> int:
         ],
         "not_attempted": apply_result.not_attempted,
         "writes": apply_result.write_stats,
+        "ledger": apply_result.ledger.as_dict(),
         "field_checks_total": field_report.total,
         "field_checks_ok": field_report.ok,
         "field_checks_error": len(field_report.errors),
@@ -675,6 +708,7 @@ def main() -> int:
         "failed": len(apply_result.failed),
         "not_attempted": len(apply_result.not_attempted),
         "writes": apply_result.write_stats,
+        "ledger": apply_result.ledger.as_dict(),
         "field_checks": f"{field_report.ok}/{field_report.total}",
         "post_plan_create": post_payload.get("counts", {}).get("create"),
         "post_plan_already_migrated": post_payload.get("counts", {}).get("already_migrated"),
