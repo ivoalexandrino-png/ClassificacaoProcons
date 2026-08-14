@@ -237,6 +237,8 @@ class ExecutionPlan:
     relations_to_create: list[RelationWrite] = field(default_factory=list)
     relations_unresolved: list[RelationWrite] = field(default_factory=list)
     gate: list[GateCheck] = field(default_factory=list)
+    scoped_safety: object | None = None
+    max_writes: int | None = None
 
     @property
     def gate_ok(self) -> bool:
@@ -291,6 +293,17 @@ class ExecutionPlan:
                 for check in self.gate
             ],
             "gate_ok": self.gate_ok,
+            "max_writes": self.max_writes,
+            "scoped_safety": (
+                self.scoped_safety.as_dict()
+                if self.scoped_safety is not None and hasattr(self.scoped_safety, "as_dict")
+                else None
+            ),
+            "operation_accounting": (
+                self.scoped_safety.accounting.as_dict()
+                if self.scoped_safety is not None and hasattr(self.scoped_safety, "accounting")
+                else None
+            ),
             "operations": [
                 {
                     "monday_item_id": op.monday_item_id,
@@ -654,13 +667,48 @@ def _build_gate(plan: ExecutionPlan, schema_checks: list[GateCheck]) -> list[Gat
             and plan.snapshot_total > 0
             and all(operation.comments_count_exact for operation in plan.operations),
             (
-                f"fingerprint {plan.snapshot_fingerprint} / {plan.snapshot_total} rows; "
+                f"board_global {plan.snapshot_fingerprint} / {plan.snapshot_total} rows; "
                 "updates exatos"
                 if all(operation.comments_count_exact for operation in plan.operations)
                 else "snapshot legado sem IDs exatos de updates"
             ),
         ),
     ]
+    if plan.scoped_safety is not None:
+        scoped = plan.scoped_safety
+        checks.append(
+            GateCheck(
+                "selected_source_fingerprint",
+                bool(getattr(scoped, "selected_source_fingerprint", "")),
+                getattr(scoped, "selected_source_fingerprint", ""),
+            ),
+        )
+        checks.append(
+            GateCheck(
+                "migration_schema_fingerprint",
+                bool(getattr(scoped, "migration_schema_fingerprint", "")),
+                getattr(scoped, "migration_schema_fingerprint", ""),
+            ),
+        )
+        checks.append(
+            GateCheck(
+                "operation_manifest_hash",
+                bool(getattr(scoped, "operation_manifest_hash", "")),
+                getattr(scoped, "operation_manifest_hash", ""),
+            ),
+        )
+        accounting = getattr(scoped, "accounting", None)
+        if accounting is not None and plan.max_writes is not None:
+            checks.append(
+                GateCheck(
+                    "max_writes",
+                    accounting.operation_total == plan.max_writes,
+                    (
+                        f"{accounting.operation_total} operações técnicas "
+                        f"== limite {plan.max_writes}"
+                    ),
+                ),
+            )
     if schema_checks:
         checks.extend(schema_checks)
     else:
@@ -749,12 +797,42 @@ def apply_plan(
         raise ExecutorAbort(f"Gate fail-closed reprovado: {', '.join(failing)}.")
     if snapshot_revalidator is None:
         raise ExecutorAbort("APPLY exige revalidação de snapshot (concorrência).")
-    current = snapshot_revalidator()
-    if current != plan.snapshot_fingerprint:
-        raise ExecutorAbort(
-            "Snapshot do Monday mudou desde o PLAN aprovado "
-            f"({current} != {plan.snapshot_fingerprint}); gere novo PLAN.",
+    if plan.scoped_safety is not None:
+        from classificacao_procons.migration.operation_manifest import (
+            validate_scoped_apply_fingerprints,
         )
+
+        current_scoped = snapshot_revalidator()
+        if not hasattr(current_scoped, "selected_source_fingerprint"):
+            raise ExecutorAbort(
+                "APPLY escopado exige revalidador que retorne ScopedSafetyMetadata.",
+            )
+        failures = validate_scoped_apply_fingerprints(
+            approved=plan.scoped_safety,
+            current=current_scoped,
+        )
+        if failures:
+            raise ExecutorAbort(
+                "Scoped safety reprovado: " + "; ".join(failures),
+            )
+        if plan.max_writes is not None and (
+            current_scoped.accounting.operation_total != plan.max_writes
+        ):
+            raise ExecutorAbort(
+                f"operation_total {current_scoped.accounting.operation_total} "
+                f"!= max_writes {plan.max_writes}.",
+            )
+    else:
+        current = snapshot_revalidator()
+        if not isinstance(current, str):
+            raise ExecutorAbort(
+                "Revalidador legado deve retornar fingerprint global (str).",
+            )
+        if current != plan.snapshot_fingerprint:
+            raise ExecutorAbort(
+                "Snapshot do Monday mudou desde o PLAN aprovado "
+                f"({current} != {plan.snapshot_fingerprint}); gere novo PLAN.",
+            )
 
     report = ApplyReport()
     write_stats = None
