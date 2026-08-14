@@ -238,7 +238,12 @@ class ExecutionPlan:
     relations_unresolved: list[RelationWrite] = field(default_factory=list)
     gate: list[GateCheck] = field(default_factory=list)
     scoped_safety: object | None = None
+    max_operations: int | None = None
     max_writes: int | None = None
+
+    @property
+    def effective_max_operations(self) -> int | None:
+        return self.max_operations if self.max_operations is not None else self.max_writes
 
     @property
     def gate_ok(self) -> bool:
@@ -293,7 +298,8 @@ class ExecutionPlan:
                 for check in self.gate
             ],
             "gate_ok": self.gate_ok,
-            "max_writes": self.max_writes,
+            "max_operations": self.effective_max_operations,
+            "max_writes": self.effective_max_operations,
             "scoped_safety": (
                 self.scoped_safety.as_dict()
                 if self.scoped_safety is not None and hasattr(self.scoped_safety, "as_dict")
@@ -692,20 +698,28 @@ def _build_gate(plan: ExecutionPlan, schema_checks: list[GateCheck]) -> list[Gat
         )
         checks.append(
             GateCheck(
-                "operation_manifest_hash",
-                bool(getattr(scoped, "operation_manifest_hash", "")),
-                getattr(scoped, "operation_manifest_hash", ""),
+                "operation_manifest_hash_v2",
+                bool(getattr(scoped, "operation_manifest_hash_v2", "")),
+                getattr(scoped, "operation_manifest_hash_v2", ""),
+            ),
+        )
+        checks.append(
+            GateCheck(
+                "code_revision",
+                bool(getattr(scoped, "code_revision", "")),
+                getattr(scoped, "code_revision", ""),
             ),
         )
         accounting = getattr(scoped, "accounting", None)
-        if accounting is not None and plan.max_writes is not None:
+        max_operations = plan.effective_max_operations
+        if accounting is not None and max_operations is not None:
             checks.append(
                 GateCheck(
-                    "max_writes",
-                    accounting.operation_total == plan.max_writes,
+                    "max_operations",
+                    accounting.operation_total == max_operations,
                     (
                         f"{accounting.operation_total} operações técnicas "
-                        f"== limite {plan.max_writes}"
+                        f"== limite {max_operations}"
                     ),
                 ),
             )
@@ -815,12 +829,13 @@ def apply_plan(
             raise ExecutorAbort(
                 "Scoped safety reprovado: " + "; ".join(failures),
             )
-        if plan.max_writes is not None and (
-            current_scoped.accounting.operation_total != plan.max_writes
+        max_operations = plan.effective_max_operations
+        if max_operations is not None and (
+            current_scoped.accounting.operation_total != max_operations
         ):
             raise ExecutorAbort(
                 f"operation_total {current_scoped.accounting.operation_total} "
-                f"!= max_writes {plan.max_writes}.",
+                f"!= max_operations {max_operations}.",
             )
     else:
         current = snapshot_revalidator()

@@ -1,7 +1,18 @@
 """Manifesto canônico de operações Monday→Sunday (PLAN/APPLY compartilhado).
 
-Gera fingerprints escopados, schema fingerprint e contabilidade idêntica ao
-``apply_writer`` sem executar writes.
+Accounting Model A — kinds mutuamente exclusivos no manifesto:
+
+- CREATE_ITEM
+- SYSTEM_FIELD_WRITE
+- CUSTOM_FIELD_WRITE (text/date/people/monday_id/outros; **não** status/link)
+- STATUS_WRITE
+- LINK_WRITE
+- COMMENT_CREATE
+- ATTACHMENT / RELATION / SUBITEM
+- LEDGER_ENTRY
+
+``operation_total`` soma cada operação uma única vez.
+``all_custom_column_writes`` = custom_other + status + link (métrica derivada).
 """
 
 from __future__ import annotations
@@ -9,13 +20,22 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from classificacao_procons.migration.apply_writer import (
     MondayApplySource,
+    MondayUpdateSource,
+    derive_system_status_key,
+    format_monday_id_column_value,
+    format_monday_update_comment,
     is_file_to_link_mapping,
 )
-from classificacao_procons.migration.column_transforms import StatusResolveError
+from classificacao_procons.migration.column_transforms import (
+    PROCONS_DOCS_SAC_MONDAY_COLUMN,
+    PROCONS_NOTIFICACAO_MONDAY_COLUMN,
+    StatusResolveError,
+)
 from classificacao_procons.migration.executor import (
     PlannedOperation,
     comment_idempotency_marker,
@@ -41,12 +61,20 @@ ManifestKind = Literal[
     "LEDGER_ENTRY",
 ]
 
+_CODE_REVISION_MODULE_PATHS: tuple[str, ...] = (
+    "src/classificacao_procons/migration/operation_manifest.py",
+    "src/classificacao_procons/migration/apply_writer.py",
+    "src/classificacao_procons/migration/executor.py",
+    "src/classificacao_procons/migration/column_transforms.py",
+)
+
 
 @dataclass(frozen=True)
 class ManifestOperation:
     kind: ManifestKind
     op_id: str
     monday_item_id: str
+    payload_digest: str
     monday_column_id: str | None = None
     sunday_column_id: str | None = None
     update_id: str | None = None
@@ -55,56 +83,112 @@ class ManifestOperation:
 
 @dataclass
 class OperationAccounting:
+    """Contagens mutuamente exclusivas (Model A)."""
+
     item_creates: int = 0
-    system_fields: int = 0
-    custom_fields_total: int = 0
-    status_within_custom_fields: int = 0
-    non_status_custom_fields: int = 0
+    system_writes: int = 0
+    custom_other_writes: int = 0
+    status_writes: int = 0
+    link_writes: int = 0
     comments: int = 0
-    links: int = 0
     attachments: int = 0
     relations: int = 0
     subitems: int = 0
-    ledger_entries: int = 0
+    ledger_operations: int = 0
+
+    @property
+    def all_custom_column_writes(self) -> int:
+        return self.custom_other_writes + self.status_writes + self.link_writes
 
     @property
     def sunday_write_operations(self) -> int:
         return (
             self.item_creates
-            + self.system_fields
-            + self.custom_fields_total
+            + self.system_writes
+            + self.custom_other_writes
+            + self.status_writes
+            + self.link_writes
             + self.comments
-            + self.links
             + self.attachments
             + self.relations
             + self.subitems
         )
 
     @property
-    def technical_operations(self) -> int:
-        return self.sunday_write_operations + self.ledger_entries
-
-    @property
     def operation_total(self) -> int:
-        """Total fail-closed sem double-count de status (subset informativo)."""
-        return self.technical_operations
+        return self.sunday_write_operations + self.ledger_operations
 
     def as_dict(self) -> dict[str, int]:
         return {
             "item_creates": self.item_creates,
-            "system_fields": self.system_fields,
-            "custom_fields_total": self.custom_fields_total,
-            "status_within_custom_fields": self.status_within_custom_fields,
-            "non_status_custom_fields": self.non_status_custom_fields,
+            "system_writes": self.system_writes,
+            "custom_other_writes": self.custom_other_writes,
+            "status_writes": self.status_writes,
+            "link_writes": self.link_writes,
             "comments": self.comments,
-            "links": self.links,
             "attachments": self.attachments,
             "relations": self.relations,
             "subitems": self.subitems,
-            "ledger_entries": self.ledger_entries,
             "sunday_write_operations": self.sunday_write_operations,
-            "technical_operations": self.technical_operations,
+            "ledger_operations": self.ledger_operations,
             "operation_total": self.operation_total,
+            "all_custom_column_writes": self.all_custom_column_writes,
+        }
+
+
+@dataclass
+class CustomWriteBreakdown:
+    monday_id: int = 0
+    status: int = 0
+    text: int = 0
+    date: int = 0
+    people: int = 0
+    link: int = 0
+    outros: int = 0
+
+    @property
+    def total(self) -> int:
+        return (
+            self.monday_id
+            + self.status
+            + self.text
+            + self.date
+            + self.people
+            + self.link
+            + self.outros
+        )
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "monday_id": self.monday_id,
+            "status": self.status,
+            "text": self.text,
+            "date": self.date,
+            "people": self.people,
+            "link": self.link,
+            "outros": self.outros,
+            "total": self.total,
+        }
+
+
+@dataclass
+class LinkScopeBreakdown:
+    notificacao_procon: int = 0
+    docs_sac: int = 0
+    outros: int = 0
+
+    @property
+    def link_writes(self) -> int:
+        return self.notificacao_procon + self.docs_sac + self.outros
+
+    def as_dict(self) -> dict[str, int]:
+        return {
+            "notificacao_procon": self.notificacao_procon,
+            "docs_sac": self.docs_sac,
+            "outros": self.outros,
+            "link_writes": self.link_writes,
+            "binary_attachments": 0,
+            "uploads": 0,
         }
 
 
@@ -115,9 +199,12 @@ class ScopedSafetyMetadata:
     selected_item_ids: tuple[str, ...]
     selected_source_fingerprint: str
     migration_schema_fingerprint: str
-    operation_manifest_hash: str
+    operation_manifest_hash_v2: str
+    code_revision: str
     accounting: OperationAccounting
     manifest_operations: tuple[ManifestOperation, ...] = ()
+    custom_breakdown: CustomWriteBreakdown | None = None
+    link_scope: LinkScopeBreakdown | None = None
     board_drift_outside_scope: bool = False
     scope_safe_despite_global_drift: bool = True
 
@@ -128,8 +215,13 @@ class ScopedSafetyMetadata:
             "selected_item_ids": list(self.selected_item_ids),
             "selected_source_fingerprint": self.selected_source_fingerprint,
             "migration_schema_fingerprint": self.migration_schema_fingerprint,
-            "operation_manifest_hash": self.operation_manifest_hash,
+            "operation_manifest_hash_v2": self.operation_manifest_hash_v2,
+            "code_revision": self.code_revision,
             "accounting": self.accounting.as_dict(),
+            "custom_breakdown": (
+                self.custom_breakdown.as_dict() if self.custom_breakdown else None
+            ),
+            "link_scope": self.link_scope.as_dict() if self.link_scope else None,
             "manifest_operation_count": len(self.manifest_operations),
             "board_drift_outside_scope": self.board_drift_outside_scope,
             "scope_safe_despite_global_drift": self.scope_safe_despite_global_drift,
@@ -143,8 +235,27 @@ def board_global_fingerprint(inventory: MondayBoardInventory) -> str:
 
 def _hash_basis(basis: object) -> str:
     return hashlib.sha256(
-        json.dumps(basis, sort_keys=True, ensure_ascii=True).encode(),
+        json.dumps(basis, sort_keys=True, ensure_ascii=True, default=str).encode(),
     ).hexdigest()[:24]
+
+
+def payload_digest(payload: object) -> str:
+    """Digest canônico do payload esperado (sem expor conteúdo em logs)."""
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str).encode(),
+    ).hexdigest()[:24]
+
+
+def migration_code_revision(*, repo_root: Path | None = None) -> str:
+    """Identidade determinística dos módulos planner/executor relevantes."""
+    root = repo_root or Path(__file__).resolve().parents[3]
+    module_digests: list[str] = []
+    for relative_path in _CODE_REVISION_MODULE_PATHS:
+        path = root / relative_path
+        module_digests.append(
+            hashlib.sha256(path.read_bytes()).hexdigest()[:16],
+        )
+    return _hash_basis(tuple(module_digests))
 
 
 def _migration_values_basis(
@@ -292,8 +403,18 @@ def migration_schema_fingerprint(
     return _hash_basis(basis)
 
 
-def operation_manifest_hash(operations: tuple[ManifestOperation, ...]) -> str:
+def operation_manifest_hash_v1(operations: tuple[ManifestOperation, ...]) -> str:
+    """Hash legado (kind + op_id apenas) — não usar para approval."""
     basis = tuple((op.kind, op.op_id) for op in sorted(operations, key=lambda row: row.op_id))
+    return _hash_basis(basis)
+
+
+def operation_manifest_hash_v2(operations: tuple[ManifestOperation, ...]) -> str:
+    """Hash de approval: identidade + payload esperado por operação."""
+    basis = tuple(
+        (op.kind, op.op_id, op.payload_digest)
+        for op in sorted(operations, key=lambda row: row.op_id)
+    )
     return _hash_basis(basis)
 
 
@@ -305,17 +426,15 @@ def summarize_manifest_accounting(
         if op.kind == "CREATE_ITEM":
             accounting.item_creates += 1
         elif op.kind == "SYSTEM_FIELD_WRITE":
-            accounting.system_fields += 1
+            accounting.system_writes += 1
         elif op.kind == "CUSTOM_FIELD_WRITE":
-            accounting.custom_fields_total += 1
-            accounting.non_status_custom_fields += 1
+            accounting.custom_other_writes += 1
         elif op.kind == "STATUS_WRITE":
-            accounting.custom_fields_total += 1
-            accounting.status_within_custom_fields += 1
+            accounting.status_writes += 1
+        elif op.kind == "LINK_WRITE":
+            accounting.link_writes += 1
         elif op.kind == "COMMENT_CREATE":
             accounting.comments += 1
-        elif op.kind == "LINK_WRITE":
-            accounting.links += 1
         elif op.kind == "ATTACHMENT":
             accounting.attachments += 1
         elif op.kind == "RELATION":
@@ -323,8 +442,57 @@ def summarize_manifest_accounting(
         elif op.kind == "SUBITEM":
             accounting.subitems += 1
         elif op.kind == "LEDGER_ENTRY":
-            accounting.ledger_entries += 1
+            accounting.ledger_operations += 1
     return accounting
+
+
+def summarize_custom_write_breakdown(
+    operations: tuple[ManifestOperation, ...],
+    *,
+    inventory: MondayBoardInventory,
+) -> CustomWriteBreakdown:
+    columns = {column.id: column for column in inventory.columns}
+    breakdown = CustomWriteBreakdown()
+    for op in operations:
+        if op.kind == "STATUS_WRITE":
+            breakdown.status += 1
+        elif op.kind == "LINK_WRITE":
+            breakdown.link += 1
+        elif op.kind == "CUSTOM_FIELD_WRITE":
+            if op.field_name == "monday_id":
+                breakdown.monday_id += 1
+            else:
+                column = columns.get(op.monday_column_id or "")
+                if column is None:
+                    breakdown.outros += 1
+                elif column.type in {"text", "long_text", "link", "email", "location"}:
+                    breakdown.text += 1
+                elif column.type == "date":
+                    breakdown.date += 1
+                elif column.type == "people":
+                    breakdown.people += 1
+                elif column.type == "numbers":
+                    breakdown.outros += 1
+                else:
+                    breakdown.outros += 1
+    return breakdown
+
+
+def summarize_link_scope(
+    operations: tuple[ManifestOperation, ...],
+) -> LinkScopeBreakdown:
+    scope = LinkScopeBreakdown()
+    for op in operations:
+        if op.kind != "LINK_WRITE":
+            continue
+        column_id = op.monday_column_id or ""
+        if column_id == PROCONS_NOTIFICACAO_MONDAY_COLUMN:
+            scope.notificacao_procon += 1
+        elif column_id == PROCONS_DOCS_SAC_MONDAY_COLUMN:
+            scope.docs_sac += 1
+        else:
+            scope.outros += 1
+    return scope
 
 
 def _column_plan_by_monday_id(board_plan: BoardPlan) -> dict[str, object]:
@@ -333,6 +501,12 @@ def _column_plan_by_monday_id(board_plan: BoardPlan) -> dict[str, object]:
 
 def _sunday_column_by_id(snapshot: SundayBoardSnapshot) -> dict[str, SundayColumnSnapshot]:
     return {column.id: column for column in snapshot.columns}
+
+
+def _update_source_by_id(
+    apply_source: MondayApplySource,
+) -> dict[str, MondayUpdateSource]:
+    return {update.update_id: update for update in apply_source.updates}
 
 
 def _planned_custom_writes(
@@ -351,6 +525,7 @@ def _planned_custom_writes(
     )
 
     operations: list[ManifestOperation] = []
+    monday_id_value = format_monday_id_column_value(monday_board_id, monday_item_id)
     operations.append(
         ManifestOperation(
             kind="CUSTOM_FIELD_WRITE",
@@ -359,6 +534,12 @@ def _planned_custom_writes(
             monday_column_id=monday_id_column_id,
             sunday_column_id=monday_id_column_id,
             field_name="monday_id",
+            payload_digest=payload_digest(
+                {
+                    "sunday_column_id": monday_id_column_id,
+                    "value": monday_id_value,
+                },
+            ),
         ),
     )
     column_plans = _column_plan_by_monday_id(board_plan)
@@ -389,6 +570,12 @@ def _planned_custom_writes(
                     monday_item_id=monday_item_id,
                     monday_column_id=monday_column.id,
                     sunday_column_id=sunday_column_id,
+                    payload_digest=payload_digest(
+                        {
+                            "sunday_column_id": sunday_column_id,
+                            "link": value,
+                        },
+                    ),
                 ),
             )
             continue
@@ -411,7 +598,7 @@ def _planned_custom_writes(
             continue
         text = apply_source.values_by_column_id.get(monday_column.id)
         try:
-            _value_for_custom_column_write(
+            value = _value_for_custom_column_write(
                 monday_column=monday_column,
                 source_text=text,
                 board_plan=board_plan,
@@ -419,19 +606,38 @@ def _planned_custom_writes(
             )
         except (StatusResolveError, ValueError):
             continue
-        kind: ManifestKind = (
-            "STATUS_WRITE" if monday_column.type == "status" else "CUSTOM_FIELD_WRITE"
-        )
-        segment = "status" if kind == "STATUS_WRITE" else "custom"
-        operations.append(
-            ManifestOperation(
-                kind=kind,
-                op_id=f"item:{monday_item_id}:{segment}:{monday_column.id}",
-                monday_item_id=monday_item_id,
-                monday_column_id=monday_column.id,
-                sunday_column_id=sunday_column_id,
-            ),
-        )
+        if monday_column.type == "status":
+            operations.append(
+                ManifestOperation(
+                    kind="STATUS_WRITE",
+                    op_id=f"item:{monday_item_id}:status:{monday_column.id}",
+                    monday_item_id=monday_item_id,
+                    monday_column_id=monday_column.id,
+                    sunday_column_id=sunday_column_id,
+                    payload_digest=payload_digest(
+                        {
+                            "sunday_column_id": sunday_column_id,
+                            "option_key": value,
+                        },
+                    ),
+                ),
+            )
+        else:
+            operations.append(
+                ManifestOperation(
+                    kind="CUSTOM_FIELD_WRITE",
+                    op_id=f"item:{monday_item_id}:custom:{monday_column.id}",
+                    monday_item_id=monday_item_id,
+                    monday_column_id=monday_column.id,
+                    sunday_column_id=sunday_column_id,
+                    payload_digest=payload_digest(
+                        {
+                            "sunday_column_id": sunday_column_id,
+                            "value": value,
+                        },
+                    ),
+                ),
+            )
     return operations
 
 
@@ -446,9 +652,10 @@ def plan_item_manifest_operations(
     monday_id_column_id: str,
     existing_comment_markers: set[str] | None = None,
 ) -> tuple[ManifestOperation, ...]:
-    """Manifesto canônico de um item CREATE/resume (sem PII no hash)."""
+    """Manifesto canônico de um item CREATE/resume (sem PII no hash/log)."""
     item_id = operation.monday_item_id
     markers = existing_comment_markers or set()
+    updates_by_id = _update_source_by_id(apply_source)
     operations: list[ManifestOperation] = []
 
     if operation.action == "create":
@@ -457,6 +664,15 @@ def plan_item_manifest_operations(
                 kind="CREATE_ITEM",
                 op_id=f"item:{item_id}:create",
                 monday_item_id=item_id,
+                payload_digest=payload_digest(
+                    {
+                        "sunday_board_id": board_plan.sunday_board_id,
+                        "target_group": operation.target_group,
+                        "group_action": operation.group_action,
+                        "initial_name_set": bool(apply_source.name),
+                        "status_sistema": derive_system_status_key(inventory, item_id),
+                    },
+                ),
             ),
         )
         operations.extend(
@@ -477,6 +693,9 @@ def plan_item_manifest_operations(
                     op_id=f"item:{item_id}:system:name",
                     monday_item_id=item_id,
                     field_name="name",
+                    payload_digest=payload_digest(
+                        {"field": "name", "value_digest": payload_digest(apply_source.name)},
+                    ),
                 ),
             )
         operations.append(
@@ -485,6 +704,12 @@ def plan_item_manifest_operations(
                 op_id=f"item:{item_id}:system:status_sistema",
                 monday_item_id=item_id,
                 field_name="status_sistema",
+                payload_digest=payload_digest(
+                    {
+                        "field": "status_sistema",
+                        "value": derive_system_status_key(inventory, item_id),
+                    },
+                ),
             ),
         )
 
@@ -495,12 +720,28 @@ def plan_item_manifest_operations(
         marker = comment_idempotency_marker(item_id, update.update_id)
         if marker in markers:
             continue
+        update_source = updates_by_id.get(update.update_id)
+        if update_source is None:
+            comment_payload = {
+                "update_id": update.update_id,
+                "content_digest": payload_digest(
+                    {"update_id": update.update_id, "missing_source": True},
+                ),
+            }
+        else:
+            comment_payload = {
+                "update_id": update.update_id,
+                "content_digest": payload_digest(
+                    format_monday_update_comment(item_id, update_source),
+                ),
+            }
         operations.append(
             ManifestOperation(
                 kind="COMMENT_CREATE",
                 op_id=f"item:{item_id}:comment:{update.update_id}",
                 monday_item_id=item_id,
                 update_id=update.update_id,
+                payload_digest=payload_digest(comment_payload),
             ),
         )
 
@@ -510,6 +751,15 @@ def plan_item_manifest_operations(
                 kind="LEDGER_ENTRY",
                 op_id=f"ledger:{monday_board_id}:{item_id}",
                 monday_item_id=item_id,
+                payload_digest=payload_digest(
+                    {
+                        "monday_board_id": monday_board_id,
+                        "monday_item_id": item_id,
+                        "sunday_board_id": board_plan.sunday_board_id,
+                        "wave": operation.wave,
+                        "disposition": operation.disposition,
+                    },
+                ),
             ),
         )
 
@@ -520,6 +770,7 @@ def plan_item_manifest_operations(
                     kind="ATTACHMENT",
                     op_id=f"item:{item_id}:attachment:{index}",
                     monday_item_id=item_id,
+                    payload_digest=payload_digest({"attachment_index": index}),
                 ),
             )
     if operation.subitem_count:
@@ -529,6 +780,7 @@ def plan_item_manifest_operations(
                     kind="SUBITEM",
                     op_id=f"item:{item_id}:subitem:{index}",
                     monday_item_id=item_id,
+                    payload_digest=payload_digest({"subitem_index": index}),
                 ),
             )
 
@@ -581,8 +833,9 @@ def attach_scoped_safety_metadata(
     monday_board_id: str,
     approved_board_global_fingerprint: str | None = None,
     existing_comment_markers: dict[str, set[str]] | None = None,
+    repo_root: Path | None = None,
 ) -> ScopedSafetyMetadata:
-    """Calcula fingerprints + manifesto para lote com --item-ids explícitos."""
+    """Calcula fingerprints + manifesto v2 para lote com --item-ids explícitos."""
     global_fp = board_global_fingerprint(inventory)
     selected_fp = selected_source_fingerprint(
         inventory=inventory,
@@ -606,7 +859,7 @@ def attach_scoped_safety_metadata(
         monday_board_id=monday_board_id,
         existing_comment_markers=existing_comment_markers,
     )
-    manifest_hash = operation_manifest_hash(manifest_ops)
+    manifest_hash_v2 = operation_manifest_hash_v2(manifest_ops)
     accounting = summarize_manifest_accounting(manifest_ops)
     board_drift = (
         approved_board_global_fingerprint is not None
@@ -618,9 +871,15 @@ def attach_scoped_safety_metadata(
         selected_item_ids=tuple(sorted(selected_item_ids)),
         selected_source_fingerprint=selected_fp,
         migration_schema_fingerprint=schema_fp,
-        operation_manifest_hash=manifest_hash,
+        operation_manifest_hash_v2=manifest_hash_v2,
+        code_revision=migration_code_revision(repo_root=repo_root),
         accounting=accounting,
         manifest_operations=manifest_ops,
+        custom_breakdown=summarize_custom_write_breakdown(
+            manifest_ops,
+            inventory=inventory,
+        ),
+        link_scope=summarize_link_scope(manifest_ops),
         board_drift_outside_scope=board_drift,
         scope_safe_despite_global_drift=not board_drift,
     )
@@ -645,7 +904,8 @@ def compare_scoped_drift(
     scope_safe = (
         not selected_changed
         and not schema_changed
-        and current.operation_manifest_hash == approved.operation_manifest_hash
+        and current.operation_manifest_hash_v2 == approved.operation_manifest_hash_v2
+        and current.code_revision == approved.code_revision
     )
     return board_changed, selected_changed, schema_changed, scope_safe
 
@@ -661,8 +921,10 @@ def validate_scoped_apply_fingerprints(
         failures.append("selected_source_fingerprint divergente")
     if current.migration_schema_fingerprint != approved.migration_schema_fingerprint:
         failures.append("migration_schema_fingerprint divergente")
-    if current.operation_manifest_hash != approved.operation_manifest_hash:
-        failures.append("operation_manifest_hash divergente")
+    if current.operation_manifest_hash_v2 != approved.operation_manifest_hash_v2:
+        failures.append("operation_manifest_hash_v2 divergente")
+    if current.code_revision != approved.code_revision:
+        failures.append("code_revision divergente")
     if current.accounting.operation_total != approved.accounting.operation_total:
         failures.append("operation_total divergente")
     return failures

@@ -148,9 +148,17 @@ def main() -> int:
         help="limite exato de comments_to_create do escopo autorizado",
     )
     parser.add_argument(
+        "--max-operations",
+        type=int,
+        help=(
+            "limite exato de operation_total do manifesto canônico "
+            "(Sunday writes + ledger; escopo --item-ids)"
+        ),
+    )
+    parser.add_argument(
         "--max-writes",
         type=int,
-        help="limite exato de operation_total do manifesto canônico (escopo --item-ids)",
+        help="alias legado de --max-operations",
     )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
@@ -478,10 +486,16 @@ def main() -> int:
 
     if requested_item_ids is not None and client is not None and sunday_snapshots:
         plan.scoped_safety = _build_scoped_safety(inventory, plan)
-        if args.max_writes is None and plan.scoped_safety is not None:
-            plan.max_writes = plan.scoped_safety.accounting.operation_total
-        elif args.max_writes is not None:
-            plan.max_writes = args.max_writes
+        if args.max_operations is not None and args.max_writes is not None:
+            if args.max_operations != args.max_writes:
+                raise ExecutorAbort(
+                    "--max-operations e --max-writes divergem; use apenas um.",
+                )
+        requested_max = args.max_operations if args.max_operations is not None else args.max_writes
+        if requested_max is None and plan.scoped_safety is not None:
+            plan.max_operations = plan.scoped_safety.accounting.operation_total
+        elif requested_max is not None:
+            plan.max_operations = requested_max
         from classificacao_procons.migration.executor import _build_gate
 
         plan.gate = _build_gate(plan, schema_checks)
@@ -496,7 +510,7 @@ def main() -> int:
         "source_updates", "updates_migraveis", "comments_to_create",
         "comments_already_present", "comments_excluded",
         "attachments_to_link", "relations_to_create",
-        "relations_unresolved", "gate_ok", "max_writes", "scoped_safety",
+        "relations_unresolved", "gate_ok", "max_operations", "max_writes", "scoped_safety",
         "operation_accounting",
     )}, ensure_ascii=False, indent=2))
     for check in payload["gate"]:
