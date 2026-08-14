@@ -61,24 +61,44 @@ ManifestKind = Literal[
     "LEDGER_ENTRY",
 ]
 
-_CODE_REVISION_MODULE_PATHS: tuple[str, ...] = (
-    "src/classificacao_procons/migration/operation_manifest.py",
-    "src/classificacao_procons/migration/apply_writer.py",
-    "src/classificacao_procons/migration/executor.py",
-    "src/classificacao_procons/migration/column_transforms.py",
-    "src/classificacao_procons/migration/mappings.py",
-    "src/classificacao_procons/migration/source_completeness.py",
-    "src/classificacao_procons/migration/status_coverage.py",
-    "src/classificacao_procons/migration/dry_run.py",
-    "src/classificacao_procons/migration/monday_inventory.py",
-    "src/classificacao_procons/migration/sunday_snapshot.py",
-    "src/classificacao_procons/migration/dispositions.py",
-    "src/classificacao_procons/migration/user_mapping.py",
-    "src/classificacao_procons/migration/ledger_sync.py",
-    "scripts/sunday_migration_execute.py",
-)
+MIGRATION_RUNTIME_PACKAGE = "src/classificacao_procons/migration"
+MIGRATION_RUNTIME_CLI = "scripts/sunday_migration_execute.py"
 
-MIGRATION_RUNTIME_MODULE_PATHS = _CODE_REVISION_MODULE_PATHS
+
+def migration_runtime_module_paths(*, repo_root: Path | None = None) -> tuple[str, ...]:
+    """Todos os .py runtime do pacote migration + CLI (ordenados, fail-closed)."""
+    root = repo_root or Path(__file__).resolve().parents[3]
+    paths: list[str] = []
+    package_root = root / MIGRATION_RUNTIME_PACKAGE
+    for path in sorted(package_root.rglob("*.py")):
+        paths.append(path.relative_to(root).as_posix())
+    cli_path = root / MIGRATION_RUNTIME_CLI
+    if cli_path.is_file():
+        cli_relative = cli_path.relative_to(root).as_posix()
+        if cli_relative not in paths:
+            paths.append(cli_relative)
+    return tuple(paths)
+
+
+MIGRATION_RUNTIME_MODULE_PATHS = migration_runtime_module_paths()
+
+
+def _migration_module_entries(
+    *,
+    repo_root: Path,
+    module_bytes: dict[str, bytes] | None = None,
+) -> list[dict[str, str]]:
+    overrides = module_bytes or {}
+    entries: list[dict[str, str]] = []
+    for relative_path in migration_runtime_module_paths(repo_root=repo_root):
+        content = overrides.get(relative_path, (repo_root / relative_path).read_bytes())
+        entries.append(
+            {
+                "path": relative_path,
+                "digest": hashlib.sha256(content).hexdigest(),
+            },
+        )
+    return entries
 
 
 @dataclass(frozen=True)
@@ -259,20 +279,14 @@ def payload_digest(payload: object) -> str:
 
 
 def migration_code_revision(*, repo_root: Path | None = None) -> str:
-    """Identidade determinística da engine de migração (file digest, não git SHA).
+    """Identidade determinística da engine de migração (digest recursivo, não git SHA).
 
-    Inclui planner, executor, writer, transforms, resolver, completeness,
-    coverage e CLI de execução. Qualquer alteração nesses arquivos invalida
-    approvals anteriores.
+    Compromete recursivamente todo ``src/classificacao_procons/migration/**/*.py``
+    mais ``scripts/sunday_migration_execute.py``. Novo/removido/alterado módulo
+    runtime invalida approvals anteriores.
     """
     root = repo_root or Path(__file__).resolve().parents[3]
-    module_digests: list[str] = []
-    for relative_path in _CODE_REVISION_MODULE_PATHS:
-        path = root / relative_path
-        module_digests.append(
-            hashlib.sha256(path.read_bytes()).hexdigest()[:16],
-        )
-    return _hash_basis(tuple(module_digests))
+    return _hash_basis(_migration_module_entries(repo_root=root))
 
 
 def migration_code_revision_for_module_bytes(
@@ -281,14 +295,7 @@ def migration_code_revision_for_module_bytes(
     module_bytes: dict[str, bytes],
 ) -> str:
     """Test helper: revision with selective module content overrides."""
-    module_digests: list[str] = []
-    for relative_path in _CODE_REVISION_MODULE_PATHS:
-        if relative_path in module_bytes:
-            content = module_bytes[relative_path]
-        else:
-            content = (repo_root / relative_path).read_bytes()
-        module_digests.append(hashlib.sha256(content).hexdigest()[:16])
-    return _hash_basis(tuple(module_digests))
+    return _hash_basis(_migration_module_entries(repo_root=repo_root, module_bytes=module_bytes))
 
 
 def _migration_values_basis(

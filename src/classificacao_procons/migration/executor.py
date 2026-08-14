@@ -770,19 +770,23 @@ def build_sunday_schema_checks(
 
 @dataclass
 class LedgerWriteReport:
-    """Contabilidade explícita de persistência do ledger durável."""
+    """Contabilidade explícita: filesystem local vs Git versionado."""
 
     expected: int = 0
-    durable_confirmed: int = 0
+    file_persisted: int = 0
+    versioned_confirmed: int = 0
     pending_sync: int = 0
+    pending_commit: int = 0
     failed: int = 0
     failures: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, object]:
         return {
             "ledger_expected": self.expected,
-            "ledger_durable_confirmed": self.durable_confirmed,
+            "ledger_file_persisted": self.file_persisted,
+            "ledger_versioned_confirmed": self.versioned_confirmed,
             "ledger_pending_sync": self.pending_sync,
+            "ledger_pending_commit": self.pending_commit,
             "ledger_failed": self.failed,
             "ledger_failures": list(self.failures),
         }
@@ -818,6 +822,7 @@ def apply_plan(
     ledger_path: str | Path = DEFAULT_LEDGER_PATH,
     fail_fast: bool = True,
     migration_context: ApplyMigrationContext | None = None,
+    ledger_gate: object | None = None,
     now: Callable[[], str] = lambda: datetime.now(UTC).isoformat(),
 ) -> ApplyReport:
     """Executa o plano. Fail-closed: aborta antes da 1ª escrita se gate/snapshot falhar."""
@@ -832,6 +837,20 @@ def apply_plan(
         raise ExecutorAbort(f"Gate fail-closed reprovado: {', '.join(failing)}.")
     if snapshot_revalidator is None:
         raise ExecutorAbort("APPLY exige revalidação de snapshot (concorrência).")
+
+    report = ApplyReport()
+
+    from classificacao_procons.migration.ledger_sync import validate_apply_ledger_gate
+
+    if ledger_gate is not None:
+        gate_failures = validate_apply_ledger_gate(ledger_gate)
+        if gate_failures:
+            raise ExecutorAbort(
+                "Ledger gate fail-closed: " + "; ".join(gate_failures),
+            )
+        report.ledger.pending_sync = ledger_gate.pending_sync
+        report.ledger.pending_commit = ledger_gate.pending_commit
+
     if plan.scoped_safety is not None:
         from classificacao_procons.migration.operation_manifest import (
             validate_scoped_apply_fingerprints,
@@ -870,7 +889,7 @@ def apply_plan(
                 f"({current} != {plan.snapshot_fingerprint}); gere novo PLAN.",
             )
 
-    report = ApplyReport()
+
     write_stats = None
     if migration_context is not None:
         from classificacao_procons.migration.apply_writer import (
@@ -1031,12 +1050,20 @@ def _record_ledger(
         "migrated_at": now(),
         "source_snapshot_timestamp": plan.source_snapshot_timestamp,
     }
-    from classificacao_procons.migration.ledger_sync import verify_ledger_record_persisted
+    from classificacao_procons.migration.ledger_sync import (
+        classify_ledger_write_outcome,
+        resolve_repo_root,
+    )
 
     persist_ledger_record(record, path=ledger_path)
-    if not verify_ledger_record_persisted(record, ledger_path=ledger_path):
+    outcome = classify_ledger_write_outcome(
+        record,
+        ledger_path=ledger_path,
+        repo_root=resolve_repo_root(Path(ledger_path).resolve().parent),
+    )
+    if outcome == "failed":
         message = (
-            f"Ledger durable persistence failed for {operation.monday_item_id} "
+            f"Ledger file persistence failed for {operation.monday_item_id} "
             f"at {ledger_path}"
         )
         if ledger_report is not None:
@@ -1044,7 +1071,11 @@ def _record_ledger(
             ledger_report.failures.append(message)
         raise RuntimeError(message)
     if ledger_report is not None:
-        ledger_report.durable_confirmed += 1
+        ledger_report.file_persisted += 1
+        if outcome == "versioned_confirmed":
+            ledger_report.versioned_confirmed += 1
+        elif outcome == "pending_commit":
+            ledger_report.pending_commit += 1
 
 
 def comment_idempotency_marker(monday_item_id: str, update_id: str) -> str:

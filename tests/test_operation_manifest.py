@@ -23,13 +23,13 @@ from classificacao_procons.migration.models import (
     SundayColumnSnapshot,
 )
 from classificacao_procons.migration.operation_manifest import (
-    MIGRATION_RUNTIME_MODULE_PATHS,
     attach_scoped_safety_metadata,
     board_global_fingerprint,
     build_scoped_operation_manifest,
     compare_scoped_drift,
     migration_code_revision,
     migration_code_revision_for_module_bytes,
+    migration_runtime_module_paths,
     migration_schema_fingerprint,
     operation_manifest_hash_v1,
     operation_manifest_hash_v2,
@@ -672,47 +672,71 @@ def test_migration_code_revision_is_stable_for_same_sources():
 
 
 def test_migration_runtime_module_paths_cover_execution_engine():
-    paths = set(MIGRATION_RUNTIME_MODULE_PATHS)
+    repo_root = Path(__file__).resolve().parents[1]
+    paths = set(migration_runtime_module_paths(repo_root=repo_root))
     expected = {
         "scripts/sunday_migration_execute.py",
         "src/classificacao_procons/migration/apply_writer.py",
         "src/classificacao_procons/migration/executor.py",
         "src/classificacao_procons/migration/operation_manifest.py",
-        "src/classificacao_procons/migration/source_completeness.py",
-        "src/classificacao_procons/migration/status_coverage.py",
-        "src/classificacao_procons/migration/column_transforms.py",
-        "src/classificacao_procons/migration/mappings.py",
-        "src/classificacao_procons/migration/dry_run.py",
-        "src/classificacao_procons/migration/monday_inventory.py",
-        "src/classificacao_procons/migration/sunday_snapshot.py",
-        "src/classificacao_procons/migration/dispositions.py",
-        "src/classificacao_procons/migration/user_mapping.py",
         "src/classificacao_procons/migration/ledger_sync.py",
+        "src/classificacao_procons/migration/disposition_ledger.py",
+        "src/classificacao_procons/migration/accounting.py",
+        "src/classificacao_procons/migration/board_disposition.py",
+        "src/classificacao_procons/migration/audiencias.py",
     }
     assert expected.issubset(paths)
+    migration_paths = {
+        path for path in paths if path.startswith("src/classificacao_procons/migration/")
+    }
+    assert migration_paths
+    assert all(path.endswith(".py") for path in migration_paths)
+
+
+def test_code_revision_changes_when_new_runtime_module_added(tmp_path, monkeypatch):
+    repo_root = tmp_path / "repo"
+    package = repo_root / "src/classificacao_procons/migration"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "existing.py").write_text("X = 1\n", encoding="utf-8")
+    (repo_root / "scripts").mkdir()
+    (repo_root / "scripts/sunday_migration_execute.py").write_text("# cli\n", encoding="utf-8")
+    before = migration_code_revision(repo_root=repo_root)
+    (package / "new_runtime.py").write_text("Y = 2\n", encoding="utf-8")
+    after = migration_code_revision(repo_root=repo_root)
+    assert before != after
+
+
+def test_code_revision_changes_when_runtime_module_removed(tmp_path):
+    repo_root = tmp_path / "repo"
+    package = repo_root / "src/classificacao_procons/migration"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    module = package / "ephemeral.py"
+    module.write_text("Z = 1\n", encoding="utf-8")
+    (repo_root / "scripts").mkdir()
+    (repo_root / "scripts/sunday_migration_execute.py").write_text("# cli\n", encoding="utf-8")
+    before = migration_code_revision(repo_root=repo_root)
+    module.unlink()
+    after = migration_code_revision(repo_root=repo_root)
+    assert before != after
 
 
 @pytest.mark.parametrize(
     "module_path",
     [
-        "src/classificacao_procons/migration/apply_writer.py",
-        "src/classificacao_procons/migration/executor.py",
-        "src/classificacao_procons/migration/operation_manifest.py",
-        "src/classificacao_procons/migration/column_transforms.py",
-        "src/classificacao_procons/migration/mappings.py",
-        "src/classificacao_procons/migration/source_completeness.py",
-        "src/classificacao_procons/migration/status_coverage.py",
-        "src/classificacao_procons/migration/dry_run.py",
-        "src/classificacao_procons/migration/monday_inventory.py",
-        "src/classificacao_procons/migration/sunday_snapshot.py",
-        "src/classificacao_procons/migration/dispositions.py",
-        "src/classificacao_procons/migration/user_mapping.py",
+        "src/classificacao_procons/migration/disposition_ledger.py",
+        "src/classificacao_procons/migration/accounting.py",
+        "src/classificacao_procons/migration/board_disposition.py",
+        "src/classificacao_procons/migration/audiencias.py",
         "src/classificacao_procons/migration/ledger_sync.py",
         "scripts/sunday_migration_execute.py",
     ],
 )
 def test_code_revision_changes_when_runtime_module_changes(module_path: str):
     repo_root = Path(__file__).resolve().parents[1]
+    if not (repo_root / module_path).is_file():
+        pytest.skip(f"{module_path} absent")
     current = (repo_root / module_path).read_bytes()
     revision_before = migration_code_revision(repo_root=repo_root)
     revision_after = migration_code_revision_for_module_bytes(
@@ -720,6 +744,21 @@ def test_code_revision_changes_when_runtime_module_changes(module_path: str):
         module_bytes={module_path: current + b"\n"},
     )
     assert revision_before != revision_after
+
+
+def test_code_revision_ignores_files_outside_runtime_package(tmp_path):
+    repo_root = tmp_path / "repo"
+    package = repo_root / "src/classificacao_procons/migration"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (repo_root / "scripts").mkdir()
+    (repo_root / "scripts/sunday_migration_execute.py").write_text("# cli\n", encoding="utf-8")
+    outside = repo_root / "notes.txt"
+    outside.write_text("noise", encoding="utf-8")
+    before = migration_code_revision(repo_root=repo_root)
+    outside.write_text("changed noise", encoding="utf-8")
+    after = migration_code_revision(repo_root=repo_root)
+    assert before == after
 
 
 def test_code_revision_changes_when_cli_execution_path_changes():
