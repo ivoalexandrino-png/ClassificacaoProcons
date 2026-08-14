@@ -613,6 +613,7 @@ def main() -> int:
         plan=plan,
         inventory=scoped_inventory,
         board_plan=board_plan,
+        sunday_snapshot=sunday_snapshot,
         apply_sources=apply_sources,
         monday_id_column_id=migration_context.monday_id_column_id,
         target_group_id=migration_context.target_group_id,

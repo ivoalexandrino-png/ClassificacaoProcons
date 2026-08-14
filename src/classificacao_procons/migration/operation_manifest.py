@@ -66,7 +66,13 @@ _CODE_REVISION_MODULE_PATHS: tuple[str, ...] = (
     "src/classificacao_procons/migration/apply_writer.py",
     "src/classificacao_procons/migration/executor.py",
     "src/classificacao_procons/migration/column_transforms.py",
+    "src/classificacao_procons/migration/mappings.py",
+    "src/classificacao_procons/migration/source_completeness.py",
+    "src/classificacao_procons/migration/status_coverage.py",
+    "scripts/sunday_migration_execute.py",
 )
+
+MIGRATION_RUNTIME_MODULE_PATHS = _CODE_REVISION_MODULE_PATHS
 
 
 @dataclass(frozen=True)
@@ -247,7 +253,12 @@ def payload_digest(payload: object) -> str:
 
 
 def migration_code_revision(*, repo_root: Path | None = None) -> str:
-    """Identidade determinística dos módulos planner/executor relevantes."""
+    """Identidade determinística da engine de migração (file digest, não git SHA).
+
+    Inclui planner, executor, writer, transforms, resolver, completeness,
+    coverage e CLI de execução. Qualquer alteração nesses arquivos invalida
+    approvals anteriores.
+    """
     root = repo_root or Path(__file__).resolve().parents[3]
     module_digests: list[str] = []
     for relative_path in _CODE_REVISION_MODULE_PATHS:
@@ -255,6 +266,22 @@ def migration_code_revision(*, repo_root: Path | None = None) -> str:
         module_digests.append(
             hashlib.sha256(path.read_bytes()).hexdigest()[:16],
         )
+    return _hash_basis(tuple(module_digests))
+
+
+def migration_code_revision_for_module_bytes(
+    *,
+    repo_root: Path,
+    module_bytes: dict[str, bytes],
+) -> str:
+    """Test helper: revision with selective module content overrides."""
+    module_digests: list[str] = []
+    for relative_path in _CODE_REVISION_MODULE_PATHS:
+        if relative_path in module_bytes:
+            content = module_bytes[relative_path]
+        else:
+            content = (repo_root / relative_path).read_bytes()
+        module_digests.append(hashlib.sha256(content).hexdigest()[:16])
     return _hash_basis(tuple(module_digests))
 
 
