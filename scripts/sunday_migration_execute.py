@@ -147,6 +147,11 @@ def main() -> int:
         type=int,
         help="limite exato de comments_to_create do escopo autorizado",
     )
+    parser.add_argument(
+        "--max-writes",
+        type=int,
+        help="limite exato de operation_total do manifesto canônico (escopo --item-ids)",
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -319,6 +324,56 @@ def main() -> int:
         return 0
 
     inventory_holder: dict[str, object] = {"inventory": None}
+    plan_holder: dict[str, object] = {"plan": None}
+    scoped_context: dict[str, object] = {}
+
+    def _build_scoped_safety(current_inventory, current_plan):
+        from classificacao_procons.migration.apply_writer import fetch_monday_apply_sources
+        from classificacao_procons.migration.operation_manifest import (
+            attach_scoped_safety_metadata,
+        )
+
+        if requested_item_ids is None or client is None or not sunday_snapshots:
+            return None
+        monday_token = get_api_token_from_env()
+        if not monday_token:
+            raise ExecutorAbort("MONDAY_API_TOKEN ausente para manifesto escopado.")
+        sunday_board = BOARD_ALLOWLIST[args.board]
+        sunday_snapshot = sunday_snapshots[sunday_board]
+        monday_id_column_id = _find_monday_id_column(sunday_snapshot)
+        scoped_items = tuple(
+            item for item in current_inventory.items if item.item_id in requested_item_ids
+        )
+        scoped_inventory = replace(current_inventory, items=scoped_items)
+        board_plan = build_board_plan(
+            scoped_inventory,
+            sunday_snapshot,
+            sunday_board_by_monday_map(),
+        )
+        apply_sources = fetch_monday_apply_sources(
+            monday_token,
+            args.board,
+            item_ids=requested_item_ids,
+        )
+        if len(apply_sources) != len(requested_item_ids):
+            raise ExecutorAbort(
+                f"apply_sources={len(apply_sources)} != allowlist={len(requested_item_ids)}.",
+            )
+        scoped_context["board_plan"] = board_plan
+        scoped_context["apply_sources"] = apply_sources
+        scoped_context["monday_id_column_id"] = monday_id_column_id
+        scoped_context["sunday_snapshot"] = sunday_snapshot
+        return attach_scoped_safety_metadata(
+            inventory=current_inventory,
+            board_plan=board_plan,
+            sunday_snapshot=sunday_snapshot,
+            apply_sources=apply_sources,
+            plan_operations=list(current_plan.operations),
+            selected_item_ids=requested_item_ids,
+            monday_id_column_id=monday_id_column_id,
+            monday_board_id=args.board,
+            existing_comment_markers=sunday_comment_markers or None,
+        )
 
     def reload_inventory():
         if args.monday_snapshot:
@@ -330,6 +385,9 @@ def main() -> int:
                 raise ExecutorAbort("MONDAY_API_TOKEN ausente e sem --monday-snapshot.")
             inventory = fetch_board_inventory(token, args.board)
         inventory_holder["inventory"] = inventory
+        current_plan = plan_holder.get("plan")
+        if requested_item_ids is not None and client is not None and current_plan is not None:
+            return _build_scoped_safety(inventory, current_plan)
         return snapshot_fingerprint(inventory)
 
     if args.monday_snapshot:
@@ -416,6 +474,17 @@ def main() -> int:
         sunday_comment_markers=sunday_comment_markers or None,
         sunday_schema_checks=schema_checks,
     )
+    plan_holder["plan"] = plan
+
+    if requested_item_ids is not None and client is not None and sunday_snapshots:
+        plan.scoped_safety = _build_scoped_safety(inventory, plan)
+        if args.max_writes is None and plan.scoped_safety is not None:
+            plan.max_writes = plan.scoped_safety.accounting.operation_total
+        elif args.max_writes is not None:
+            plan.max_writes = args.max_writes
+        from classificacao_procons.migration.executor import _build_gate
+
+        plan.gate = _build_gate(plan, schema_checks)
 
     Path(args.out).write_text(
         json.dumps(plan.to_payload(), ensure_ascii=False, indent=2), encoding="utf-8",
@@ -427,7 +496,8 @@ def main() -> int:
         "source_updates", "updates_migraveis", "comments_to_create",
         "comments_already_present", "comments_excluded",
         "attachments_to_link", "relations_to_create",
-        "relations_unresolved", "gate_ok",
+        "relations_unresolved", "gate_ok", "max_writes", "scoped_safety",
+        "operation_accounting",
     )}, ensure_ascii=False, indent=2))
     for check in payload["gate"]:
         print(f"  gate[{'OK ' if check['ok'] else 'FAIL'}] {check['check']}: {check['detail']}")
