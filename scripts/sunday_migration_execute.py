@@ -216,7 +216,6 @@ def main() -> int:
         return 3
 
     if args.mode == "repair":
-        from classificacao_procons.migration.apply_writer import fetch_monday_apply_sources
         from classificacao_procons.migration.repair_plan import (
             RepairApplyAbort,
             RepairPlanAbort,
@@ -336,7 +335,6 @@ def main() -> int:
     scoped_context: dict[str, object] = {}
 
     def _build_scoped_safety(current_inventory, current_plan):
-        from classificacao_procons.migration.apply_writer import fetch_monday_apply_sources
         from classificacao_procons.migration.operation_manifest import (
             attach_scoped_safety_metadata,
         )
