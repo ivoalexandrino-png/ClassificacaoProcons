@@ -722,6 +722,32 @@ def audit_board_migrated_items(
     )
 
 
+def classify_missing_comment_marker(
+    *,
+    update_created_at: str | None,
+    migrated_at: str | None,
+    source_snapshot_timestamp: str | None,
+) -> Literal["MIGRATION_MISS", "POST_MIGRATION_DELTA", "INCONCLUSIVE"]:
+    """Classifica marker ausente sem expor conteúdo do comment."""
+    from datetime import datetime
+
+    def _parse(value: str | None):
+        if not value:
+            return None
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+    created = _parse(update_created_at)
+    migrated = _parse(migrated_at)
+    snapshot = _parse(source_snapshot_timestamp)
+    if created and migrated and created > migrated:
+        return "POST_MIGRATION_DELTA"
+    if created and snapshot and created <= snapshot:
+        return "MIGRATION_MISS"
+    if created and migrated and created <= migrated:
+        return "MIGRATION_MISS"
+    return "INCONCLUSIVE"
+
+
 def audit_comments_for_items(
     *,
     inventory: MondayBoardInventory,

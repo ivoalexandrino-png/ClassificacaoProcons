@@ -69,6 +69,12 @@ _CODE_REVISION_MODULE_PATHS: tuple[str, ...] = (
     "src/classificacao_procons/migration/mappings.py",
     "src/classificacao_procons/migration/source_completeness.py",
     "src/classificacao_procons/migration/status_coverage.py",
+    "src/classificacao_procons/migration/dry_run.py",
+    "src/classificacao_procons/migration/monday_inventory.py",
+    "src/classificacao_procons/migration/sunday_snapshot.py",
+    "src/classificacao_procons/migration/dispositions.py",
+    "src/classificacao_procons/migration/user_mapping.py",
+    "src/classificacao_procons/migration/ledger_sync.py",
     "scripts/sunday_migration_execute.py",
 )
 
