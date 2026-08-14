@@ -21,11 +21,13 @@ from classificacao_procons.migration.models import (
     SundayColumnSnapshot,
 )
 from classificacao_procons.migration.operation_manifest import (
+    MIGRATION_RUNTIME_MODULE_PATHS,
     attach_scoped_safety_metadata,
     board_global_fingerprint,
     build_scoped_operation_manifest,
     compare_scoped_drift,
     migration_code_revision,
+    migration_code_revision_for_module_bytes,
     migration_schema_fingerprint,
     operation_manifest_hash_v1,
     operation_manifest_hash_v2,
@@ -665,3 +667,59 @@ def test_migration_code_revision_is_stable_for_same_sources():
     revision_a = migration_code_revision(repo_root=Path(__file__).resolve().parents[1])
     revision_b = migration_code_revision(repo_root=Path(__file__).resolve().parents[1])
     assert revision_a == revision_b
+
+
+def test_migration_runtime_module_paths_cover_execution_engine():
+    paths = set(MIGRATION_RUNTIME_MODULE_PATHS)
+    assert "scripts/sunday_migration_execute.py" in paths
+    assert "src/classificacao_procons/migration/apply_writer.py" in paths
+    assert "src/classificacao_procons/migration/executor.py" in paths
+    assert "src/classificacao_procons/migration/operation_manifest.py" in paths
+    assert "src/classificacao_procons/migration/source_completeness.py" in paths
+    assert "src/classificacao_procons/migration/status_coverage.py" in paths
+
+
+def test_code_revision_changes_when_cli_execution_path_changes():
+    repo_root = Path(__file__).resolve().parents[1]
+    cli_path = "scripts/sunday_migration_execute.py"
+    current = (repo_root / cli_path).read_bytes()
+    before_hotfix = current + b"\n"
+    revision_before = migration_code_revision_for_module_bytes(
+        repo_root=repo_root,
+        module_bytes={cli_path: before_hotfix},
+    )
+    revision_after = migration_code_revision(repo_root=repo_root)
+    assert revision_before != revision_after
+
+
+def test_code_revision_rejects_stale_approval_after_runtime_change():
+    repo_root = Path(__file__).resolve().parents[1]
+    approved = attach_scoped_safety_metadata(
+        inventory=_inventory(_item(ITEM_A)),
+        board_plan=_board_plan(),
+        sunday_snapshot=_sunday_snapshot(),
+        apply_sources={ITEM_A: _source(ITEM_A)},
+        plan_operations=[_create_operation(ITEM_A)],
+        selected_item_ids=frozenset({ITEM_A}),
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
+    )
+    stale_revision = migration_code_revision_for_module_bytes(
+        repo_root=repo_root,
+        module_bytes={
+            "src/classificacao_procons/migration/apply_writer.py": b"stale-engine",
+        },
+    )
+    current = attach_scoped_safety_metadata(
+        inventory=_inventory(_item(ITEM_A)),
+        board_plan=_board_plan(),
+        sunday_snapshot=_sunday_snapshot(),
+        apply_sources={ITEM_A: _source(ITEM_A)},
+        plan_operations=[_create_operation(ITEM_A)],
+        selected_item_ids=frozenset({ITEM_A}),
+        monday_id_column_id="999",
+        monday_board_id=PROCONS,
+    )
+    object.__setattr__(current, "code_revision", stale_revision)
+    failures = validate_scoped_apply_fingerprints(approved=approved, current=current)
+    assert "code_revision divergente" in failures

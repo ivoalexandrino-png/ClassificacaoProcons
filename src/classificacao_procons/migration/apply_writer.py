@@ -13,6 +13,7 @@ from classificacao_procons.migration.column_transforms import (
     derive_file_to_link_value,
     get_explicit_column_mapping,
     is_file_to_link_mapping,
+    link_values_equal,
     resolve_sunday_custom_status_write_value,
 )
 from classificacao_procons.migration.executor import (
@@ -480,6 +481,61 @@ def _value_for_custom_column_write(
     return value
 
 
+def expected_sunday_field_value(
+    *,
+    monday_board_id: str,
+    monday_column: MondayColumnInfo,
+    source_text: str | None,
+    board_plan: BoardPlan,
+    sunday_column: SundayColumnSnapshot | None,
+    plan_column: object | None = None,
+) -> object | None:
+    """Valor Sunday esperado usando o mesmo caminho de apply_create_item."""
+    if is_file_to_link_mapping(monday_board_id, monday_column.id):
+        return _sunday_value_for_monday_column(
+            monday_column=monday_column,
+            text=source_text,
+            board_plan=board_plan,
+        )
+    if monday_column.type in {
+        "name", "subtasks", "mirror", "lookup", "item_id",
+        "creation_log", "last_updated", "people", "file",
+        "board_relation", "formula",
+    }:
+        return None
+    if plan_column is None or not getattr(plan_column, "exists_in_target", False):
+        return None
+    if getattr(plan_column, "strategy", "") not in {
+        "direto", "transformacao", "configurar_manualmente",
+    }:
+        return None
+    if sunday_column is None or sunday_column.is_system:
+        return None
+    if not (source_text or "").strip():
+        return None
+    try:
+        return _value_for_custom_column_write(
+            monday_column=monday_column,
+            source_text=source_text,
+            board_plan=board_plan,
+            sunday_column=sunday_column,
+        )
+    except (StatusResolveError, ValueError):
+        return None
+
+
+def sunday_field_values_match(
+    expected: object,
+    actual: object,
+    *,
+    monday_board_id: str,
+    monday_column_id: str,
+) -> bool:
+    if is_file_to_link_mapping(monday_board_id, monday_column_id):
+        return link_values_equal(expected, actual)
+    return expected == actual
+
+
 def apply_create_item(
     *,
     client,
@@ -634,11 +690,16 @@ def verify_applied_board(
     plan: ExecutionPlan,
     inventory: MondayBoardInventory,
     board_plan: BoardPlan,
+    sunday_snapshot: SundayBoardSnapshot,
     apply_sources: dict[str, MondayApplySource],
     monday_id_column_id: str,
     target_group_id: str,
 ) -> FieldCheckReport:
-    """Validação pós-APPLY item a item (somente leitura)."""
+    """Validação pós-APPLY item a item (somente leitura).
+
+    Usa expected_sunday_field_value (resolver canônico) — option keys live para
+    status, link_values_equal para FILE→LINK, demais campos via writer path.
+    """
     report = FieldCheckReport()
     sunday_by_monday = build_sunday_monday_id_index(
         client,
@@ -646,6 +707,7 @@ def verify_applied_board(
         monday_id_column_id=monday_id_column_id,
     )
     column_plans = _column_plan_by_monday_id(board_plan)
+    sunday_columns = _sunday_column_by_id(sunday_snapshot)
 
     for item in inventory.items:
         source = apply_sources.get(item.item_id)
@@ -686,6 +748,39 @@ def verify_applied_board(
         )
 
         for monday_column in inventory.columns:
+            if is_file_to_link_mapping(plan.monday_board_id, monday_column.id):
+                plan_column = column_plans.get(monday_column.id)
+                if plan_column is None or not plan_column.exists_in_target:
+                    continue
+                sunday_column_id = plan_column.sunday_column_id
+                if not sunday_column_id:
+                    continue
+                sunday_column = sunday_columns.get(sunday_column_id)
+                expected = expected_sunday_field_value(
+                    monday_board_id=plan.monday_board_id,
+                    monday_column=monday_column,
+                    source_text=source.values_by_column_id.get(monday_column.id),
+                    board_plan=board_plan,
+                    sunday_column=sunday_column,
+                    plan_column=plan_column,
+                )
+                if expected is None:
+                    continue
+                actual = client.get_value(sunday_item_id, sunday_column_id)
+                report.total += 1
+                if sunday_field_values_match(
+                    expected,
+                    actual,
+                    monday_board_id=plan.monday_board_id,
+                    monday_column_id=monday_column.id,
+                ):
+                    report.ok += 1
+                else:
+                    report.errors.append(
+                        f"{item.item_id}/{monday_column.title}: "
+                        f"esperado {expected!r}, lido {actual!r}",
+                    )
+                continue
             if monday_column.type in {
                 "name", "subtasks", "mirror", "lookup", "item_id",
                 "creation_log", "last_updated", "people", "file",
@@ -700,14 +795,30 @@ def verify_applied_board(
             sunday_column_id = plan_column.sunday_column_id
             if not sunday_column_id:
                 continue
-            expected = _sunday_value_for_monday_column(
+            sunday_column = sunday_columns.get(sunday_column_id)
+            expected = expected_sunday_field_value(
+                monday_board_id=plan.monday_board_id,
                 monday_column=monday_column,
-                text=source.values_by_column_id.get(monday_column.id),
+                source_text=source.values_by_column_id.get(monday_column.id),
                 board_plan=board_plan,
+                sunday_column=sunday_column,
+                plan_column=plan_column,
             )
             if expected is None:
                 continue
             actual = client.get_value(sunday_item_id, sunday_column_id)
-            check(monday_column.title, expected, actual)
+            report.total += 1
+            if sunday_field_values_match(
+                expected,
+                actual,
+                monday_board_id=plan.monday_board_id,
+                monday_column_id=monday_column.id,
+            ):
+                report.ok += 1
+            else:
+                report.errors.append(
+                    f"{item.item_id}/{monday_column.title}: "
+                    f"esperado {expected!r}, lido {actual!r}",
+                )
 
     return report
