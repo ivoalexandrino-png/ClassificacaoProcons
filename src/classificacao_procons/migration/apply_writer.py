@@ -33,6 +33,10 @@ from classificacao_procons.migration.models import (
     SundayBoardSnapshot,
     SundayColumnSnapshot,
 )
+from classificacao_procons.migration.monday_items_fetch import (
+    ITEM_IDS_QUERY_INITIAL_BATCH,
+    fetch_monday_items_by_ids_complete,
+)
 from classificacao_procons.monday.client import _graphql_request
 
 _APPLY_ITEMS_QUERY = """
@@ -182,28 +186,23 @@ def _fetch_monday_updates(
         item_id: [] for item_id in sorted(item_ids)
     }
     ordered_ids = sorted(item_ids)
-    for offset in range(0, len(ordered_ids), 100):
-        batch = ordered_ids[offset : offset + 100]
+    for offset in range(0, len(ordered_ids), ITEM_IDS_QUERY_INITIAL_BATCH):
+        seed = ordered_ids[offset : offset + ITEM_IDS_QUERY_INITIAL_BATCH]
         page_number = 1
         while True:
-            rows = _graphql_request(
-                api_token=api_token,
+            rows_by_id = fetch_monday_items_by_ids_complete(
+                api_token,
+                seed,
                 query=_APPLY_UPDATES_QUERY,
-                variables={
+                variables_for_batch=lambda batch, page=page_number: {
                     "ids": batch,
                     "limit": UPDATES_PAGE_SIZE,
-                    "page": page_number,
+                    "page": page,
                 },
-            ).get("items", [])
-            by_id = {str(row.get("id")): row for row in rows}
-            missing = set(batch) - set(by_id)
-            if missing:
-                raise RuntimeError(
-                    f"Leitura de updates incompleta para {len(missing)} item(ns).",
-                )
+            )
             page_full = False
-            for item_id in batch:
-                updates = by_id[item_id].get("updates") or []
+            for item_id in seed:
+                updates = rows_by_id[item_id].get("updates") or []
                 page_full = page_full or len(updates) == UPDATES_PAGE_SIZE
                 for update in updates:
                     update_id = str(update.get("id") or "").strip()

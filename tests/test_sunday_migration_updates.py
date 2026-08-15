@@ -178,7 +178,10 @@ def test_read_only_update_diagnostic_paginates_to_exact_count(monkeypatch):
             ],
         }
 
-    monkeypatch.setattr(monday_inventory, "_graphql_request", fake_graphql_request)
+    monkeypatch.setattr(
+        "classificacao_procons.migration.monday_items_fetch._graphql_request",
+        fake_graphql_request,
+    )
 
     assert monday_inventory._fetch_exact_update_counts(
         "test-token",
@@ -247,7 +250,10 @@ def test_apply_source_reads_body_author_and_date_without_writes(monkeypatch):
             ],
         }
 
-    monkeypatch.setattr(apply_writer, "_graphql_request", fake_graphql_request)
+    monkeypatch.setattr(
+        "classificacao_procons.migration.monday_items_fetch._graphql_request",
+        fake_graphql_request,
+    )
 
     updates = _fetch_monday_updates("test-token", {"item-3"})["item-3"]
     assert updates == (
