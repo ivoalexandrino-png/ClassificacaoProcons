@@ -9,8 +9,6 @@ pessoas, contagens de arquivos/subitens e alvos de conexão.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
-from dataclasses import dataclass
 
 from classificacao_procons.migration.models import (
     MondayBoardInventory,
@@ -18,15 +16,16 @@ from classificacao_procons.migration.models import (
     MondayItemDigest,
     MondayUpdateDigest,
 )
+from classificacao_procons.migration.monday_items_fetch import (
+    ITEM_IDS_QUERY_INITIAL_BATCH,
+    _fetch_items_by_ids_adaptive,
+    validate_items_fetch_completeness,
+)
 from classificacao_procons.monday.client import _graphql_request
 
 ITEMS_PAGE_SIZE = 250
 UPDATES_PAGE_SIZE = 100
 UPDATES_MAX_PAGES = 30
-# Monday GraphQL `items(ids:)` pode truncar silenciosamente lotes grandes (observado
-# no board 4944254220: batch 100 retorna parcial; 25 retorna completo). Não confiar
-# no tamanho pedido — subdividir deterministically até completude ou erro explícito.
-ITEM_IDS_QUERY_INITIAL_BATCH = 100
 
 _BOARD_META_QUERY = """
 query ($ids: [ID!]) {
@@ -87,101 +86,6 @@ query ($ids: [ID!], $limit: Int!, $page: Int!) {
   }
 }
 """
-
-
-@dataclass(frozen=True)
-class ItemsFetchCompleteness:
-    """Metadados de completude de um fetch `items(ids:)` (somente IDs técnicos)."""
-
-    requested_ids: tuple[str, ...]
-    returned_unique_ids: tuple[str, ...]
-    missing_ids: tuple[str, ...]
-    duplicate_ids: tuple[str, ...]
-
-    @property
-    def is_complete(self) -> bool:
-        return not self.missing_ids and not self.duplicate_ids
-
-
-def validate_items_fetch_completeness(
-    requested_ids: list[str] | tuple[str, ...],
-    returned_by_id: dict[str, object],
-) -> ItemsFetchCompleteness:
-    """Valida que todos os IDs solicitados foram retornados uma única vez."""
-    requested = tuple(requested_ids)
-    seen: dict[str, int] = {}
-    for item_id in returned_by_id:
-        seen[item_id] = seen.get(item_id, 0) + 1
-    duplicate_ids = tuple(item_id for item_id, count in seen.items() if count > 1)
-    returned_unique = tuple(dict.fromkeys(returned_by_id))
-    missing_ids = tuple(item_id for item_id in requested if item_id not in returned_by_id)
-    return ItemsFetchCompleteness(
-        requested_ids=requested,
-        returned_unique_ids=returned_unique,
-        missing_ids=missing_ids,
-        duplicate_ids=duplicate_ids,
-    )
-
-
-def _fetch_items_by_ids_adaptive(
-    api_token: str,
-    item_ids: list[str],
-    *,
-    query: str,
-    variables_for_batch: Callable[[list[str]], dict],
-) -> dict[str, dict]:
-    """Busca items(ids:) com subdivisão determinística quando a API trunca silenciosamente."""
-    if not item_ids:
-        return {}
-
-    results: dict[str, dict] = {}
-
-    def fetch_batch(batch: list[str]) -> dict[str, dict]:
-        rows = _graphql_request(
-            api_token=api_token,
-            query=query,
-            variables=variables_for_batch(batch),
-        ).get("items", [])
-        by_id: dict[str, dict] = {}
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            item_id = str(row.get("id") or "").strip()
-            if item_id:
-                by_id[item_id] = row
-        completeness = validate_items_fetch_completeness(batch, by_id)
-        if completeness.is_complete:
-            return by_id
-        if len(batch) == 1:
-            missing = completeness.missing_ids[0] if completeness.missing_ids else batch[0]
-            raise RuntimeError(
-                "Monday items(ids:) não retornou item solicitado "
-                f"({missing}); resposta parcial não aceita.",
-            )
-        midpoint = len(batch) // 2
-        left = fetch_batch(batch[:midpoint])
-        right = fetch_batch(batch[midpoint:])
-        merged = {**left, **right}
-        merged_completeness = validate_items_fetch_completeness(batch, merged)
-        if not merged_completeness.is_complete:
-            raise RuntimeError(
-                "Diagnóstico de items(ids:) incompleto após subdivisão: "
-                f"{len(merged_completeness.missing_ids)} item(ns) ausente(s).",
-            )
-        return merged
-
-    for offset in range(0, len(item_ids), ITEM_IDS_QUERY_INITIAL_BATCH):
-        seed = item_ids[offset : offset + ITEM_IDS_QUERY_INITIAL_BATCH]
-        results.update(fetch_batch(seed))
-
-    final = validate_items_fetch_completeness(item_ids, results)
-    if not final.is_complete:
-        raise RuntimeError(
-            "Inventário Monday incompleto: "
-            f"{len(final.missing_ids)} ausente(s), "
-            f"{len(final.duplicate_ids)} duplicado(s).",
-        )
-    return results
 
 
 def _parse_settings(settings_str: object) -> dict:

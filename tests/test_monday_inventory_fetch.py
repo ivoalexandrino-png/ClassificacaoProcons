@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from classificacao_procons.migration.monday_inventory import (
+from classificacao_procons.migration.monday_inventory import _fetch_update_diagnostics
+from classificacao_procons.migration.monday_items_fetch import (
     ITEM_IDS_QUERY_INITIAL_BATCH,
     _fetch_items_by_ids_adaptive,
-    _fetch_update_diagnostics,
     validate_items_fetch_completeness,
 )
 
@@ -33,7 +33,7 @@ def test_fetch_items_by_ids_adaptive_complete_batch(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "classificacao_procons.migration.monday_inventory._graphql_request",
+        "classificacao_procons.migration.monday_items_fetch._graphql_request",
         fake_graphql,
     )
     item_ids = [str(i) for i in range(1, 6)]
@@ -59,7 +59,7 @@ def test_fetch_items_by_ids_adaptive_subdivides_partial_batch(monkeypatch):
         return {"items": [{"id": item_id, "updates": []} for item_id in batch]}
 
     monkeypatch.setattr(
-        "classificacao_procons.migration.monday_inventory._graphql_request",
+        "classificacao_procons.migration.monday_items_fetch._graphql_request",
         fake_graphql,
     )
     item_ids = [str(i) for i in range(1, 9)]
@@ -78,7 +78,7 @@ def test_fetch_items_by_ids_adaptive_raises_when_single_id_missing(monkeypatch):
         return {"items": []}
 
     monkeypatch.setattr(
-        "classificacao_procons.migration.monday_inventory._graphql_request",
+        "classificacao_procons.migration.monday_items_fetch._graphql_request",
         fake_graphql,
     )
     with pytest.raises(RuntimeError, match="não retornou item solicitado"):
@@ -117,7 +117,7 @@ def test_fetch_update_diagnostics_no_items_lost_with_partial_api(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "classificacao_procons.migration.monday_inventory._graphql_request",
+        "classificacao_procons.migration.monday_items_fetch._graphql_request",
         fake_graphql,
     )
     item_ids = [str(i) for i in range(1, 151)]
@@ -152,7 +152,7 @@ def test_fetch_update_diagnostics_deduplicates_repeated_updates(monkeypatch):
         }
 
     monkeypatch.setattr(
-        "classificacao_procons.migration.monday_inventory._graphql_request",
+        "classificacao_procons.migration.monday_items_fetch._graphql_request",
         fake_graphql,
     )
     diagnostics = _fetch_update_diagnostics("token", ["42"])
