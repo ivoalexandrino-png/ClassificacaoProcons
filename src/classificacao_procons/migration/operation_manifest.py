@@ -127,6 +127,10 @@ class OperationAccounting:
     relations: int = 0
     subitems: int = 0
     ledger_operations: int = 0
+    asset_downloads: int = 0
+    storage_uploads: int = 0
+    storage_adopts: int = 0
+    attachment_link_writes: int = 0
 
     @property
     def all_custom_column_writes(self) -> int:
@@ -148,7 +152,11 @@ class OperationAccounting:
 
     @property
     def operation_total(self) -> int:
-        return self.sunday_write_operations + self.ledger_operations
+        return (
+            self.sunday_write_operations
+            + self.ledger_operations
+            + self.storage_uploads
+        )
 
     def as_dict(self) -> dict[str, int]:
         return {
@@ -161,6 +169,10 @@ class OperationAccounting:
             "attachments": self.attachments,
             "relations": self.relations,
             "subitems": self.subitems,
+            "asset_downloads": self.asset_downloads,
+            "storage_uploads": self.storage_uploads,
+            "storage_adopts": self.storage_adopts,
+            "attachment_link_writes": self.attachment_link_writes,
             "sunday_write_operations": self.sunday_write_operations,
             "ledger_operations": self.ledger_operations,
             "operation_total": self.operation_total,
@@ -330,8 +342,11 @@ def selected_source_fingerprint(
     apply_sources: dict[str, MondayApplySource],
     item_ids: frozenset[str],
     existing_comment_markers: dict[str, set[str]] | None = None,
+    assets_by_item: dict[str, tuple[object, ...]] | None = None,
 ) -> str:
     """Fingerprint determinístico apenas dos itens autorizados."""
+    from classificacao_procons.migration.monday_asset_metadata import assets_fingerprint_basis
+
     items_by_id = {item.item_id: item for item in inventory.items}
     markers = existing_comment_markers or {}
     basis: list[tuple[object, ...]] = []
@@ -360,6 +375,10 @@ def selected_source_fingerprint(
                 for column_id, targets in sorted(item.relation_targets.items())
             ),
         )
+        if assets_by_item is not None:
+            asset_basis = assets_fingerprint_basis(assets_by_item, item_ids=frozenset({item_id}))[0]
+        else:
+            asset_basis = (item.file_count, item.file_bytes)
         basis.append(
             (
                 item_id,
@@ -371,8 +390,7 @@ def selected_source_fingerprint(
                     apply_source=source,
                 ),
                 migratable_updates,
-                item.file_count,
-                item.file_bytes,
+                asset_basis,
                 relation_basis,
                 item.subitem_count,
                 tuple(sorted(markers.get(item_id, set()))),
@@ -477,6 +495,8 @@ def summarize_manifest_accounting(
             accounting.comments += 1
         elif op.kind == "ATTACHMENT":
             accounting.attachments += 1
+            accounting.attachment_link_writes += 1
+            accounting.storage_uploads += 1
         elif op.kind == "RELATION":
             accounting.relations += 1
         elif op.kind == "SUBITEM":
@@ -691,6 +711,7 @@ def plan_item_manifest_operations(
     apply_source: MondayApplySource,
     monday_id_column_id: str,
     existing_comment_markers: set[str] | None = None,
+    item_assets: tuple[object, ...] | None = None,
 ) -> tuple[ManifestOperation, ...]:
     """Manifesto canônico de um item CREATE/resume (sem PII no hash/log)."""
     item_id = operation.monday_item_id
@@ -803,7 +824,22 @@ def plan_item_manifest_operations(
             ),
         )
 
-    if operation.attachments_to_link:
+    if item_assets:
+        from classificacao_procons.migration.asset_pipeline import attachment_payload_digest
+
+        for asset in item_assets:
+            asset_id = getattr(asset, "asset_id", None)
+            if not asset_id:
+                continue
+            operations.append(
+                ManifestOperation(
+                    kind="ATTACHMENT",
+                    op_id=f"item:{item_id}:asset:{asset_id}",
+                    monday_item_id=item_id,
+                    payload_digest=attachment_payload_digest(asset),
+                ),
+            )
+    elif operation.attachments_to_link:
         for index in range(operation.attachments_to_link):
             operations.append(
                 ManifestOperation(
@@ -837,6 +873,7 @@ def build_scoped_operation_manifest(
     monday_id_column_id: str,
     monday_board_id: str,
     existing_comment_markers: dict[str, set[str]] | None = None,
+    assets_by_item: dict[str, tuple[object, ...]] | None = None,
 ) -> tuple[ManifestOperation, ...]:
     manifest: list[ManifestOperation] = []
     markers = existing_comment_markers or {}
@@ -846,6 +883,7 @@ def build_scoped_operation_manifest(
         source = apply_sources.get(operation.monday_item_id)
         if source is None:
             continue
+        item_assets = assets_by_item.get(operation.monday_item_id) if assets_by_item else None
         manifest.extend(
             plan_item_manifest_operations(
                 monday_board_id=monday_board_id,
@@ -856,6 +894,7 @@ def build_scoped_operation_manifest(
                 apply_source=source,
                 monday_id_column_id=monday_id_column_id,
                 existing_comment_markers=markers.get(operation.monday_item_id, set()),
+                item_assets=item_assets,
             ),
         )
     return tuple(sorted(manifest, key=lambda row: row.op_id))
@@ -874,6 +913,7 @@ def attach_scoped_safety_metadata(
     approved_board_global_fingerprint: str | None = None,
     existing_comment_markers: dict[str, set[str]] | None = None,
     repo_root: Path | None = None,
+    assets_by_item: dict[str, tuple[object, ...]] | None = None,
 ) -> ScopedSafetyMetadata:
     """Calcula fingerprints + manifesto v2 para lote com --item-ids explícitos."""
     global_fp = board_global_fingerprint(inventory)
@@ -883,6 +923,7 @@ def attach_scoped_safety_metadata(
         apply_sources=apply_sources,
         item_ids=selected_item_ids,
         existing_comment_markers=existing_comment_markers,
+        assets_by_item=assets_by_item,
     )
     schema_fp = migration_schema_fingerprint(
         inventory=inventory,
@@ -898,6 +939,7 @@ def attach_scoped_safety_metadata(
         monday_id_column_id=monday_id_column_id,
         monday_board_id=monday_board_id,
         existing_comment_markers=existing_comment_markers,
+        assets_by_item=assets_by_item,
     )
     manifest_hash_v2 = operation_manifest_hash_v2(manifest_ops)
     accounting = summarize_manifest_accounting(manifest_ops)
