@@ -7,6 +7,8 @@ import mimetypes
 import re
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
+from typing import Literal
 
 from classificacao_procons.migration.asset_models import (
     MaterializedAsset,
@@ -17,13 +19,10 @@ from classificacao_procons.migration.monday_inventory import _graphql_request
 
 _ASSET_URL_QUERY = """
 query ($ids: [ID!]!) {
-  items(ids: $ids) {
+  assets(ids: $ids) {
     id
-    assets {
-      id
-      url
-      public_url
-    }
+    url
+    public_url
   }
 }
 """
@@ -31,6 +30,14 @@ query ($ids: [ID!]!) {
 MONDAY_FILES_API = "https://api.monday.com/v2/files"
 
 ALLOWED_ASSET_EXTENSIONS = frozenset({"pdf", "jpg", "jpeg"})
+
+DownloadAuthMode = Literal["monday_auth", "presigned"]
+
+
+@dataclass(frozen=True)
+class DownloadTarget:
+    url: str
+    auth_mode: DownloadAuthMode
 
 
 def validate_asset_extension(asset: MondayAssetMetadata) -> None:
@@ -62,25 +69,46 @@ def guess_mime_type(filename: str, extension: str | None) -> str:
     return "application/octet-stream"
 
 
-def _resolve_download_target(
-    api_token: str,
-    asset: MondayAssetMetadata,
-) -> str:
+def classify_download_auth_mode(url: str) -> DownloadAuthMode:
+    """Presigned/S3 não aceitam Authorization Monday; endpoints Monday exigem."""
+    lowered = url.lower()
+    if lowered.startswith(MONDAY_FILES_API.lower()):
+        return "monday_auth"
+    if "files-monday-com.s3" in lowered:
+        return "presigned"
+    if ".s3." in lowered and "amazonaws.com" in lowered:
+        return "presigned"
+    if "monday.com" in lowered:
+        return "monday_auth"
+    return "presigned"
+
+
+def build_download_request(target: DownloadTarget, api_token: str) -> urllib.request.Request:
+    headers = {"User-Agent": "ClassificacaoProcons/1.0"}
+    if target.auth_mode == "monday_auth":
+        headers["Authorization"] = api_token
+    return urllib.request.Request(target.url, headers=headers)
+
+
+def resolve_download_target(api_token: str, asset: MondayAssetMetadata) -> DownloadTarget:
     rows = _graphql_request(
         api_token=api_token,
         query=_ASSET_URL_QUERY,
-        variables={"ids": [asset.item_id]},
-    ).get("items") or []
+        variables={"ids": [asset.asset_id]},
+    ).get("assets") or []
     if not rows:
-        raise MigrationAssetError(f"Item Monday {asset.item_id} não encontrado para download.")
-    item_row = rows[0]
-    for row in item_row.get("assets") or []:
-        if str(row.get("id")) == asset.asset_id:
-            url = str(row.get("public_url") or row.get("url") or "").strip()
-            if url.startswith("http://") or url.startswith("https://"):
-                return url
-            break
-    return f"{MONDAY_FILES_API}/{asset.asset_id}"
+        raise MigrationAssetError(f"Asset Monday {asset.asset_id} não encontrado para download.")
+    row = rows[0]
+    public_url = str(row.get("public_url") or "").strip()
+    monday_url = str(row.get("url") or "").strip()
+    if public_url.startswith(("http://", "https://")):
+        return DownloadTarget(url=public_url, auth_mode=classify_download_auth_mode(public_url))
+    if monday_url.startswith(("http://", "https://")):
+        return DownloadTarget(url=monday_url, auth_mode=classify_download_auth_mode(monday_url))
+    return DownloadTarget(
+        url=f"{MONDAY_FILES_API}/{asset.asset_id}",
+        auth_mode="monday_auth",
+    )
 
 
 def download_monday_asset(
@@ -90,11 +118,8 @@ def download_monday_asset(
     http_opener=None,
 ) -> MaterializedAsset:
     """Baixa bytes via autenticação Monday; valida tamanho quando conhecido."""
-    target = _resolve_download_target(api_token, asset)
-    request = urllib.request.Request(
-        target,
-        headers={"Authorization": api_token, "User-Agent": "ClassificacaoProcons/1.0"},
-    )
+    target = resolve_download_target(api_token, asset)
+    request = build_download_request(target, api_token)
     opener = http_opener or urllib.request.urlopen
     try:
         with opener(request, timeout=120) as response:
@@ -113,10 +138,10 @@ def download_monday_asset(
             f"Download Monday asset {asset.asset_id} falhou: {exc.reason}.",
         ) from exc
 
-    if asset.file_size is not None and len(content) < asset.file_size:
+    if asset.file_size is not None and len(content) != asset.file_size:
         raise MigrationAssetError(
-            f"Download parcial asset {asset.asset_id}: "
-            f"{len(content)} < {asset.file_size} bytes esperados.",
+            f"Tamanho divergente asset {asset.asset_id}: "
+            f"{len(content)} != {asset.file_size}.",
         )
 
     sanitized = sanitize_asset_filename(

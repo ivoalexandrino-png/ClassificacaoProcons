@@ -33,6 +33,9 @@ from classificacao_procons.migration.asset_storage import (
     build_storage_object_key,
 )
 from classificacao_procons.migration.monday_asset_download import (
+    DownloadTarget,
+    build_download_request,
+    classify_download_auth_mode,
     download_monday_asset,
     materialized_matches_metadata,
     sanitize_asset_filename,
@@ -253,8 +256,11 @@ def test_download_http_failure_aborts(monkeypatch):
         raise MigrationAssetError("Download Monday asset 9001 HTTP 403.")
 
     monkeypatch.setattr(
-        "classificacao_procons.migration.monday_asset_download._resolve_download_target",
-        lambda *_a, **_k: "https://example.test/file",
+        "classificacao_procons.migration.monday_asset_download.resolve_download_target",
+        lambda *_a, **_k: DownloadTarget(
+            url="https://example.test/file",
+            auth_mode="monday_auth",
+        ),
     )
     monkeypatch.setattr(
         "classificacao_procons.migration.monday_asset_download.urllib.request.urlopen",
@@ -281,14 +287,17 @@ def test_download_partial_bytes_aborts(monkeypatch):
             return b"x" * 50
 
     monkeypatch.setattr(
-        "classificacao_procons.migration.monday_asset_download._resolve_download_target",
-        lambda *_a, **_k: "https://example.test/file",
+        "classificacao_procons.migration.monday_asset_download.resolve_download_target",
+        lambda *_a, **_k: DownloadTarget(
+            url="https://example.test/file",
+            auth_mode="monday_auth",
+        ),
     )
     monkeypatch.setattr(
         "classificacao_procons.migration.monday_asset_download.urllib.request.urlopen",
         lambda *_a, **_k: Resp(),
     )
-    with pytest.raises(MigrationAssetError, match="parcial"):
+    with pytest.raises(MigrationAssetError, match="Tamanho divergente"):
         download_monday_asset("token", asset)
 
 
@@ -459,6 +468,38 @@ def test_reports_do_not_include_raw_urls_in_payload_digest():
     digest = attachment_payload_digest(_approved(_materialized(_asset(ASSET_A))))
     assert "http" not in digest
     assert "token" not in digest.lower()
+
+
+def test_classify_download_auth_mode_presigned_s3():
+    url = "https://files-monday-com.s3.amazonaws.com/bucket/key?X-Amz-Signature=abc"
+    assert classify_download_auth_mode(url) == "presigned"
+
+
+def test_classify_download_auth_mode_monday_files_api():
+    from classificacao_procons.migration.monday_asset_download import MONDAY_FILES_API
+
+    assert classify_download_auth_mode(f"{MONDAY_FILES_API}/123") == "monday_auth"
+
+
+def test_build_download_request_presigned_has_no_authorization_header():
+    request = build_download_request(
+        DownloadTarget(
+            url="https://files-monday-com.s3.amazonaws.com/x",
+            auth_mode="presigned",
+        ),
+        "monday-secret",
+    )
+    assert "Authorization" not in request.headers
+
+
+def test_build_download_request_monday_auth_has_authorization_header():
+    from classificacao_procons.migration.monday_asset_download import MONDAY_FILES_API
+
+    request = build_download_request(
+        DownloadTarget(url=f"{MONDAY_FILES_API}/1", auth_mode="monday_auth"),
+        "monday-secret",
+    )
+    assert request.headers["Authorization"] == "monday-secret"
 
 
 def test_duplicate_sunday_attachment_marker_is_ambiguous():

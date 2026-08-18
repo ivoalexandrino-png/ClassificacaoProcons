@@ -189,6 +189,18 @@ def main() -> int:
         default="/tmp/sunday-migration-apply-report.json",
         help="relatório sanitizado do APPLY",
     )
+    parser.add_argument(
+        "--approval-bundle-out",
+        help="PLAN binary: grava BinaryApprovalBundle JSON (metadata + SHA256, sem bytes)",
+    )
+    parser.add_argument(
+        "--approval-bundle",
+        help="APPLY binary: carrega approval bundle persistido e aprovado",
+    )
+    parser.add_argument(
+        "--expected-approval-digest",
+        help="APPLY binary: SHA256 canônico do bundle aprovado pelo humano",
+    )
     args = parser.parse_args()
 
     if args.board not in BOARD_ALLOWLIST:
@@ -386,6 +398,8 @@ def main() -> int:
     inventory_holder: dict[str, object] = {"inventory": None}
     plan_holder: dict[str, object] = {"plan": None}
     scoped_context: dict[str, object] = {}
+    binary_metadata_assets: dict[str, object] = {}
+    binary_approved_by_item: dict[str, object] = {}
 
     def _build_scoped_safety(current_inventory, current_plan):
         from classificacao_procons.migration.operation_manifest import (
@@ -432,6 +446,8 @@ def main() -> int:
             monday_id_column_id=monday_id_column_id,
             monday_board_id=args.board,
             existing_comment_markers=sunday_comment_markers or None,
+            assets_by_item=binary_approved_by_item or None,
+            metadata_assets_by_item=binary_metadata_assets or None,
         )
 
     def reload_inventory():
@@ -558,6 +574,70 @@ def main() -> int:
         from classificacao_procons.migration.executor import _build_gate
 
         plan.gate = _build_gate(plan, schema_checks)
+
+    if args.approval_bundle_out:
+        if requested_item_ids is None:
+            raise ExecutorAbort("--approval-bundle-out exige --item-ids.")
+        if not scoped_context:
+            raise ExecutorAbort(
+                "--approval-bundle-out exige --refresh-sunday (schema live) e MONDAY_API_TOKEN.",
+            )
+        from classificacao_procons.migration.binary_approval_bundle import (
+            BinaryApprovalBudgets,
+            generate_binary_approval_artifact,
+            save_binary_approval_bundle,
+        )
+
+        monday_token = get_api_token_from_env()
+        if not monday_token:
+            raise ExecutorAbort("MONDAY_API_TOKEN ausente para approval bundle binary.")
+        budgets = BinaryApprovalBudgets(
+            max_items=plan.max_items,
+            max_assets=plan.max_assets or 0,
+            max_comments=plan.max_comments or sum(
+                op.comments_to_create for op in plan.operations
+            ),
+            max_storage_uploads=plan.max_storage_uploads or 0,
+            max_operations=plan.effective_max_operations or 0,
+        )
+        bundle, scoped = generate_binary_approval_artifact(
+            api_token=monday_token,
+            board_id=args.board,
+            sunday_board_id=BOARD_ALLOWLIST[args.board],
+            wave=args.wave,
+            item_ids=requested_item_ids,
+            inventory=inventory,
+            board_plan=scoped_context["board_plan"],
+            sunday_snapshot=scoped_context["sunday_snapshot"],
+            apply_sources=scoped_context["apply_sources"],
+            plan_operations=list(plan.operations),
+            monday_id_column_id=scoped_context["monday_id_column_id"],
+            budgets=budgets,
+        )
+        plan.scoped_safety = scoped
+        from classificacao_procons.migration.executor import _build_gate
+
+        plan.gate = _build_gate(plan, schema_checks)
+        save_binary_approval_bundle(bundle, args.approval_bundle_out)
+        print("\nBINARY APPROVAL BUNDLE")
+        print(json.dumps({
+            "approval_bundle_path": args.approval_bundle_out,
+            "approval_bundle_digest": bundle.approval_bundle_digest,
+            "selected_source": bundle.selected_source,
+            "schema": bundle.schema,
+            "manifest_v2": bundle.manifest_v2,
+            "code_revision": bundle.code_revision,
+            "operation_total": bundle.operation_total,
+            "approved_assets": [
+                {
+                    "monday_item_id": asset.monday_item_id,
+                    "asset_id": asset.asset_id,
+                    "size": asset.size,
+                    "sha256_prefix": asset.source_sha256[:12],
+                }
+                for asset in bundle.approved_assets
+            ],
+        }, ensure_ascii=False, indent=2))
 
     Path(args.out).write_text(
         json.dumps(plan.to_payload(), ensure_ascii=False, indent=2), encoding="utf-8",
@@ -686,6 +766,70 @@ def main() -> int:
         return 3
 
     print("\nIniciando APPLY (fail-fast)…")
+    binary_apply_state = None
+    storage_backend = None
+    from classificacao_procons.migration.binary_approval_bundle import (
+        group_approved_assets_by_item,
+        load_binary_approval_bundle,
+        plan_requires_binary_approval,
+    )
+
+    needs_binary = plan_requires_binary_approval(
+        max_assets=plan.max_assets,
+        max_storage_uploads=plan.max_storage_uploads,
+    )
+    if needs_binary:
+        if not args.approval_bundle:
+            print("ABORT: APPLY binary exige --approval-bundle.")
+            return 3
+        if not args.expected_approval_digest:
+            print("ABORT: APPLY binary exige --expected-approval-digest.")
+            return 3
+        if requested_item_ids is None:
+            print("ABORT: APPLY binary exige --item-ids explícitos.")
+            return 3
+        bundle = load_binary_approval_bundle(args.approval_bundle)
+        binary_approved_by_item.clear()
+        binary_approved_by_item.update(
+            group_approved_assets_by_item(bundle.approved_assets),
+        )
+        from classificacao_procons.migration.monday_asset_metadata import (
+            fetch_item_assets_metadata,
+        )
+
+        assets_meta = fetch_item_assets_metadata(
+            monday_token,
+            board_id=args.board,
+            item_ids=requested_item_ids,
+        )
+        binary_metadata_assets.clear()
+        binary_metadata_assets.update(assets_meta)
+        current_scoped = _build_scoped_safety(inventory, plan)
+        from classificacao_procons.migration.binary_apply import prepare_binary_apply_state
+
+        try:
+            binary_apply_state = prepare_binary_apply_state(
+                api_token=monday_token,
+                bundle=bundle,
+                expected_digest=args.expected_approval_digest,
+                requested_item_ids=requested_item_ids,
+                current_scoped=current_scoped,
+                assets_by_item=assets_meta,
+                max_items=plan.max_items,
+                max_assets=plan.max_assets,
+                max_comments=plan.max_comments,
+                max_storage_uploads=plan.max_storage_uploads,
+                max_operations=plan.effective_max_operations,
+            )
+        except Exception as exc:
+            print(f"ABORT: binary approval gate: {exc}")
+            return 3
+        from classificacao_procons.migration.asset_storage import (
+            DriveStorageBackend,
+            migration_storage_config_from_env,
+        )
+
+        storage_backend = DriveStorageBackend(migration_storage_config_from_env())
     try:
         apply_result = apply_plan(
             plan,
@@ -696,6 +840,8 @@ def main() -> int:
             fail_fast=True,
             migration_context=migration_context,
             ledger_gate=ledger_gate,
+            binary_apply_state=binary_apply_state,
+            storage_backend=storage_backend,
         )
     except ExecutorAbort as exc:
         print(f"\nABORT: {exc}")

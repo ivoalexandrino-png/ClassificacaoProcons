@@ -916,16 +916,22 @@ def attach_scoped_safety_metadata(
     existing_comment_markers: dict[str, set[str]] | None = None,
     repo_root: Path | None = None,
     assets_by_item: dict[str, tuple[object, ...]] | None = None,
+    metadata_assets_by_item: dict[str, tuple[object, ...]] | None = None,
 ) -> ScopedSafetyMetadata:
     """Calcula fingerprints + manifesto v2 para lote com --item-ids explícitos."""
     global_fp = board_global_fingerprint(inventory)
+    fingerprint_assets = (
+        metadata_assets_by_item
+        if metadata_assets_by_item is not None
+        else assets_by_item
+    )
     selected_fp = selected_source_fingerprint(
         inventory=inventory,
         board_plan=board_plan,
         apply_sources=apply_sources,
         item_ids=selected_item_ids,
         existing_comment_markers=existing_comment_markers,
-        assets_by_item=assets_by_item,
+        assets_by_item=fingerprint_assets,
     )
     schema_fp = migration_schema_fingerprint(
         inventory=inventory,
