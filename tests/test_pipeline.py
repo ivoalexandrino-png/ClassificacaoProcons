@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from classificacao_procons.drive.client import DriveUploadResult
 from classificacao_procons.models import ProconComplaint, ProconNotificationEmail
-from classificacao_procons.monday.client import MondayRegistrationResult
+from classificacao_procons.monday.client import MondayClientError, MondayRegistrationResult
 from classificacao_procons.pipeline import (
     PipelineOptions,
     calculate_sac_and_legal_deadlines,
@@ -255,3 +255,134 @@ def test_process_should_register_standalone_pa_when_access_code_missing(
     fetch_complaint_mock.assert_not_called()
     ensure_pa_mock.assert_called_once()
     assert ensure_pa_mock.call_args.kwargs["pa_protocol"] == "1681159/2026"
+
+
+@patch("classificacao_procons.pipeline.GmailProconFetcher")
+@patch("classificacao_procons.pipeline.has_gmail_modify_access", return_value=True)
+@patch("classificacao_procons.pipeline.has_valid_token", return_value=True)
+@patch("classificacao_procons.pa_standalone_registry.ensure_pa_monday_item_for_protocol")
+def test_process_should_return_error_when_standalone_pa_monday_fails(
+    ensure_pa_mock,
+    _has_token_mock,
+    _modify_mock,
+    fetcher_cls_mock,
+    tmp_path,
+) -> None:
+    pa_notification = ProconNotificationEmail(
+        message_id="msg-pa-fail",
+        subject="Processo Administrativo Aberto: 35.001.003.26.1768203",
+        sender="procon.naoresponder@procon.sp.gov.br",
+        received_at=datetime(2026, 8, 18, 15, 55),
+        portal_url="https://fornecedor2.procon.sp.gov.br/login",
+        access_code="",
+        notification_type="processo_administrativo",
+        protocol_number="1768203/2026",
+        administrative_process_number="35.001.003.26.1768203",
+    )
+    fetcher = MagicMock()
+    fetcher_cls_mock.from_credentials.return_value = fetcher
+    fetcher.list_unread_notifications.return_value = [pa_notification]
+    ensure_pa_mock.side_effect = MondayClientError(
+        "Não foi possível confirmar consumidora da CIP anterior.",
+    )
+
+    results = process_new_complaints(
+        PipelineOptions(
+            download_dir=tmp_path / "downloads",
+            state_path=tmp_path / "processed.json",
+            monday_api_token="token-test",
+        ),
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "error"
+    assert "consumidora da CIP anterior" in (results[0].error or "")
+
+
+@patch("classificacao_procons.pipeline.GmailProconFetcher")
+@patch("classificacao_procons.pipeline.has_gmail_modify_access", return_value=True)
+@patch("classificacao_procons.pipeline.has_valid_token", return_value=True)
+@patch("classificacao_procons.pipeline._register_on_monday_if_configured")
+@patch("classificacao_procons.pipeline.save_complaint_pdf")
+@patch("classificacao_procons.pipeline.fetch_reclamacao_complaint_by_protocol")
+@patch(
+    "classificacao_procons.pipeline.resolve_storage_state_path",
+    return_value="credentials/procon-sp-storage.json",
+)
+@patch("classificacao_procons.pa_standalone_registry.ensure_pa_monday_item_for_protocol")
+def test_process_should_handle_cip_before_pa_when_both_unread(
+    ensure_pa_mock,
+    _storage_mock,
+    fetch_reclamacao_mock,
+    save_pdf_mock,
+    register_monday_mock,
+    _has_token_mock,
+    _modify_mock,
+    fetcher_cls_mock,
+    tmp_path,
+) -> None:
+    pa_notification = ProconNotificationEmail(
+        message_id="msg-pa",
+        subject="Processo Administrativo Aberto: 35.001.003.26.1768203",
+        sender="procon.naoresponder@procon.sp.gov.br",
+        received_at=datetime(2026, 8, 18, 15, 55, 1),
+        portal_url="https://fornecedor2.procon.sp.gov.br/login",
+        access_code="",
+        notification_type="processo_administrativo",
+        protocol_number="1768203/2026",
+        administrative_process_number="35.001.003.26.1768203",
+    )
+    cip_notification = ProconNotificationEmail(
+        message_id="msg-cip",
+        subject="Fundação Procon-SP - Notificação de emissão de Reclamação",
+        sender="procon.naoresponder@procon.sp.gov.br",
+        received_at=datetime(2026, 8, 18, 15, 55, 0),
+        portal_url="https://fornecedor2.procon.sp.gov.br/login",
+        access_code="",
+        notification_type="cip",
+        protocol_number="1768203/2026",
+    )
+    fetcher = MagicMock()
+    fetcher_cls_mock.from_credentials.return_value = fetcher
+    fetcher.list_unread_notifications.return_value = [pa_notification, cip_notification]
+    fetch_reclamacao_mock.return_value = ProconComplaint(
+        access_code="",
+        consumer_name="CONSUMIDOR TESTE",
+        consumer_cpf="12345678901",
+        cip_fa_number="1768203/2026",
+        complaint_date=date(2026, 8, 10),
+        response_deadline=date(2026, 8, 20),
+        cause="Produto",
+        pdf_path=str(tmp_path / "downloads" / "procon.pdf"),
+    )
+    (tmp_path / "downloads").mkdir(parents=True)
+    (tmp_path / "downloads" / "procon.pdf").write_bytes(b"%PDF-1.4")
+    save_pdf_mock.return_value = DriveUploadResult(
+        consumer_folder_id="folder-1",
+        consumer_folder_url="https://drive.google.com/folder/folder-1",
+        pdf_file_id="file-1",
+        pdf_url="https://drive.google.com/file/file-1/view",
+    )
+    register_monday_mock.side_effect = lambda result, **kwargs: result
+    ensure_pa_mock.return_value = MondayRegistrationResult(
+        item_id="monday-pa",
+        board_id="board-1",
+        item_url=None,
+        skipped_duplicate=True,
+    )
+
+    results = process_new_complaints(
+        PipelineOptions(
+            download_dir=tmp_path / "downloads",
+            state_path=tmp_path / "processed.json",
+            mark_read=True,
+            monday_api_token="token-test",
+        ),
+    )
+
+    assert len(results) == 2
+    assert results[0].status == "success"
+    assert results[0].protocol_number == "1768203/2026"
+    assert results[0].consumer_name == "CONSUMIDOR TESTE"
+    fetch_reclamacao_mock.assert_called_once()
+    ensure_pa_mock.assert_called_once()

@@ -3,17 +3,27 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from playwright.sync_api import Page, sync_playwright
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import sync_playwright
 
-from classificacao_procons.portal.client import PORTAL_LOGIN_URL, ProconPortalError
+from classificacao_procons.models import ProconComplaint
+from classificacao_procons.portal.client import (
+    PORTAL_LOGIN_URL,
+    ProconPortalError,
+    _download_pdf_from_documents_tab,
+    _extract_complaint_from_page,
+)
 
 PA_LIST_URL_FRAGMENT = "/m/atendimentos"
+ENV_STORAGE_PATH = "PROCON_SP_STORAGE_STATE_PATH"
+ENV_STORAGE_JSON = "PROCON_SP_STORAGE_STATE_JSON"
+DEFAULT_STORAGE_PATH = Path("credentials/procon-sp-storage.json")
 
 
 class ProcuradorPortalError(ProconPortalError):
@@ -135,3 +145,143 @@ def validate_storage_state_file(path: str) -> bool:
     except (OSError, json.JSONDecodeError):
         return False
     return isinstance(payload, dict) and "cookies" in payload
+
+
+def resolve_storage_state_path() -> str | None:
+    """Resolve caminho do storage state (arquivo local ou JSON em env)."""
+    configured = os.environ.get(ENV_STORAGE_PATH, "").strip()
+    if configured and Path(configured).is_file():
+        return configured
+
+    if DEFAULT_STORAGE_PATH.is_file():
+        return str(DEFAULT_STORAGE_PATH)
+
+    raw_json = os.environ.get(ENV_STORAGE_JSON, "").strip()
+    if raw_json:
+        DEFAULT_STORAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DEFAULT_STORAGE_PATH.write_text(raw_json, encoding="utf-8")
+        return str(DEFAULT_STORAGE_PATH)
+
+    return None
+
+
+def _select_company_if_needed(page: Page, company_hint: str) -> None:
+    company_select = page.locator("mat-select, select").filter(has_text=company_hint)
+    if company_select.count():
+        company_select.first.click()
+        page.get_by_role("option", name=re.compile(company_hint, re.I)).first.click()
+        page.wait_for_timeout(1500)
+
+
+def _open_reclamacao_by_protocol(page: Page, protocol_number: str) -> None:
+    reclamacoes_tab = page.get_by_role("tab", name=re.compile(r"Reclamações", re.I))
+    if reclamacoes_tab.count():
+        reclamacoes_tab.first.click()
+        page.wait_for_timeout(2000)
+
+    search = page.get_by_placeholder(re.compile(r"Filtrar por protocolo", re.I))
+    if search.count():
+        search.first.fill(protocol_number)
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(3000)
+
+    protocol_fragment = protocol_number.split("/", 1)[0]
+    row = page.locator("table tr", has_text=protocol_fragment)
+    if not row.count():
+        raise ProcuradorPortalError(
+            f"Protocolo {protocol_number} não encontrado na lista de Reclamações.",
+        )
+
+    row.first.click()
+    page.wait_for_timeout(3000)
+    if PA_LIST_URL_FRAGMENT not in page.url:
+        link = row.first.locator("a")
+        if link.count():
+            link.first.click()
+            page.wait_for_timeout(3000)
+
+    if PA_LIST_URL_FRAGMENT not in page.url:
+        raise ProcuradorPortalError(
+            f"Não foi possível abrir a reclamação {protocol_number} no portal.",
+        )
+
+
+def fetch_reclamacao_complaint_by_protocol(
+    protocol_number: str,
+    *,
+    storage_state_path: str,
+    download_dir: Path,
+    company_hint: str = "B4A",
+    headless: bool = True,
+) -> ProconComplaint:
+    """
+    Abre reclamação pelo protocolo com sessão gov.br já salva (storage state).
+
+    Usado quando o e-mail de Reclamação não traz código de acesso.
+    """
+    state_path = Path(storage_state_path)
+    if not state_path.is_file():
+        raise ProcuradorPortalError(
+            f"Storage state não encontrado: {storage_state_path}. "
+            "Veja docs/procon-portal-procurador.md.",
+        )
+
+    download_dir.mkdir(parents=True, exist_ok=True)
+    safe_protocol = protocol_number.replace("/", "-")
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=headless)
+        context = browser.new_context(storage_state=str(state_path))
+        page = context.new_page()
+        try:
+            page.goto(PORTAL_LOGIN_URL, wait_until="domcontentloaded", timeout=60_000)
+            page.wait_for_timeout(2000)
+            _select_company_if_needed(page, company_hint)
+            _open_reclamacao_by_protocol(page, protocol_number)
+
+            complaint = _extract_complaint_from_page(
+                page,
+                protocol_number,
+                complaint_kind="reclamacao",
+            )
+            pdf_path = _download_pdf_from_documents_tab(
+                page,
+                download_dir,
+                safe_protocol,
+                complaint_kind="reclamacao",
+            )
+            if pdf_path:
+                return ProconComplaint(
+                    access_code=complaint.access_code,
+                    consumer_name=complaint.consumer_name,
+                    consumer_cpf=complaint.consumer_cpf,
+                    cip_fa_number=complaint.cip_fa_number or protocol_number,
+                    complaint_date=complaint.complaint_date,
+                    response_deadline=complaint.response_deadline,
+                    cause=complaint.cause,
+                    state=complaint.state,
+                    portal_url=complaint.portal_url,
+                    pdf_path=pdf_path,
+                    complaint_kind="reclamacao",
+                    administrative_process_number=complaint.administrative_process_number,
+                )
+            return ProconComplaint(
+                access_code=complaint.access_code,
+                consumer_name=complaint.consumer_name,
+                consumer_cpf=complaint.consumer_cpf,
+                cip_fa_number=complaint.cip_fa_number or protocol_number,
+                complaint_date=complaint.complaint_date,
+                response_deadline=complaint.response_deadline,
+                cause=complaint.cause,
+                state=complaint.state,
+                portal_url=complaint.portal_url,
+                complaint_kind="reclamacao",
+                administrative_process_number=complaint.administrative_process_number,
+            )
+        except PlaywrightTimeoutError as exc:
+            raise ProcuradorPortalError(
+                "Timeout ao abrir reclamação no portal Procon-SP.",
+            ) from exc
+        finally:
+            context.close()
+            browser.close()

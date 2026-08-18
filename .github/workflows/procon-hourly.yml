@@ -125,6 +125,15 @@ jobs:
           printf '%s' "$GMAIL_OAUTH_JSON" > credentials/gmail-oauth.json
           printf '%s' "$GMAIL_TOKEN_JSON" > credentials/gmail-token.json
 
+      - name: Configure Procon-SP portal session
+        env:
+          PROCON_SP_STORAGE_STATE_JSON: ${{ secrets.PROCON_SP_STORAGE_STATE_JSON }}
+        run: |
+          if [ -n "$PROCON_SP_STORAGE_STATE_JSON" ]; then
+            printf '%s' "$PROCON_SP_STORAGE_STATE_JSON" > credentials/procon-sp-storage.json
+            echo "PROCON_SP_STORAGE_STATE_PATH=credentials/procon-sp-storage.json" >> "$GITHUB_ENV"
+          fi
+
       - name: Validate Google credentials
         run: |
           python3 <<'PY'
@@ -172,6 +181,7 @@ jobs:
         continue-on-error: true
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          PROCON_SP_STORAGE_STATE_PATH: ${{ env.PROCON_SP_STORAGE_STATE_PATH }}
         run: python -m classificacao_procons.cli process --max-results 30 --sources sp,sc,alerj,campinas,uberlandia
 
       - name: Process consumer interactions (Procon-SP)
