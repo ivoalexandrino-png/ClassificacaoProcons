@@ -825,16 +825,18 @@ def plan_item_manifest_operations(
         )
 
     if item_assets:
+        from classificacao_procons.migration.asset_models import ApprovedBinaryAsset
         from classificacao_procons.migration.asset_pipeline import attachment_payload_digest
 
         for asset in item_assets:
-            asset_id = getattr(asset, "asset_id", None)
-            if not asset_id:
-                continue
+            if not isinstance(asset, ApprovedBinaryAsset):
+                raise ValueError(
+                    "ATTACHMENT binary exige ApprovedBinaryAsset com source_sha256.",
+                )
             operations.append(
                 ManifestOperation(
                     kind="ATTACHMENT",
-                    op_id=f"item:{item_id}:asset:{asset_id}",
+                    op_id=f"item:{item_id}:asset:{asset.asset_id}",
                     monday_item_id=item_id,
                     payload_digest=attachment_payload_digest(asset),
                 ),

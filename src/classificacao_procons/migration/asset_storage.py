@@ -18,6 +18,7 @@ from classificacao_procons.drive.client import (
     ensure_folder_path,
 )
 from classificacao_procons.migration.asset_models import (
+    DriveFolderPolicyReport,
     MaterializedAsset,
     MigrationAssetError,
     StorageBackendMissingError,
@@ -63,6 +64,24 @@ def build_drive_file_name(storage_key: str) -> str:
     return storage_key.replace("/", "__")
 
 
+def build_drive_stable_view_url(file_id: str) -> str:
+    """URL permanente baseada em file_id (sem token/query assinada)."""
+    safe_id = file_id.strip()
+    if not safe_id or not re.fullmatch(r"[\w-]+", safe_id):
+        raise MigrationAssetError("Drive file_id inválido para URL estável.")
+    return f"https://drive.google.com/file/d/{safe_id}/view"
+
+
+def validate_stable_drive_public_url(url: str, *, file_id: str) -> None:
+    """Fail-closed se URL contiver credencial temporária ou não for estável."""
+    lowered = url.lower()
+    if any(token in lowered for token in ("access_token=", "authuser=", "export=download")):
+        raise MigrationAssetError("URL Drive contém credencial temporária.")
+    expected = build_drive_stable_view_url(file_id)
+    if url != expected and not url.startswith("https://drive.google.com/file/d/"):
+        raise MigrationAssetError("URL Drive não estável.")
+
+
 class StoragePort:
     """Porta injetável para testes (mock) e Drive (produção)."""
 
@@ -105,7 +124,7 @@ class DriveStorageBackend(StoragePort):
         return StorageObjectRecord(
             storage_key=storage_key,
             drive_file_id=str(row["id"]),
-            public_url=str(row.get("webViewLink") or ""),
+            public_url=build_drive_stable_view_url(str(row["id"])),
             sha256=str(props.get(APP_PROP_SHA256) or ""),
             size=int(row.get("size") or 0),
             mime_type=materialized_mime_placeholder(),
@@ -127,7 +146,7 @@ class DriveStorageBackend(StoragePort):
             return StorageObjectRecord(
                 storage_key=storage_key,
                 drive_file_id=existing.drive_file_id,
-                public_url=existing.public_url,
+                public_url=build_drive_stable_view_url(existing.drive_file_id),
                 sha256=materialized.sha256,
                 size=len(materialized.content),
                 mime_type=materialized.mime_type,
@@ -169,10 +188,13 @@ class DriveStorageBackend(StoragePort):
         except HttpError as exc:
             raise DriveClientError(f"Falha upload asset storage: {exc}") from exc
 
+        file_id = str(uploaded["id"])
+        stable_url = build_drive_stable_view_url(file_id)
+        validate_stable_drive_public_url(stable_url, file_id=file_id)
         return StorageObjectRecord(
             storage_key=storage_key,
-            drive_file_id=str(uploaded["id"]),
-            public_url=str(uploaded.get("webViewLink") or ""),
+            drive_file_id=file_id,
+            public_url=stable_url,
             sha256=materialized.sha256,
             size=len(materialized.content),
             mime_type=materialized.mime_type,
@@ -219,3 +241,72 @@ def storage_payload_digest_fields(
 
 def storage_key_digest(storage_key: str) -> str:
     return hashlib.sha256(storage_key.encode("utf-8")).hexdigest()
+
+
+def inspect_migration_assets_folder_policy(
+    config: StorageBackendConfig,
+) -> DriveFolderPolicyReport:
+    """Leitura read-only da política do folder raiz (sem alterar permissões)."""
+
+    service = _build_drive_service(config.token_path)
+    try:
+        metadata = (
+            service.files()
+            .get(
+                fileId=config.root_folder_id,
+                fields="id,name,driveId,shared,capabilities",
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+    except HttpError as exc:
+        raise DriveClientError(f"Falha ao inspecionar folder migration assets: {exc}") from exc
+
+    drive_id = metadata.get("driveId")
+    folder_type: str
+    if drive_id:
+        folder_type = "shared_drive"
+    elif metadata.get("shared"):
+        folder_type = "shared_drive"
+    else:
+        folder_type = "my_drive"
+
+    sharing_model = "restricted"
+    public_exposure = False
+    permissions_inherited: str = "unknown"
+    try:
+        permissions = (
+            service.permissions()
+            .list(
+                fileId=config.root_folder_id,
+                fields="permissions(type,role,deleted)",
+                supportsAllDrives=True,
+            )
+            .execute()
+            .get("permissions")
+            or []
+        )
+        for perm in permissions:
+            if perm.get("deleted"):
+                continue
+            perm_type = str(perm.get("type") or "")
+            if perm_type == "anyone":
+                sharing_model = "anyone_with_link"
+                public_exposure = True
+            elif perm_type == "domain":
+                sharing_model = "domain"
+            elif perm_type == "user":
+                if sharing_model == "restricted":
+                    sharing_model = "explicit_users"
+        permissions_inherited = "no"
+    except HttpError:
+        permissions_inherited = "unknown"
+
+    return DriveFolderPolicyReport(
+        folder_type=folder_type,  # type: ignore[arg-type]
+        sharing_model=sharing_model,  # type: ignore[arg-type]
+        permissions_inherited=permissions_inherited,  # type: ignore[arg-type]
+        upload_alters_sharing=False,
+        public_exposure=public_exposure,
+        link_access_validated=False,
+    )

@@ -8,6 +8,7 @@ from classificacao_procons.migration.asset_models import (
     StorageObjectRecord,
     SundayAttachmentPlan,
 )
+from classificacao_procons.migration.asset_storage import validate_stable_drive_public_url
 from classificacao_procons.sunday.models import Attachment
 
 
@@ -64,6 +65,7 @@ def plan_sunday_attachment(
     )
     if not storage.public_url.startswith("http"):
         raise MigrationAssetError("Storage URL inválida para Sunday attachment.")
+    validate_stable_drive_public_url(storage.public_url, file_id=storage.drive_file_id)
     return SundayAttachmentPlan(
         board_id=asset.board_id,
         item_id=asset.item_id,

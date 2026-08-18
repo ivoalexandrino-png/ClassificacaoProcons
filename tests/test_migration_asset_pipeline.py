@@ -14,6 +14,7 @@ from classificacao_procons.migration.asset_attachment import (
     plan_sunday_attachment,
 )
 from classificacao_procons.migration.asset_models import (
+    ApprovedBinaryAsset,
     MaterializedAsset,
     MigrationAssetError,
     MondayAssetMetadata,
@@ -21,19 +22,21 @@ from classificacao_procons.migration.asset_models import (
 )
 from classificacao_procons.migration.asset_pipeline import (
     BinaryAssetApplyStats,
-    apply_item_assets,
+    apply_item_assets_with_approval,
     attachment_payload_digest,
     classify_binary_item_ready,
-    validate_asset_extension,
 )
+from classificacao_procons.migration.asset_preflight import approved_binary_asset_from_materialized
 from classificacao_procons.migration.asset_storage import (
     StoragePort,
+    build_drive_stable_view_url,
     build_storage_object_key,
 )
 from classificacao_procons.migration.monday_asset_download import (
     download_monday_asset,
     materialized_matches_metadata,
     sanitize_asset_filename,
+    validate_asset_extension,
 )
 from classificacao_procons.migration.monday_asset_metadata import assets_fingerprint_basis
 from classificacao_procons.migration.operation_manifest import (
@@ -45,6 +48,7 @@ from classificacao_procons.migration.operation_manifest import (
 from classificacao_procons.sunday.models import Attachment
 
 BOARD = "4944254220"
+SUNDAY = "82"
 ITEM = "10736174113"
 ASSET_A = "9001"
 ASSET_B = "9002"
@@ -74,7 +78,7 @@ def _materialized(
     content: bytes | None = None,
 ) -> MaterializedAsset:
     payload = content if content is not None else (b"x" * (asset.file_size or 0))
-    extension = asset.file_extension or "pdf"
+    extension = (asset.file_extension or "pdf").lstrip(".")
     return MaterializedAsset(
         metadata=asset,
         content=payload,
@@ -85,6 +89,13 @@ def _materialized(
             asset_id=asset.asset_id,
             extension=extension,
         ),
+    )
+
+
+def _approved(materialized: MaterializedAsset) -> ApprovedBinaryAsset:
+    return approved_binary_asset_from_materialized(
+        materialized=materialized,
+        sunday_board_id=SUNDAY,
     )
 
 
@@ -104,10 +115,11 @@ class FakeStorage(StoragePort):
                 raise MigrationAssetError("CONFLICT")
             self.adopts += 1
             return replace(existing, action="ADOPT_EXISTING_STORAGE_OBJECT")
+        file_id = f"drive-{len(self.objects)+1}"
         record = StorageObjectRecord(
             storage_key=storage_key,
-            drive_file_id=f"drive-{len(self.objects)+1}",
-            public_url=f"https://drive.example/file/{len(self.objects)+1}",
+            drive_file_id=file_id,
+            public_url=build_drive_stable_view_url(file_id),
             sha256=materialized.sha256,
             size=len(materialized.content),
             mime_type=materialized.mime_type,
@@ -141,10 +153,11 @@ class FakeSunday:
 
 
 def test_single_pdf_attachment_manifest_and_accounting():
-    asset = _asset(ASSET_A)
-    digest = attachment_payload_digest(asset)
-    assert digest == attachment_payload_digest(asset)
-    assert digest != attachment_payload_digest(_asset(ASSET_A, name="other.pdf"))
+    materialized = _materialized(_asset(ASSET_A))
+    approved = _approved(materialized)
+    digest = attachment_payload_digest(approved)
+    assert digest == attachment_payload_digest(approved)
+    assert digest != attachment_payload_digest(replace(approved, source_sha256="0" * 64))
     ops = (
         ManifestOperation(
             kind="ATTACHMENT",
@@ -169,7 +182,9 @@ def test_two_pdf_multi_asset_manifest():
                     kind="ATTACHMENT",
                     op_id=f"item:{ITEM}:asset:{asset.asset_id}",
                     monday_item_id=ITEM,
-                    payload_digest=attachment_payload_digest(asset),
+                    payload_digest=attachment_payload_digest(
+                        _approved(_materialized(asset)),
+                    ),
                 )
                 for asset in assets
             ],
@@ -193,7 +208,9 @@ def test_multi_asset_order_independent_manifest_hash():
                         kind="ATTACHMENT",
                         op_id=f"item:{ITEM}:asset:{asset.asset_id}",
                         monday_item_id=ITEM,
-                        payload_digest=attachment_payload_digest(asset),
+                        payload_digest=attachment_payload_digest(
+                            _approved(_materialized(asset)),
+                        ),
                     )
                     for asset in assets
                 ],
@@ -317,8 +334,8 @@ def test_sunday_attachment_idempotent_by_marker():
     asset = _asset(ASSET_A)
     storage_record = StorageObjectRecord(
         storage_key="k",
-        drive_file_id="1",
-        public_url="https://drive.example/1",
+        drive_file_id="AbCdEf123",
+        public_url=build_drive_stable_view_url("AbCdEf123"),
         sha256="abc",
         size=10,
         mime_type="application/pdf",
@@ -341,16 +358,21 @@ def test_end_to_end_mock_single_and_multi_asset_rerun_zero_writes():
     assets = (_asset(ASSET_A), _asset(ASSET_B, name="b.pdf"))
     storage = FakeStorage()
     sunday = FakeSunday()
+    approved = {
+        ASSET_A: _approved(_materialized(assets[0])),
+        ASSET_B: _approved(_materialized(assets[1])),
+    }
 
     def downloader(_token, asset):
         return _materialized(asset)
 
     stats = BinaryAssetApplyStats()
-    apply_item_assets(
+    apply_item_assets_with_approval(
         api_token="token",
         sunday_client=sunday,
         sunday_item_id="999",
         expected_assets=assets,
+        approved_by_asset_id=approved,
         storage=storage,
         stats=stats,
         downloader=downloader,
@@ -360,11 +382,12 @@ def test_end_to_end_mock_single_and_multi_asset_rerun_zero_writes():
     assert stats.attachment_link_writes == 2
 
     rerun_stats = BinaryAssetApplyStats()
-    apply_item_assets(
+    apply_item_assets_with_approval(
         api_token="token",
         sunday_client=sunday,
         sunday_item_id="999",
         expected_assets=assets,
+        approved_by_asset_id=approved,
         storage=storage,
         stats=rerun_stats,
         downloader=downloader,
@@ -380,14 +403,19 @@ def test_four_jpg_assets_each_get_attachment():
         _asset(str(1000 + index), name=f"img{index}.jpg", size=50 + index, extension="jpg")
         for index in range(4)
     )
+    approved = {
+        asset.asset_id: _approved(_materialized(asset, b"J" * (asset.file_size or 0)))
+        for asset in assets
+    }
     storage = FakeStorage()
     sunday = FakeSunday()
     stats = BinaryAssetApplyStats()
-    apply_item_assets(
+    apply_item_assets_with_approval(
         api_token="token",
         sunday_client=sunday,
         sunday_item_id="999",
         expected_assets=assets,
+        approved_by_asset_id=approved,
         storage=storage,
         stats=stats,
         downloader=lambda _t, asset: _materialized(asset, b"J" * (asset.file_size or 0)),
@@ -428,7 +456,7 @@ def test_migration_code_revision_changes_with_new_modules():
 
 
 def test_reports_do_not_include_raw_urls_in_payload_digest():
-    digest = attachment_payload_digest(_asset(ASSET_A))
+    digest = attachment_payload_digest(_approved(_materialized(_asset(ASSET_A))))
     assert "http" not in digest
     assert "token" not in digest.lower()
 
