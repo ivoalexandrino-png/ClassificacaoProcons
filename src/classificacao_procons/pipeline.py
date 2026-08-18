@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
@@ -35,7 +36,11 @@ from classificacao_procons.interaction_pipeline import (
     ConsumerInteractionPipelineOptions,
     flush_pending_interactions_for_protocol,
 )
-from classificacao_procons.models import ProcessedComplaint, ProconNotificationEmail
+from classificacao_procons.models import (
+    ProcessedComplaint,
+    ProconComplaint,
+    ProconNotificationEmail,
+)
 from classificacao_procons.monday import MondayClientError, register_complaint
 from classificacao_procons.monday.client import (
     DEFAULT_BOARD_NAME,
@@ -45,6 +50,10 @@ from classificacao_procons.monday.client import (
     update_administrative_process,
 )
 from classificacao_procons.portal import PortalFetchOptions, ProconPortalError, fetch_complaint
+from classificacao_procons.portal.procurador import (
+    fetch_reclamacao_complaint_by_protocol,
+    resolve_storage_state_path,
+)
 from classificacao_procons.proconsumidor.portal import (
     ProconsumidorPortalError,
     ProconsumidorPortalOptions,
@@ -241,6 +250,48 @@ def _interaction_options_from_pipeline(
     )
 
 
+def _notification_process_order(notification: ProconNotificationEmail) -> int:
+    """CIP/Reclamação antes de PA para permitir vínculo no Monday."""
+    if notification.notification_type == "cip":
+        return 0
+    if notification.notification_type == "processo_administrativo":
+        return 1
+    return 2
+
+
+def _fetch_sp_complaint(
+    notification: ProconNotificationEmail,
+    *,
+    download_dir: Path,
+) -> ProconComplaint:
+    if notification.access_code.strip():
+        return fetch_complaint(
+            PortalFetchOptions(
+                access_code=notification.access_code,
+                download_dir=download_dir,
+                complaint_kind="reclamacao",
+            ),
+        )
+
+    storage_path = resolve_storage_state_path()
+    protocol = notification.protocol_number or ""
+    if not storage_path:
+        raise ProconPortalError(
+            "Reclamação sem código de acesso requer sessão gov.br "
+            "(PROCON_SP_STORAGE_STATE_PATH ou PROCON_SP_STORAGE_STATE_JSON). "
+            "Veja docs/procon-portal-procurador.md.",
+        )
+    if not protocol:
+        raise ProconPortalError("Protocolo ausente no e-mail de Reclamação.")
+
+    return fetch_reclamacao_complaint_by_protocol(
+        protocol,
+        storage_state_path=storage_path,
+        download_dir=download_dir,
+        company_hint=os.environ.get("PROCON_SP_COMPANY_HINT", "B4A"),
+    )
+
+
 def _process_standalone_pa_without_portal(
     notification: ProconNotificationEmail,
     *,
@@ -301,13 +352,34 @@ def _process_standalone_pa_without_portal(
     if not api_token:
         raise PipelineError("MONDAY_API_TOKEN não configurado para cadastro de PA standalone.")
 
-    monday_result = ensure_pa_monday_item_for_protocol(
-        pa_protocol=protocol,
-        api_token=api_token,
-        board_name=options.monday_board_name,
-        fetcher=fetcher,
-        pa_opened_on=notification.received_at.date(),
-    )
+    try:
+        monday_result = ensure_pa_monday_item_for_protocol(
+            pa_protocol=protocol,
+            api_token=api_token,
+            board_name=options.monday_board_name,
+            fetcher=fetcher,
+            pa_opened_on=notification.received_at.date(),
+        )
+    except MondayClientError as exc:
+        return ProcessedComplaint(
+            status="error",
+            message_id=notification.message_id,
+            access_code="",
+            protocol_number=protocol,
+            consumer_name="",
+            consumer_cpf="",
+            complaint_date=None,
+            procon_response_deadline=None,
+            sac_deadline=None,
+            legal_deadline=None,
+            cause="",
+            state=_resolve_state(notification, ""),
+            pdf_url=None,
+            drive_folder_url=None,
+            notification_type="processo_administrativo",
+            administrative_process_number=pa_number or None,
+            error=str(exc),
+        )
 
     if pa_number:
         _mark_pa_processed(processed_protocols, pa_number)
@@ -902,12 +974,9 @@ def _process_sp_notification(
             fetcher=fetcher,
         )
 
-    complaint = fetch_complaint(
-        PortalFetchOptions(
-            access_code=notification.access_code,
-            download_dir=options.download_dir,
-            complaint_kind="reclamacao",
-        ),
+    complaint = _fetch_sp_complaint(
+        notification,
+        download_dir=options.download_dir,
     )
 
     protocol = _resolve_protocol(notification, complaint.cip_fa_number)
@@ -1089,6 +1158,8 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
             if notification.source_id.strip().lower() in allowed
         ]
 
+    notifications.sort(key=_notification_process_order)
+
     processed_protocols = _load_processed_protocols(options.state_path)
     results: list[ProcessedComplaint] = []
 
@@ -1114,6 +1185,7 @@ def process_new_complaints(options: PipelineOptions | None = None) -> list[Proce
             DriveClientError,
             PlaywrightTimeoutError,
             PipelineError,
+            MondayClientError,
         ) as exc:
             result = ProcessedComplaint(
                 status="error",
