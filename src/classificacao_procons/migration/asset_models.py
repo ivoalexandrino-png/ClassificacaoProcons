@@ -76,6 +76,37 @@ class SundayAttachmentPlan:
     marker: str
 
 
+@dataclass(frozen=True)
+class ApprovedBinaryAsset:
+    """Asset com SHA256 real dos bytes — obrigatório no approval final."""
+
+    board_id: str
+    monday_item_id: str
+    asset_id: str
+    sanitized_filename: str
+    mime_type: str
+    size: int
+    source_sha256: str
+    storage_object_key: str
+    sunday_board_id: str
+
+
+@dataclass(frozen=True)
+class DriveFolderPolicyReport:
+    folder_type: Literal["my_drive", "shared_drive", "unknown"]
+    sharing_model: Literal[
+        "restricted",
+        "domain",
+        "explicit_users",
+        "anyone_with_link",
+        "unknown",
+    ]
+    permissions_inherited: Literal["yes", "no", "unknown"]
+    upload_alters_sharing: bool
+    public_exposure: bool
+    link_access_validated: bool
+
+
 class MigrationAssetError(RuntimeError):
     """Falha fail-closed na pipeline de assets."""
 
