@@ -849,6 +849,8 @@ def apply_plan(
     fail_fast: bool = True,
     migration_context: ApplyMigrationContext | None = None,
     ledger_gate: object | None = None,
+    binary_apply_state: object | None = None,
+    storage_backend: object | None = None,
     now: Callable[[], str] = lambda: datetime.now(UTC).isoformat(),
 ) -> ApplyReport:
     """Executa o plano. Fail-closed: aborta antes da 1ª escrita se gate/snapshot falhar."""
@@ -887,10 +889,20 @@ def apply_plan(
             raise ExecutorAbort(
                 "APPLY escopado exige revalidador que retorne ScopedSafetyMetadata.",
             )
-        failures = validate_scoped_apply_fingerprints(
-            approved=plan.scoped_safety,
-            current=current_scoped,
-        )
+        if binary_apply_state is not None:
+            from classificacao_procons.migration.binary_approval_bundle import (
+                validate_runtime_against_bundle,
+            )
+
+            failures = validate_runtime_against_bundle(
+                binary_apply_state.bundle,
+                current_scoped,
+            )
+        else:
+            failures = validate_scoped_apply_fingerprints(
+                approved=plan.scoped_safety,
+                current=current_scoped,
+            )
         if failures:
             raise ExecutorAbort(
                 "Scoped safety reprovado: " + "; ".join(failures),
@@ -1002,6 +1014,44 @@ def apply_plan(
                         target_group_id=migration_context.target_group_id,
                         stats=write_stats,
                     )
+                if (
+                    binary_apply_state is not None
+                    and storage_backend is not None
+                    and operation.action in ("create", "resume")
+                ):
+                    from classificacao_procons.migration.asset_pipeline import (
+                        BinaryAssetApplyStats,
+                        apply_item_assets_with_approval,
+                    )
+                    from classificacao_procons.migration.binary_approval_bundle import (
+                        approved_assets_by_id,
+                    )
+
+                    item_assets = binary_apply_state.assets_by_item.get(
+                        operation.monday_item_id,
+                        (),
+                    )
+                    if item_assets:
+                        binary_stats = BinaryAssetApplyStats()
+                        apply_item_assets_with_approval(
+                            api_token=binary_apply_state.api_token,
+                            sunday_client=client,
+                            sunday_item_id=sunday_item_id,
+                            expected_assets=item_assets,
+                            approved_by_asset_id=approved_assets_by_id(
+                                binary_apply_state.bundle,
+                            ),
+                            storage=storage_backend,
+                            stats=binary_stats,
+                            preflighted={
+                                asset.asset_id: binary_apply_state.materialized_by_asset_id[
+                                    asset.asset_id
+                                ]
+                                for asset in item_assets
+                            },
+                        )
+                        if write_stats is not None:
+                            write_stats.attachments += binary_stats.attachment_link_writes
             elif operation.action == "adopt":
                 sunday_item_id = operation.adopt_sunday_item_id
                 if not sunday_item_id:
