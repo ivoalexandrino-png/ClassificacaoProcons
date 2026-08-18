@@ -160,6 +160,16 @@ def main() -> int:
         type=int,
         help="alias legado de --max-operations",
     )
+    parser.add_argument(
+        "--max-assets",
+        type=int,
+        help="limite exato de ATTACHMENT/asset operations no manifesto (binary pipeline)",
+    )
+    parser.add_argument(
+        "--max-storage-uploads",
+        type=int,
+        help="limite exato de storage_uploads no manifesto (binary pipeline)",
+    )
     parser.add_argument("--monday-snapshot", help="inventário sanitizado (JSON)")
     parser.add_argument("--sunday-snapshot", default=DEFAULT_SUNDAY_SNAPSHOT)
     parser.add_argument("--refresh-sunday", action="store_true")
@@ -537,6 +547,14 @@ def main() -> int:
             plan.max_operations = plan.scoped_safety.accounting.operation_total
         elif requested_max is not None:
             plan.max_operations = requested_max
+        if args.max_assets is not None:
+            plan.max_assets = args.max_assets
+        elif plan.scoped_safety is not None:
+            plan.max_assets = plan.scoped_safety.accounting.attachments
+        if args.max_storage_uploads is not None:
+            plan.max_storage_uploads = args.max_storage_uploads
+        elif plan.scoped_safety is not None:
+            plan.max_storage_uploads = plan.scoped_safety.accounting.storage_uploads
         from classificacao_procons.migration.executor import _build_gate
 
         plan.gate = _build_gate(plan, schema_checks)

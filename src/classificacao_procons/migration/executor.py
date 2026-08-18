@@ -240,6 +240,8 @@ class ExecutionPlan:
     scoped_safety: object | None = None
     max_operations: int | None = None
     max_writes: int | None = None
+    max_assets: int | None = None
+    max_storage_uploads: int | None = None
 
     @property
     def effective_max_operations(self) -> int | None:
@@ -300,6 +302,8 @@ class ExecutionPlan:
             "gate_ok": self.gate_ok,
             "max_operations": self.effective_max_operations,
             "max_writes": self.effective_max_operations,
+            "max_assets": self.max_assets,
+            "max_storage_uploads": self.max_storage_uploads,
             "scoped_safety": (
                 self.scoped_safety.as_dict()
                 if self.scoped_safety is not None and hasattr(self.scoped_safety, "as_dict")
@@ -720,6 +724,28 @@ def _build_gate(plan: ExecutionPlan, schema_checks: list[GateCheck]) -> list[Gat
                     (
                         f"{accounting.operation_total} operações técnicas "
                         f"== limite {max_operations}"
+                    ),
+                ),
+            )
+        if accounting is not None and plan.max_assets is not None:
+            checks.append(
+                GateCheck(
+                    "max_assets",
+                    accounting.attachments == plan.max_assets,
+                    (
+                        f"{accounting.attachments} attachments "
+                        f"== limite {plan.max_assets}"
+                    ),
+                ),
+            )
+        if accounting is not None and plan.max_storage_uploads is not None:
+            checks.append(
+                GateCheck(
+                    "max_storage_uploads",
+                    accounting.storage_uploads == plan.max_storage_uploads,
+                    (
+                        f"{accounting.storage_uploads} storage uploads "
+                        f"== limite {plan.max_storage_uploads}"
                     ),
                 ),
             )
