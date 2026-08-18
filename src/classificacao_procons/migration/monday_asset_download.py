@@ -30,6 +30,16 @@ query ($ids: [ID!]!) {
 
 MONDAY_FILES_API = "https://api.monday.com/v2/files"
 
+ALLOWED_ASSET_EXTENSIONS = frozenset({"pdf", "jpg", "jpeg"})
+
+
+def validate_asset_extension(asset: MondayAssetMetadata) -> None:
+    extension = (asset.file_extension or "").lower().lstrip(".")
+    if extension and extension not in ALLOWED_ASSET_EXTENSIONS:
+        raise MigrationAssetError(
+            f"Tipo de asset não suportado: {extension or 'desconhecido'}.",
+        )
+
 
 def sanitize_asset_filename(name: str, *, asset_id: str, extension: str | None) -> str:
     cleaned = " ".join(name.split()).strip()

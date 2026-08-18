@@ -10,7 +10,9 @@ from classificacao_procons.migration.asset_attachment import (
     plan_sunday_attachment,
 )
 from classificacao_procons.migration.asset_models import (
+    ApprovedBinaryAsset,
     MaterializedAsset,
+    MigrationAssetError,
     MondayAssetMetadata,
     StorageObjectRecord,
 )
@@ -24,7 +26,7 @@ from classificacao_procons.migration.dispositions import Disposition
 from classificacao_procons.migration.monday_asset_download import (
     download_monday_asset,
     materialized_matches_metadata,
-    sanitize_asset_filename,
+    validate_asset_extension,
 )
 from classificacao_procons.migration.operation_manifest import payload_digest
 
@@ -75,62 +77,39 @@ class AssetDownloader(Protocol):
     ) -> MaterializedAsset: ...
 
 
-def attachment_payload_digest(asset: MondayAssetMetadata) -> str:
-    sanitized = sanitize_asset_filename(
-        asset.name,
-        asset_id=asset.asset_id,
-        extension=asset.file_extension,
-    )
-    storage_key = build_storage_object_key(
-        board_id=asset.board_id,
-        item_id=asset.item_id,
-        asset_id=asset.asset_id,
-        sanitized_filename=sanitized,
-    )
+def attachment_payload_digest(approved: ApprovedBinaryAsset) -> str:
+    """Digest final de approval — inclui SHA256 real dos bytes."""
     return payload_digest(
         {
-            "board_id": asset.board_id,
-            "item_id": asset.item_id,
-            "asset_id": asset.asset_id,
-            "filename": asset.name,
-            "file_size": asset.file_size,
-            "file_extension": asset.file_extension,
-            "created_at": asset.created_at,
-            "storage_key": storage_key,
+            "board_id": approved.board_id,
+            "monday_item_id": approved.monday_item_id,
+            "asset_id": approved.asset_id,
+            "sanitized_filename": approved.sanitized_filename,
+            "mime_type": approved.mime_type,
+            "size": approved.size,
+            "source_sha256": approved.source_sha256,
+            "storage_object_key": approved.storage_object_key,
+            "sunday_board_id": approved.sunday_board_id,
             "operation": "sunday_link_attachment",
         },
     )
 
 
-ALLOWED_ASSET_EXTENSIONS = frozenset({"pdf", "jpg", "jpeg"})
-
-
-def validate_asset_extension(asset: MondayAssetMetadata) -> None:
-    from classificacao_procons.migration.asset_models import MigrationAssetError
-
-    extension = (asset.file_extension or "").lower().lstrip(".")
-    if extension and extension not in ALLOWED_ASSET_EXTENSIONS:
-        raise MigrationAssetError(
-            f"Tipo de asset não suportado: {extension or 'desconhecido'}.",
-        )
-
-
-def apply_single_asset(
+def apply_single_asset_from_materialized(
     *,
-    api_token: str,
     sunday_client,
     sunday_item_id: str,
     expected: MondayAssetMetadata,
+    approved: ApprovedBinaryAsset,
+    materialized: MaterializedAsset,
     storage: StoragePort,
     stats: BinaryAssetApplyStats | None = None,
-    downloader: AssetDownloader | None = None,
 ) -> StorageObjectRecord:
-    validate_asset_extension(expected)
-    download_fn = downloader or download_monday_asset
-    materialized = download_fn(api_token, expected)
+    if materialized.sha256 != approved.source_sha256:
+        raise MigrationAssetError(
+            f"SHA256 divergente asset {expected.asset_id} antes de write.",
+        )
     materialized_matches_metadata(materialized, expected)
-    if stats is not None:
-        stats.asset_downloads += 1
 
     record = resolve_or_upload_storage_object(backend=storage, materialized=materialized)
     if stats is not None:
@@ -153,30 +132,149 @@ def apply_single_asset(
     return record
 
 
+def apply_single_asset(
+    *,
+    api_token: str,
+    sunday_client,
+    sunday_item_id: str,
+    expected: MondayAssetMetadata,
+    approved: ApprovedBinaryAsset,
+    storage: StoragePort,
+    stats: BinaryAssetApplyStats | None = None,
+    downloader: AssetDownloader | None = None,
+) -> StorageObjectRecord:
+    validate_asset_extension(expected)
+    download_fn = downloader or download_monday_asset
+    materialized = download_fn(api_token, expected)
+    if stats is not None:
+        stats.asset_downloads += 1
+    return apply_single_asset_from_materialized(
+        sunday_client=sunday_client,
+        sunday_item_id=sunday_item_id,
+        expected=expected,
+        approved=approved,
+        materialized=materialized,
+        storage=storage,
+        stats=stats,
+    )
+
+
+def apply_item_assets_with_approval(
+    *,
+    api_token: str,
+    sunday_client,
+    sunday_item_id: str,
+    expected_assets: tuple[MondayAssetMetadata, ...],
+    approved_by_asset_id: dict[str, ApprovedBinaryAsset],
+    storage: StoragePort,
+    stats: BinaryAssetApplyStats | None = None,
+    downloader: AssetDownloader | None = None,
+    preflighted: dict[str, MaterializedAsset] | None = None,
+) -> tuple[StorageObjectRecord, ...]:
+    """Preflight completo do item antes do primeiro write externo."""
+    from classificacao_procons.migration.asset_models import MigrationAssetError
+
+    materialized_by_id = preflighted
+    if materialized_by_id is None:
+        from classificacao_procons.migration.asset_preflight import runtime_preflight_verify_batch
+
+        batch = runtime_preflight_verify_batch(
+            api_token,
+            assets_by_item={expected_assets[0].item_id: expected_assets},
+            approved_by_asset_id=approved_by_asset_id,
+            downloader=downloader,
+        )
+        materialized_by_id = batch.materialized_by_asset_id
+        if stats is not None:
+            stats.asset_downloads += len(expected_assets)
+
+    records: list[StorageObjectRecord] = []
+    for asset in sorted(expected_assets, key=lambda row: row.asset_id):
+        approved = approved_by_asset_id.get(asset.asset_id)
+        if approved is None:
+            raise MigrationAssetError(f"Asset {asset.asset_id} ausente do approval.")
+        materialized = materialized_by_id.get(asset.asset_id)
+        if materialized is None:
+            raise MigrationAssetError(f"Preflight ausente para asset {asset.asset_id}.")
+        records.append(
+            apply_single_asset_from_materialized(
+                sunday_client=sunday_client,
+                sunday_item_id=sunday_item_id,
+                expected=asset,
+                approved=approved,
+                materialized=materialized,
+                storage=storage,
+                stats=stats,
+            ),
+        )
+    return tuple(records)
+
+
 def apply_item_assets(
     *,
     api_token: str,
     sunday_client,
     sunday_item_id: str,
     expected_assets: tuple[MondayAssetMetadata, ...],
+    approved_by_asset_id: dict[str, ApprovedBinaryAsset],
     storage: StoragePort,
     stats: BinaryAssetApplyStats | None = None,
     downloader: AssetDownloader | None = None,
 ) -> tuple[StorageObjectRecord, ...]:
-    records: list[StorageObjectRecord] = []
-    for asset in sorted(expected_assets, key=lambda row: row.asset_id):
-        records.append(
-            apply_single_asset(
-                api_token=api_token,
-                sunday_client=sunday_client,
-                sunday_item_id=sunday_item_id,
-                expected=asset,
-                storage=storage,
-                stats=stats,
-                downloader=downloader,
-            ),
+    return apply_item_assets_with_approval(
+        api_token=api_token,
+        sunday_client=sunday_client,
+        sunday_item_id=sunday_item_id,
+        expected_assets=expected_assets,
+        approved_by_asset_id=approved_by_asset_id,
+        storage=storage,
+        stats=stats,
+        downloader=downloader,
+    )
+
+
+def apply_binary_batch_with_approval(
+    *,
+    api_token: str,
+    sunday_client,
+    assets_by_item: dict[str, tuple[MondayAssetMetadata, ...]],
+    sunday_item_id_by_monday_item: dict[str, str],
+    approved_by_asset_id: dict[str, ApprovedBinaryAsset],
+    storage: StoragePort,
+    stats: BinaryAssetApplyStats | None = None,
+    downloader: AssetDownloader | None = None,
+) -> dict[str, tuple[StorageObjectRecord, ...]]:
+    """Preflight de TODOS os assets do lote antes do primeiro write externo."""
+    from classificacao_procons.migration.asset_preflight import runtime_preflight_verify_batch
+
+    batch = runtime_preflight_verify_batch(
+        api_token,
+        assets_by_item=assets_by_item,
+        approved_by_asset_id=approved_by_asset_id,
+        downloader=downloader,
+    )
+    if stats is not None:
+        stats.asset_downloads += len(batch.materialized_by_asset_id)
+
+    result: dict[str, tuple[StorageObjectRecord, ...]] = {}
+    for item_id in sorted(assets_by_item):
+        assets = assets_by_item[item_id]
+        item_preflighted = {
+            asset.asset_id: batch.materialized_by_asset_id[asset.asset_id]
+            for asset in assets
+        }
+        result[item_id] = apply_item_assets_with_approval(
+            api_token=api_token,
+            sunday_client=sunday_client,
+            sunday_item_id=sunday_item_id_by_monday_item[item_id],
+            expected_assets=assets,
+            approved_by_asset_id=approved_by_asset_id,
+            storage=storage,
+            stats=stats,
+            downloader=downloader,
+            preflighted=item_preflighted,
         )
-    return tuple(records)
+    return result
 
 
 def verify_item_assets(
