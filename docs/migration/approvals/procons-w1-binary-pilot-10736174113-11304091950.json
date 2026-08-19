@@ -1,0 +1,80 @@
+{
+  "version": "1",
+  "board_id": "4944254220",
+  "wave": 1,
+  "item_ids": [
+    "10736174113",
+    "11304091950"
+  ],
+  "selected_source": "d409bc5f90ff0897422a5c58",
+  "schema": "0b08b2a7267e882bb3f28900",
+  "manifest_v2": "0b59491017f7b33245281bae",
+  "code_revision": "6be75073843ec37b216f8c1a",
+  "board_global": "96ae411c43750d3545dd09b6",
+  "operation_total": 75,
+  "budgets": {
+    "max_items": 2,
+    "max_assets": 5,
+    "max_comments": 25,
+    "max_storage_uploads": 5,
+    "max_operations": 75
+  },
+  "approved_assets": [
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "10736174113",
+      "asset_id": "2624279472",
+      "sanitized_filename": "Contato realizado.pdf",
+      "mime_type": "application/pdf",
+      "size": 168488,
+      "source_sha256": "d040de3ea89cea3076be3e21905c8e99a9c548396f3d7b5cee2f73320ce1bf10",
+      "storage_object_key": "monday/4944254220/10736174113/2624279472/Contato realizado.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "11304091950",
+      "asset_id": "2767922874",
+      "sanitized_filename": "Screenshot_20260216_185220_Instagram.jpg",
+      "mime_type": "image/jpeg",
+      "size": 338395,
+      "source_sha256": "e1d313cd7fb9722939ca7b1b1c7aca00c5f36447d79fd18b488d70f4568da79f",
+      "storage_object_key": "monday/4944254220/11304091950/2767922874/Screenshot_20260216_185220_Instagram.jpg",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "11304091950",
+      "asset_id": "2767922880",
+      "sanitized_filename": "Screenshot_20260216_185228_Instagram.jpg",
+      "mime_type": "image/jpeg",
+      "size": 454308,
+      "source_sha256": "4adaaa45ea543f43d5df69f17fa3e7f2fc775b4dc268caefa3581d9c841b29a0",
+      "storage_object_key": "monday/4944254220/11304091950/2767922880/Screenshot_20260216_185228_Instagram.jpg",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "11304091950",
+      "asset_id": "2767922897",
+      "sanitized_filename": "Screenshot_20260216_185213_Instagram.jpg",
+      "mime_type": "image/jpeg",
+      "size": 465543,
+      "source_sha256": "69823a1ab2547ef2cc34724ab07bc7f20fc227003442d4245a05f116aa24a409",
+      "storage_object_key": "monday/4944254220/11304091950/2767922897/Screenshot_20260216_185213_Instagram.jpg",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "11304091950",
+      "asset_id": "2767922906",
+      "sanitized_filename": "Screenshot_20260218_093416_Gmail.jpg",
+      "mime_type": "image/jpeg",
+      "size": 586360,
+      "source_sha256": "1c8d60982d5b04b4f2fa49d18d8e32bde888f3c5f3ef5e6ea7f643c06e39ea0b",
+      "storage_object_key": "monday/4944254220/11304091950/2767922906/Screenshot_20260218_093416_Gmail.jpg",
+      "sunday_board_id": "82"
+    }
+  ],
+  "approval_bundle_digest": "b761b51c2578387be8338b9a9a38d0fde340a9317d8b7146f9038d2695c57df2"
+}
