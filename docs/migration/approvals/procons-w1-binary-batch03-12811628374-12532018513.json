@@ -1,0 +1,83 @@
+{
+  "version": "1",
+  "board_id": "4944254220",
+  "wave": 1,
+  "item_ids": [
+    "12532018513",
+    "12539772979",
+    "12673988479",
+    "12719372706",
+    "12811628374"
+  ],
+  "selected_source": "00cb672b5e92177d8ba049d8",
+  "schema": "0b08b2a7267e882bb3f28900",
+  "manifest_v2": "ee5d245de546272997168d5f",
+  "code_revision": "6be75073843ec37b216f8c1a",
+  "board_global": "bab7a01e79b15ce30c7d299f",
+  "operation_total": 196,
+  "budgets": {
+    "max_items": 5,
+    "max_assets": 5,
+    "max_comments": 86,
+    "max_storage_uploads": 5,
+    "max_operations": 196
+  },
+  "approved_assets": [
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12532018513",
+      "asset_id": "3134253692",
+      "sanitized_filename": "monday-notificacao-1DTHU44tSAmBBRqmfDyX9g-KV7eS-laJZ.pdf",
+      "mime_type": "application/pdf",
+      "size": 623587,
+      "source_sha256": "d71d6a8196474fbd10934c1864fa300332fb15624ecaa59486e00a81b31b230a",
+      "storage_object_key": "monday/4944254220/12532018513/3134253692/monday-notificacao-1DTHU44tSAmBBRqmfDyX9g-KV7eS-laJZ.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12539772979",
+      "asset_id": "3134253895",
+      "sanitized_filename": "monday-notificacao-1ExBKzf-RJxYsM1TimFHiCWgQgd_KVwnB.pdf",
+      "mime_type": "application/pdf",
+      "size": 624032,
+      "source_sha256": "c408bee3e85258273c9d9de091bfeff0926c4f9beae3f621a498bac7856f7c12",
+      "storage_object_key": "monday/4944254220/12539772979/3134253895/monday-notificacao-1ExBKzf-RJxYsM1TimFHiCWgQgd_KVwnB.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12673988479",
+      "asset_id": "3146757708",
+      "sanitized_filename": "monday-notificacao-1DIzlWHcikN6ESEOJZtpANW0s3IYT8Tm3.pdf",
+      "mime_type": "application/pdf",
+      "size": 625638,
+      "source_sha256": "c9e18da3f57d1f04d93ee1090ea049270a68405d781ad31bb539206a1a8d3ae5",
+      "storage_object_key": "monday/4944254220/12673988479/3146757708/monday-notificacao-1DIzlWHcikN6ESEOJZtpANW0s3IYT8Tm3.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12719372706",
+      "asset_id": "3157902792",
+      "sanitized_filename": "monday-notificacao-16TsRLGmQAHpTJLjqs5sifqY5eXZPA_qM.pdf",
+      "mime_type": "application/pdf",
+      "size": 626183,
+      "source_sha256": "d6164e9f6721fe501c5ecb96dd0ad2fe9406199116dd1918873bd2883dfb02fe",
+      "storage_object_key": "monday/4944254220/12719372706/3157902792/monday-notificacao-16TsRLGmQAHpTJLjqs5sifqY5eXZPA_qM.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12811628374",
+      "asset_id": "3181258233",
+      "sanitized_filename": "monday-notificacao-1LpYLNMgY-xuTteK16KxRcNt8danH_6-M.pdf",
+      "mime_type": "application/pdf",
+      "size": 625912,
+      "source_sha256": "939bc46eeb58c1459aeae0b822cad4a8aaaaf245ade28ddf0351f3d5f1567bcd",
+      "storage_object_key": "monday/4944254220/12811628374/3181258233/monday-notificacao-1LpYLNMgY-xuTteK16KxRcNt8danH_6-M.pdf",
+      "sunday_board_id": "82"
+    }
+  ],
+  "approval_bundle_digest": "d5e64bc622bb1b386299fdf910ac5c2b84e7b55fbd82c606cfea84e505d58604"
+}
