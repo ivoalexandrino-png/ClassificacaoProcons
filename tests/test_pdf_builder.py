@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from classificacao_procons.drive.pdf_builder import (
+    _attachment_trim_priority,
     build_unified_response_pdf,
     is_mergeable_supporting_file,
     local_supporting_file_name,
@@ -115,9 +116,46 @@ class TestPdfBuilder:
         output = tmp_path / "out.pdf"
         text_to_pdf(text="A", destination=first, title="A")
         text_to_pdf(text="B", destination=second, title="B")
+        with pytest.raises(Exception, match="9MB"):
+            merge_pdf_files(sources=[first, second], destination=output, max_bytes=10)
+
+    def test_should_prefer_dropping_notificacao_procon_when_trimming(self, tmp_path: Path) -> None:
+        notificacao = tmp_path / "Notificacao Procon.pdf"
+        tratativa = tmp_path / "Tratativa zendesk.pdf"
+        notificacao.write_bytes(b"x" * 100)
+        tratativa.write_bytes(b"y" * 200)
+        assert _attachment_trim_priority(notificacao) < _attachment_trim_priority(tratativa)
+
+    def test_should_drop_low_priority_attachments_until_unified_pdf_fits(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        essential = tmp_path / "evidencia.pdf"
+        notificacao = tmp_path / "Notificacao Procon.pdf"
+        text_to_pdf(text="Evidência", destination=essential, title="Evidência")
+        text_to_pdf(text="Notificação duplicada", destination=notificacao, title="Notificação")
+
+        output = tmp_path / "unificado.pdf"
+        response_pdf = tmp_path / "resposta-preview.pdf"
+        text_to_pdf(
+            text="Resposta completa ao Procon.",
+            destination=response_pdf,
+            title="Resposta",
+        )
+        limit = response_pdf.stat().st_size + essential.stat().st_size + 100
         with patch(
             "classificacao_procons.drive.pdf_builder.MAX_UNIFIED_PDF_BYTES",
-            10,
+            limit,
         ):
-            with pytest.raises(Exception, match="9MB"):
-                merge_pdf_files(sources=[first, second], destination=output)
+            build_unified_response_pdf(
+                response_text="Resposta completa ao Procon.",
+                supporting_files=[essential, notificacao],
+                destination=output,
+            )
+
+        from pypdf import PdfReader
+
+        unified_pages = len(PdfReader(str(output)).pages)
+        response_pages = len(PdfReader(str(tmp_path / "resposta-completa.pdf")).pages)
+        essential_pages = len(PdfReader(str(essential)).pages)
+        assert unified_pages == response_pages + essential_pages
