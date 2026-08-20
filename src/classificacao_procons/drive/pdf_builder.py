@@ -117,12 +117,19 @@ def image_to_pdf(*, image_path: Path, destination: Path) -> Path:
     return destination
 
 
-def merge_pdf_files(*, sources: list[Path], destination: Path) -> Path:
+def merge_pdf_files(
+    *,
+    sources: list[Path],
+    destination: Path,
+    max_bytes: int | None = None,
+) -> Path:
     """Une PDFs na ordem informada."""
     from pypdf import PdfReader, PdfWriter
 
     if not sources:
         raise DriveClientError("Nenhum PDF informado para unificação.")
+
+    limit = MAX_UNIFIED_PDF_BYTES if max_bytes is None else max_bytes
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     writer = PdfWriter()
@@ -137,12 +144,45 @@ def merge_pdf_files(*, sources: list[Path], destination: Path) -> Path:
         writer.write(output_file)
 
     size = destination.stat().st_size
-    if size > MAX_UNIFIED_PDF_BYTES:
+    if size > limit:
         raise DriveClientError(
             f"PDF unificado excede 9MB ({size} bytes). "
             "Reduza anexos do SAC ou comprima manualmente.",
         )
     return destination
+
+
+def _normalize_attachment_name(path: Path) -> str:
+    return path.name.casefold().removesuffix(".pdf").strip()
+
+
+def _attachment_trim_priority(path: Path) -> tuple[int, int]:
+    """Menor tupla = removido primeiro quando o PDF unificado excede o limite."""
+    normalized = _normalize_attachment_name(path)
+    if normalized == "notificacao procon":
+        return (0, 0)
+    if normalized == "tratativa zendesk":
+        return (1, 0)
+    return (2, path.stat().st_size)
+
+
+def _build_unified_pdf_parts(
+    *,
+    response_pdf: Path,
+    supporting_files: list[Path],
+    work_dir: Path,
+) -> list[Path]:
+    parts: list[Path] = [response_pdf]
+    for index, supporting_path in enumerate(supporting_files, start=1):
+        kind = _resolve_supporting_file_kind(supporting_path)
+        if kind == "pdf":
+            parts.append(supporting_path)
+            continue
+        if kind == "image":
+            converted = work_dir / f"anexo-sac-{index}.pdf"
+            image_to_pdf(image_path=supporting_path, destination=converted)
+            parts.append(converted)
+    return parts
 
 
 def build_unified_response_pdf(
@@ -157,20 +197,23 @@ def build_unified_response_pdf(
     response_pdf = work_dir / "resposta-completa.pdf"
     text_to_pdf(text=response_text, destination=response_pdf, title=title)
 
-    parts: list[Path] = [response_pdf]
-
-    for index, supporting_path in enumerate(supporting_files, start=1):
-        kind = _resolve_supporting_file_kind(supporting_path)
-        if kind == "pdf":
-            parts.append(supporting_path)
-            continue
-        if kind == "image":
-            converted = work_dir / f"anexo-sac-{index}.pdf"
-            image_to_pdf(image_path=supporting_path, destination=converted)
-            parts.append(converted)
-            continue
-
-    return merge_pdf_files(sources=parts, destination=destination)
+    remaining = list(supporting_files)
+    while True:
+        parts = _build_unified_pdf_parts(
+            response_pdf=response_pdf,
+            supporting_files=remaining,
+            work_dir=work_dir,
+        )
+        try:
+            return merge_pdf_files(sources=parts, destination=destination)
+        except DriveClientError as exc:
+            if "9MB" not in str(exc) or not remaining:
+                raise
+            drop_index = min(
+                range(len(remaining)),
+                key=lambda index: _attachment_trim_priority(remaining[index]),
+            )
+            remaining.pop(drop_index)
 
 
 def _escape_reportlab_text(value: str) -> str:
