@@ -15,9 +15,10 @@ from googleapiclient.http import MediaIoBaseDownload, MediaIoBaseUpload
 from classificacao_procons.drive.client import (
     DRIVE_FOLDER_MIME,
     DRIVE_PDF_MIME,
-    DriveClientError,
     _build_drive_service,
 )
+from classificacao_procons.drive.errors import DriveClientError
+from classificacao_procons.drive.protocol import validate_complaint_pdf_protocol
 
 DRIVE_TEXT_MIME = "text/plain"
 PROCON_PDF_PREFIX = "atendimento procon"
@@ -205,8 +206,16 @@ def _find_summary_txt(files: list[DriveFileInfo]) -> DriveFileInfo | None:
 def _select_sac_subfolder(subfolders: list[DriveFileInfo]) -> DriveFileInfo | None:
     if not subfolders:
         return None
+    eligible = [
+        folder
+        for folder in subfolders
+        if _normalize_folder_name(folder.name)
+        != _normalize_folder_name(RESPONSE_OUTPUT_FOLDER)
+    ]
+    if not eligible:
+        return None
     ranked = sorted(
-        subfolders,
+        eligible,
         key=lambda folder: (
             _score_sac_folder_name(folder.name),
             folder.created_time or datetime.min,
@@ -223,6 +232,7 @@ def resolve_sac_folder_context(
     *,
     docs_sac_url: str,
     token_path: str | None = None,
+    expected_protocol_number: str | None = None,
 ) -> SacFolderContext:
     """Localiza PDF original, pasta SAC e resumo TXT a partir do link do Monday."""
     service = _build_drive_service(token_path)
@@ -233,6 +243,10 @@ def resolve_sac_folder_context(
         linked_children = _list_children(service, folder_id=linked_id)
         complaint_pdf = _find_complaint_pdf(linked_children)
         if complaint_pdf is not None:
+            validate_complaint_pdf_protocol(
+                pdf_name=complaint_pdf.name,
+                expected_protocol=expected_protocol_number,
+            )
             subfolders = [
                 item for item in linked_children if item.mime_type == DRIVE_FOLDER_MIME
             ]
@@ -264,6 +278,10 @@ def resolve_sac_folder_context(
             complaint_pdf = _find_complaint_pdf(parent_children)
             if complaint_pdf is None:
                 raise DriveClientError("PDF original da reclamação não encontrado no Drive.")
+            validate_complaint_pdf_protocol(
+                pdf_name=complaint_pdf.name,
+                expected_protocol=expected_protocol_number,
+            )
             return SacFolderContext(
                 consumer_folder_id=parent_id,
                 sac_folder_id=linked_id,

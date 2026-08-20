@@ -76,6 +76,96 @@ class TestDriveOperations:
         assert folder_url == "https://drive.google.com/folder/folder-123"
         service.files.return_value.create.assert_not_called()
 
+    def test_should_create_disambiguated_folder_when_homonyms_have_different_protocol(
+        self,
+    ) -> None:
+        service = MagicMock()
+
+        def list_side_effect(**kwargs):
+            query = kwargs.get("q", "")
+            fields = kwargs.get("fields", "")
+            response = {"files": []}
+            if "createdTime" in fields and "GABRIELE CELETE CUSTODIO JESUS'" in query:
+                response = {"files": [{"id": "old-folder", "createdTime": "2026-07-15T00:00:00Z"}]}
+            elif "GABRIELE CELETE CUSTODIO JESUS - 1759897-2026'" in query:
+                response = {"files": []}
+            elif kwargs.get("fields") == "files(name,mimeType)":
+                response = {
+                    "files": [
+                        {
+                            "name": (
+                                "Atendimento Procon - GABRIELE CELETE CUSTODIO JESUS - "
+                                "1656146-2026 - 15-07-2026.pdf"
+                            ),
+                            "mimeType": "application/pdf",
+                        },
+                    ],
+                }
+            list_mock = MagicMock()
+            list_mock.execute.return_value = response
+            return list_mock
+
+        service.files.return_value.list.side_effect = list_side_effect
+        service.files.return_value.create.return_value.execute.return_value = {
+            "id": "new-folder",
+            "webViewLink": "https://drive.google.com/folder/new-folder",
+        }
+        service.files.return_value.get.return_value.execute.return_value = {
+            "webViewLink": "https://drive.google.com/folder/new-folder",
+        }
+
+        folder_id, folder_url = ensure_consumer_folder(
+            service,
+            parent_folder_id="parent-abc",
+            consumer_name="GABRIELE CELETE CUSTODIO JESUS",
+            protocol_number="1759897/2026",
+        )
+
+        assert folder_id == "new-folder"
+        assert "new-folder" in folder_url
+        create_body = service.files.return_value.create.call_args.kwargs["body"]
+        assert create_body["name"] == "GABRIELE CELETE CUSTODIO JESUS - 1759897-2026"
+
+    def test_should_reuse_folder_when_protocol_matches(self) -> None:
+        service = MagicMock()
+
+        def list_side_effect(**kwargs):
+            query = kwargs.get("q", "")
+            fields = kwargs.get("fields", "")
+            response = {"files": []}
+            if "createdTime" in fields and "MARIA SILVA'" in query:
+                response = {"files": [{"id": "matched-folder", "createdTime": "2026-08-15T00:00:00Z"}]}
+            elif kwargs.get("fields") == "files(name,mimeType)":
+                response = {
+                    "files": [
+                        {
+                            "name": (
+                                "Atendimento Procon - MARIA SILVA - "
+                                "1759897-2026 - 15-08-2026.pdf"
+                            ),
+                            "mimeType": "application/pdf",
+                        },
+                    ],
+                }
+            list_mock = MagicMock()
+            list_mock.execute.return_value = response
+            return list_mock
+
+        service.files.return_value.list.side_effect = list_side_effect
+        service.files.return_value.get.return_value.execute.return_value = {
+            "webViewLink": "https://drive.google.com/folder/matched-folder",
+        }
+
+        folder_id, _folder_url = ensure_consumer_folder(
+            service,
+            parent_folder_id="parent-abc",
+            consumer_name="MARIA SILVA",
+            protocol_number="1759897/2026",
+        )
+
+        assert folder_id == "matched-folder"
+        service.files.return_value.create.assert_not_called()
+
     def test_should_upload_pdf_to_folder(self, tmp_path: Path) -> None:
         pdf = tmp_path / "reclamacao.pdf"
         pdf.write_bytes(b"%PDF-1.4 test")
