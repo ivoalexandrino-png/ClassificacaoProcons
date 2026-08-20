@@ -1,0 +1,2182 @@
+{
+  "snapshot_at": "2026-08-20T22:17:24Z",
+  "board_id": "4944254220",
+  "source_total_at_snapshot": 462,
+  "W1_count_at_snapshot": 191,
+  "W2_count": 271,
+  "W2_item_ids": [
+    "4944254297",
+    "4944254311",
+    "4944254325",
+    "4968566073",
+    "4968595076",
+    "5007666429",
+    "5007702041",
+    "5007721743",
+    "5007785891",
+    "5014027263",
+    "5102454355",
+    "5139828227",
+    "5139862800",
+    "5155180523",
+    "5180013768",
+    "5187010546",
+    "5201494314",
+    "5203993706",
+    "5207744762",
+    "5236492729",
+    "5275616949",
+    "5299137619",
+    "5346709014",
+    "5391826749",
+    "5394042140",
+    "5402783491",
+    "5418746997",
+    "5418947324",
+    "5427039655",
+    "5427088897",
+    "5429717526",
+    "5454595371",
+    "5469055504",
+    "5475116609",
+    "5499827454",
+    "5500367630",
+    "5548250558",
+    "5563418604",
+    "5594696358",
+    "5653570799",
+    "5653826012",
+    "5665835401",
+    "5722399073",
+    "5730883020",
+    "5742656551",
+    "5772705216",
+    "5801394276",
+    "5874075090",
+    "5875946402",
+    "5907551769",
+    "5981771637",
+    "6008727274",
+    "6064052181",
+    "6091959648",
+    "6126728986",
+    "6186066696",
+    "6233677270",
+    "6236058349",
+    "6242325498",
+    "6281689072",
+    "6307650265",
+    "6325186131",
+    "6331849128",
+    "6341645954",
+    "6364947409",
+    "6400641380",
+    "6412215317",
+    "6412272204",
+    "6428453897",
+    "6432784936",
+    "6432804991",
+    "6432815290",
+    "6460663126",
+    "6474634277",
+    "6499940636",
+    "6532466825",
+    "6550284217",
+    "6585007882",
+    "6585031429",
+    "6586392189",
+    "6602902405",
+    "6602944443",
+    "6645385296",
+    "6664684421",
+    "6704199819",
+    "6704208543",
+    "6757130361",
+    "6769010444",
+    "6815987157",
+    "6966585606",
+    "7014440299",
+    "7037551035",
+    "7058620030",
+    "7068848836",
+    "7073054893",
+    "7080991123",
+    "7127446593",
+    "7161270174",
+    "7181585096",
+    "7185053572",
+    "7196091037",
+    "7208867773",
+    "7216838755",
+    "7241579024",
+    "7279725982",
+    "7355565507",
+    "7362714931",
+    "7362732614",
+    "7393001699",
+    "7395610673",
+    "7400539698",
+    "7401891838",
+    "7409232162",
+    "7428966819",
+    "7438704687",
+    "7446009868",
+    "7448304789",
+    "7449302411",
+    "7484596215",
+    "7492301184",
+    "7517443739",
+    "7579108831",
+    "7593177449",
+    "7601977751",
+    "7612544402",
+    "7630158766",
+    "7676465094",
+    "7695246456",
+    "7778436220",
+    "7778508735",
+    "7778537584",
+    "7785955755",
+    "7853702283",
+    "7917656485",
+    "7990595195",
+    "7998991080",
+    "8010197771",
+    "8040004577",
+    "8040236277",
+    "8078197530",
+    "8115338225",
+    "8179283939",
+    "8210479687",
+    "8247965901",
+    "8258536889",
+    "8335365364",
+    "8340967921",
+    "8341010221",
+    "8344208144",
+    "8363714294",
+    "8412458967",
+    "8412502857",
+    "8412562158",
+    "8452020359",
+    "8499027344",
+    "8515815287",
+    "8515833269",
+    "8518772178",
+    "8540740003",
+    "8552129812",
+    "8552154025",
+    "8582484408",
+    "8583581650",
+    "8583796162",
+    "8646885137",
+    "8647262463",
+    "8671912122",
+    "8690378903",
+    "8690423085",
+    "8690444032",
+    "8690965525",
+    "8691525491",
+    "8712022897",
+    "8712063187",
+    "8767023918",
+    "8769494305",
+    "8775924946",
+    "8777725382",
+    "8807496383",
+    "8809620163",
+    "8819515274",
+    "8836292596",
+    "8861275444",
+    "8861851743",
+    "8862368996",
+    "8862386740",
+    "8864910927",
+    "8888707004",
+    "8899743620",
+    "8899769993",
+    "8905083967",
+    "8917655513",
+    "8925726630",
+    "8925780836",
+    "8939431468",
+    "8947382842",
+    "8947444981",
+    "8953787243",
+    "8978238907",
+    "8989503649",
+    "8989932052",
+    "9001732667",
+    "9001827976",
+    "9002386806",
+    "9007934104",
+    "9008025763",
+    "9008066476",
+    "9008088974",
+    "9008322571",
+    "9008807076",
+    "9009232709",
+    "9041337134",
+    "9042638710",
+    "9042685222",
+    "9043154234",
+    "9071556123",
+    "9071924537",
+    "9082043550",
+    "9087578141",
+    "9087614018",
+    "9092853972",
+    "9092924609",
+    "9111764779",
+    "9111821740",
+    "9111880919",
+    "9137909910",
+    "9137936468",
+    "9137999365",
+    "9162482626",
+    "9183325916",
+    "9193731840",
+    "9193827314",
+    "9195937692",
+    "9220622237",
+    "9251378516",
+    "9322856242",
+    "9354339587",
+    "9354509040",
+    "9374906602",
+    "9388654212",
+    "9420222361",
+    "9431669819",
+    "9441205157",
+    "9469783280",
+    "9485933188",
+    "9491430770",
+    "9513604431",
+    "9523363861",
+    "9531775700",
+    "9546313055",
+    "9592881422",
+    "9602508974",
+    "9622099221",
+    "9633012976",
+    "9644456884",
+    "9649919486",
+    "9660041575",
+    "9674226873",
+    "9684827409",
+    "9694007905",
+    "9696266332",
+    "9739551645",
+    "9765967139",
+    "9779766000",
+    "9797811602",
+    "9798014004",
+    "9798026197",
+    "9803281739",
+    "9817105882",
+    "9827630430",
+    "9859010692"
+  ],
+  "items": [
+    {
+      "monday_item_id": "4944254297",
+      "updated_at": "2026-01-12T16:27:41Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "4944254311",
+      "updated_at": "2026-01-12T16:28:13Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "4944254325",
+      "updated_at": "2026-01-12T16:27:03Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "4968566073",
+      "updated_at": "2026-01-12T16:28:42Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "4968595076",
+      "updated_at": "2026-01-12T16:29:19Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5007666429",
+      "updated_at": "2026-01-12T16:35:52Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5007702041",
+      "updated_at": "2026-01-12T16:30:13Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5007721743",
+      "updated_at": "2026-01-12T16:31:15Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5007785891",
+      "updated_at": "2026-01-12T16:31:47Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5014027263",
+      "updated_at": "2026-01-12T16:30:46Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5102454355",
+      "updated_at": "2026-01-12T16:36:20Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5139828227",
+      "updated_at": "2026-01-12T16:36:48Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5139862800",
+      "updated_at": "2026-01-12T16:37:10Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5155180523",
+      "updated_at": "2026-01-12T16:27:07Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5180013768",
+      "updated_at": "2026-01-12T16:37:34Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5187010546",
+      "updated_at": "2026-01-12T16:38:15Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5201494314",
+      "updated_at": "2026-01-12T16:40:04Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5203993706",
+      "updated_at": "2026-01-12T16:39:19Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5207744762",
+      "updated_at": "2026-01-12T16:38:47Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5236492729",
+      "updated_at": "2026-02-12T22:51:46Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5275616949",
+      "updated_at": "2026-01-12T16:40:22Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5299137619",
+      "updated_at": "2026-01-12T16:40:47Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5346709014",
+      "updated_at": "2026-02-12T22:51:46Z",
+      "asset_count": 8,
+      "file_bytes": 8698818,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5391826749",
+      "updated_at": "2026-02-12T22:51:46Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "5394042140",
+      "updated_at": "2026-01-12T16:18:44Z",
+      "asset_count": 5,
+      "file_bytes": 3331805,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5402783491",
+      "updated_at": "2026-01-12T16:18:18Z",
+      "asset_count": 16,
+      "file_bytes": 7196685,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5418746997",
+      "updated_at": "2026-01-12T16:16:22Z",
+      "asset_count": 28,
+      "file_bytes": 5439447,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5418947324",
+      "updated_at": "2026-01-12T16:16:06Z",
+      "asset_count": 8,
+      "file_bytes": 2171254,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5427039655",
+      "updated_at": "2026-01-12T16:15:32Z",
+      "asset_count": 6,
+      "file_bytes": 27587777,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5427088897",
+      "updated_at": "2026-01-12T16:15:48Z",
+      "asset_count": 9,
+      "file_bytes": 3501771,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5429717526",
+      "updated_at": "2026-01-12T16:14:40Z",
+      "asset_count": 5,
+      "file_bytes": 4786385,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5454595371",
+      "updated_at": "2026-01-12T16:15:15Z",
+      "asset_count": 4,
+      "file_bytes": 2162721,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5469055504",
+      "updated_at": "2026-01-12T16:14:21Z",
+      "asset_count": 6,
+      "file_bytes": 2638263,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5475116609",
+      "updated_at": "2026-01-12T16:13:57Z",
+      "asset_count": 6,
+      "file_bytes": 1581128,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5499827454",
+      "updated_at": "2026-01-12T15:55:35Z",
+      "asset_count": 5,
+      "file_bytes": 1479862,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5500367630",
+      "updated_at": "2026-01-12T15:56:35Z",
+      "asset_count": 1,
+      "file_bytes": 592781,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5548250558",
+      "updated_at": "2026-01-12T15:55:14Z",
+      "asset_count": 6,
+      "file_bytes": 4383700,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5563418604",
+      "updated_at": "2026-01-12T15:54:50Z",
+      "asset_count": 6,
+      "file_bytes": 1377068,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5594696358",
+      "updated_at": "2026-01-12T15:54:28Z",
+      "asset_count": 5,
+      "file_bytes": 1985441,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5653570799",
+      "updated_at": "2026-01-12T15:53:56Z",
+      "asset_count": 5,
+      "file_bytes": 2736858,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5653826012",
+      "updated_at": "2026-01-12T15:51:46Z",
+      "asset_count": 5,
+      "file_bytes": 5101554,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5665835401",
+      "updated_at": "2026-01-12T15:52:09Z",
+      "asset_count": 6,
+      "file_bytes": 3379173,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5722399073",
+      "updated_at": "2026-01-12T15:49:37Z",
+      "asset_count": 4,
+      "file_bytes": 1938058,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5730883020",
+      "updated_at": "2026-01-12T15:48:57Z",
+      "asset_count": 6,
+      "file_bytes": 5694336,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5742656551",
+      "updated_at": "2026-01-12T15:49:12Z",
+      "asset_count": 6,
+      "file_bytes": 1278432,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5772705216",
+      "updated_at": "2026-01-12T16:47:27Z",
+      "asset_count": 5,
+      "file_bytes": 1562894,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5801394276",
+      "updated_at": "2026-01-12T16:47:30Z",
+      "asset_count": 6,
+      "file_bytes": 1921274,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5874075090",
+      "updated_at": "2026-01-12T16:47:59Z",
+      "asset_count": 5,
+      "file_bytes": 4753075,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5875946402",
+      "updated_at": "2026-01-12T16:48:16Z",
+      "asset_count": 18,
+      "file_bytes": 12084900,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5907551769",
+      "updated_at": "2026-01-12T16:48:35Z",
+      "asset_count": 11,
+      "file_bytes": 3133523,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "5981771637",
+      "updated_at": "2026-01-12T16:49:00Z",
+      "asset_count": 7,
+      "file_bytes": 3995691,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6008727274",
+      "updated_at": "2026-01-12T16:49:18Z",
+      "asset_count": 8,
+      "file_bytes": 3765986,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6064052181",
+      "updated_at": "2026-01-12T16:49:35Z",
+      "asset_count": 9,
+      "file_bytes": 4660129,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6091959648",
+      "updated_at": "2026-01-12T16:50:01Z",
+      "asset_count": 4,
+      "file_bytes": 22588347,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6126728986",
+      "updated_at": "2026-01-12T16:50:26Z",
+      "asset_count": 5,
+      "file_bytes": 6730880,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6186066696",
+      "updated_at": "2026-01-12T16:50:47Z",
+      "asset_count": 5,
+      "file_bytes": 1645353,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6233677270",
+      "updated_at": "2026-01-12T16:51:08Z",
+      "asset_count": 6,
+      "file_bytes": 2109477,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6236058349",
+      "updated_at": "2026-01-12T16:51:25Z",
+      "asset_count": 9,
+      "file_bytes": 2750274,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6242325498",
+      "updated_at": "2026-01-12T16:51:43Z",
+      "asset_count": 6,
+      "file_bytes": 4599236,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6281689072",
+      "updated_at": "2026-01-12T16:52:04Z",
+      "asset_count": 2,
+      "file_bytes": 1214372,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6307650265",
+      "updated_at": "2026-01-12T16:52:21Z",
+      "asset_count": 7,
+      "file_bytes": 2712479,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6325186131",
+      "updated_at": "2026-01-12T16:52:39Z",
+      "asset_count": 3,
+      "file_bytes": 1366003,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6331849128",
+      "updated_at": "2026-01-12T16:52:59Z",
+      "asset_count": 8,
+      "file_bytes": 1449630,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6341645954",
+      "updated_at": "2026-01-12T16:53:28Z",
+      "asset_count": 7,
+      "file_bytes": 1320344,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6364947409",
+      "updated_at": "2026-01-12T16:53:42Z",
+      "asset_count": 9,
+      "file_bytes": 2859513,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6400641380",
+      "updated_at": "2026-01-12T16:54:15Z",
+      "asset_count": 4,
+      "file_bytes": 863926,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6412215317",
+      "updated_at": "2026-01-12T16:55:25Z",
+      "asset_count": 8,
+      "file_bytes": 1397385,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6412272204",
+      "updated_at": "2026-01-12T16:55:05Z",
+      "asset_count": 4,
+      "file_bytes": 909000,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6428453897",
+      "updated_at": "2026-01-12T16:55:48Z",
+      "asset_count": 8,
+      "file_bytes": 1081495,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6432784936",
+      "updated_at": "2026-01-12T17:01:18Z",
+      "asset_count": 4,
+      "file_bytes": 2182952,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6432804991",
+      "updated_at": "2026-01-12T16:56:07Z",
+      "asset_count": 6,
+      "file_bytes": 1600207,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6432815290",
+      "updated_at": "2026-01-12T16:56:42Z",
+      "asset_count": 2,
+      "file_bytes": 623270,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6460663126",
+      "updated_at": "2026-01-12T17:01:38Z",
+      "asset_count": 6,
+      "file_bytes": 1506288,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6474634277",
+      "updated_at": "2026-02-12T22:51:46Z",
+      "asset_count": 2,
+      "file_bytes": 1634169,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6499940636",
+      "updated_at": "2026-01-12T17:02:10Z",
+      "asset_count": 7,
+      "file_bytes": 2144611,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6532466825",
+      "updated_at": "2026-01-12T17:02:42Z",
+      "asset_count": 5,
+      "file_bytes": 1223968,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6550284217",
+      "updated_at": "2026-01-12T17:02:57Z",
+      "asset_count": 5,
+      "file_bytes": 1784020,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6585007882",
+      "updated_at": "2026-01-12T17:04:35Z",
+      "asset_count": 2,
+      "file_bytes": 638073,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6585031429",
+      "updated_at": "2026-01-12T17:04:08Z",
+      "asset_count": 7,
+      "file_bytes": 5568662,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6586392189",
+      "updated_at": "2026-01-12T17:03:26Z",
+      "asset_count": 3,
+      "file_bytes": 874722,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6602902405",
+      "updated_at": "2026-01-12T17:05:06Z",
+      "asset_count": 6,
+      "file_bytes": 4997337,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6602944443",
+      "updated_at": "2026-01-12T17:05:03Z",
+      "asset_count": 2,
+      "file_bytes": 3954000,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6645385296",
+      "updated_at": "2026-01-12T17:05:34Z",
+      "asset_count": 4,
+      "file_bytes": 1282609,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6664684421",
+      "updated_at": "2026-01-12T17:06:01Z",
+      "asset_count": 4,
+      "file_bytes": 3228629,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6704199819",
+      "updated_at": "2026-01-12T17:06:34Z",
+      "asset_count": 4,
+      "file_bytes": 786583,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6704208543",
+      "updated_at": "2026-01-12T17:06:16Z",
+      "asset_count": 5,
+      "file_bytes": 839577,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6757130361",
+      "updated_at": "2026-01-12T17:06:51Z",
+      "asset_count": 2,
+      "file_bytes": 999183,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6769010444",
+      "updated_at": "2026-01-12T17:07:22Z",
+      "asset_count": 2,
+      "file_bytes": 1565087,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6815987157",
+      "updated_at": "2026-01-12T17:07:37Z",
+      "asset_count": 5,
+      "file_bytes": 2966128,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "6966585606",
+      "updated_at": "2026-01-12T17:08:11Z",
+      "asset_count": 9,
+      "file_bytes": 3891743,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7014440299",
+      "updated_at": "2026-01-12T17:08:27Z",
+      "asset_count": 9,
+      "file_bytes": 5584509,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7037551035",
+      "updated_at": "2026-01-12T17:15:41Z",
+      "asset_count": 7,
+      "file_bytes": 3615827,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7058620030",
+      "updated_at": "2026-01-12T17:16:04Z",
+      "asset_count": 5,
+      "file_bytes": 3086561,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7068848836",
+      "updated_at": "2026-01-12T17:16:41Z",
+      "asset_count": 5,
+      "file_bytes": 4155350,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7073054893",
+      "updated_at": "2026-01-12T17:17:06Z",
+      "asset_count": 6,
+      "file_bytes": 1251662,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7080991123",
+      "updated_at": "2025-11-13T15:12:35Z",
+      "asset_count": 8,
+      "file_bytes": 3578508,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7127446593",
+      "updated_at": "2026-01-12T17:17:40Z",
+      "asset_count": 1,
+      "file_bytes": 593906,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7161270174",
+      "updated_at": "2026-01-12T17:18:30Z",
+      "asset_count": 8,
+      "file_bytes": 3711193,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7181585096",
+      "updated_at": "2026-01-12T17:18:57Z",
+      "asset_count": 9,
+      "file_bytes": 4104465,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7185053572",
+      "updated_at": "2026-01-12T17:19:18Z",
+      "asset_count": 5,
+      "file_bytes": 3891454,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7196091037",
+      "updated_at": "2026-01-12T17:19:44Z",
+      "asset_count": 8,
+      "file_bytes": 4972665,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7208867773",
+      "updated_at": "2026-01-12T17:20:03Z",
+      "asset_count": 7,
+      "file_bytes": 5743625,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7216838755",
+      "updated_at": "2026-01-12T17:20:28Z",
+      "asset_count": 8,
+      "file_bytes": 2826515,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7241579024",
+      "updated_at": "2026-01-12T17:20:47Z",
+      "asset_count": 6,
+      "file_bytes": 1520214,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7279725982",
+      "updated_at": "2026-01-12T17:21:12Z",
+      "asset_count": 7,
+      "file_bytes": 1368778,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7355565507",
+      "updated_at": "2026-01-12T17:22:03Z",
+      "asset_count": 6,
+      "file_bytes": 1397301,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7362714931",
+      "updated_at": "2026-01-12T17:22:32Z",
+      "asset_count": 7,
+      "file_bytes": 1438332,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7362732614",
+      "updated_at": "2026-01-12T17:21:39Z",
+      "asset_count": 8,
+      "file_bytes": 3588074,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7393001699",
+      "updated_at": "2026-01-12T17:22:53Z",
+      "asset_count": 7,
+      "file_bytes": 2194679,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7395610673",
+      "updated_at": "2026-01-12T17:23:14Z",
+      "asset_count": 4,
+      "file_bytes": 1101201,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7400539698",
+      "updated_at": "2026-01-12T17:23:50Z",
+      "asset_count": 5,
+      "file_bytes": 5890580,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7401891838",
+      "updated_at": "2026-01-12T17:23:32Z",
+      "asset_count": 8,
+      "file_bytes": 2537342,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7409232162",
+      "updated_at": "2026-01-12T17:24:05Z",
+      "asset_count": 5,
+      "file_bytes": 1330149,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7428966819",
+      "updated_at": "2026-01-12T17:24:23Z",
+      "asset_count": 6,
+      "file_bytes": 1358064,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7438704687",
+      "updated_at": "2026-01-12T17:24:42Z",
+      "asset_count": 8,
+      "file_bytes": 3915867,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7446009868",
+      "updated_at": "2026-01-12T17:25:00Z",
+      "asset_count": 7,
+      "file_bytes": 2857814,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7448304789",
+      "updated_at": "2026-01-12T17:25:18Z",
+      "asset_count": 8,
+      "file_bytes": 2279647,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7449302411",
+      "updated_at": "2026-01-12T17:25:46Z",
+      "asset_count": 1,
+      "file_bytes": 595996,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7484596215",
+      "updated_at": "2026-01-12T17:26:48Z",
+      "asset_count": 8,
+      "file_bytes": 2144872,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7492301184",
+      "updated_at": "2026-01-12T17:27:20Z",
+      "asset_count": 1,
+      "file_bytes": 595647,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7517443739",
+      "updated_at": "2026-01-12T17:28:05Z",
+      "asset_count": 8,
+      "file_bytes": 3431291,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7579108831",
+      "updated_at": "2026-01-12T17:28:27Z",
+      "asset_count": 7,
+      "file_bytes": 1350106,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7593177449",
+      "updated_at": "2026-01-12T17:28:57Z",
+      "asset_count": 11,
+      "file_bytes": 3414049,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7601977751",
+      "updated_at": "2026-01-12T17:29:18Z",
+      "asset_count": 8,
+      "file_bytes": 3410960,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7612544402",
+      "updated_at": "2026-01-12T17:29:34Z",
+      "asset_count": 5,
+      "file_bytes": 1534714,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7630158766",
+      "updated_at": "2026-01-12T17:29:48Z",
+      "asset_count": 4,
+      "file_bytes": 1942251,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7676465094",
+      "updated_at": "2026-02-12T22:51:46Z",
+      "asset_count": 7,
+      "file_bytes": 2167363,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7695246456",
+      "updated_at": "2026-01-12T17:30:24Z",
+      "asset_count": 1,
+      "file_bytes": 595016,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7778436220",
+      "updated_at": "2026-01-12T17:31:19Z",
+      "asset_count": 7,
+      "file_bytes": 1932838,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7778508735",
+      "updated_at": "2026-01-12T17:31:34Z",
+      "asset_count": 7,
+      "file_bytes": 2734597,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7778537584",
+      "updated_at": "2026-01-12T17:31:51Z",
+      "asset_count": 7,
+      "file_bytes": 3469900,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7785955755",
+      "updated_at": "2026-01-12T17:32:26Z",
+      "asset_count": 8,
+      "file_bytes": 3199065,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7853702283",
+      "updated_at": "2026-01-12T17:32:40Z",
+      "asset_count": 11,
+      "file_bytes": 3666384,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7917656485",
+      "updated_at": "2026-01-12T17:32:58Z",
+      "asset_count": 8,
+      "file_bytes": 2782007,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7990595195",
+      "updated_at": "2026-01-12T17:33:20Z",
+      "asset_count": 11,
+      "file_bytes": 2895358,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "7998991080",
+      "updated_at": "2026-01-12T17:33:39Z",
+      "asset_count": 12,
+      "file_bytes": 2206482,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8010197771",
+      "updated_at": "2025-11-13T15:11:55Z",
+      "asset_count": 1,
+      "file_bytes": 623178,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8040004577",
+      "updated_at": "2025-11-13T15:12:18Z",
+      "asset_count": 1,
+      "file_bytes": 623953,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8040236277",
+      "updated_at": "2025-11-13T15:17:04Z",
+      "asset_count": 13,
+      "file_bytes": 1923803,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8078197530",
+      "updated_at": "2025-11-13T15:15:07Z",
+      "asset_count": 8,
+      "file_bytes": 3692525,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8115338225",
+      "updated_at": "2025-11-13T15:13:45Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "8179283939",
+      "updated_at": "2025-11-05T15:37:58Z",
+      "asset_count": 10,
+      "file_bytes": 2152220,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8210479687",
+      "updated_at": "2025-11-05T15:38:23Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "8247965901",
+      "updated_at": "2025-11-05T15:38:55Z",
+      "asset_count": 9,
+      "file_bytes": 1859571,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8258536889",
+      "updated_at": "2025-11-05T15:01:57Z",
+      "asset_count": 7,
+      "file_bytes": 3428204,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8335365364",
+      "updated_at": "2025-11-05T15:03:06Z",
+      "asset_count": 11,
+      "file_bytes": 1561228,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8340967921",
+      "updated_at": "2025-11-05T15:03:11Z",
+      "asset_count": 10,
+      "file_bytes": 4277286,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8341010221",
+      "updated_at": "2025-12-03T18:03:59Z",
+      "asset_count": 9,
+      "file_bytes": 3140710,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8344208144",
+      "updated_at": "2025-11-05T15:03:52Z",
+      "asset_count": 10,
+      "file_bytes": 2798063,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8363714294",
+      "updated_at": "2025-11-05T15:04:09Z",
+      "asset_count": 1,
+      "file_bytes": 624976,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8412458967",
+      "updated_at": "2025-11-05T15:05:10Z",
+      "asset_count": 2,
+      "file_bytes": 813017,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8412502857",
+      "updated_at": "2025-11-05T15:34:55Z",
+      "asset_count": 1,
+      "file_bytes": 190514,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8412562158",
+      "updated_at": "2025-11-05T15:39:25Z",
+      "asset_count": 8,
+      "file_bytes": 6226800,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8452020359",
+      "updated_at": "2025-11-05T15:06:58Z",
+      "asset_count": 1,
+      "file_bytes": 622640,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8499027344",
+      "updated_at": "2025-11-05T15:07:39Z",
+      "asset_count": 12,
+      "file_bytes": 2389376,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8515815287",
+      "updated_at": "2025-11-05T15:07:44Z",
+      "asset_count": 8,
+      "file_bytes": 2299089,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8515833269",
+      "updated_at": "2025-11-05T15:08:32Z",
+      "asset_count": 7,
+      "file_bytes": 1737297,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8518772178",
+      "updated_at": "2025-11-05T15:39:52Z",
+      "asset_count": 10,
+      "file_bytes": 19018320,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8540740003",
+      "updated_at": "2025-11-05T15:08:11Z",
+      "asset_count": 8,
+      "file_bytes": 2170936,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8552129812",
+      "updated_at": "2025-11-05T15:08:58Z",
+      "asset_count": 10,
+      "file_bytes": 1920053,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8552154025",
+      "updated_at": "2025-11-05T15:09:23Z",
+      "asset_count": 7,
+      "file_bytes": 2509926,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8582484408",
+      "updated_at": "2025-11-05T15:09:59Z",
+      "asset_count": 7,
+      "file_bytes": 1961471,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8583581650",
+      "updated_at": "2025-11-05T15:10:17Z",
+      "asset_count": 9,
+      "file_bytes": 2812919,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8583796162",
+      "updated_at": "2025-11-05T15:10:39Z",
+      "asset_count": 10,
+      "file_bytes": 2627917,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8646885137",
+      "updated_at": "2025-11-05T15:11:24Z",
+      "asset_count": 11,
+      "file_bytes": 2017679,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8647262463",
+      "updated_at": "2025-11-05T15:11:21Z",
+      "asset_count": 9,
+      "file_bytes": 2217131,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8671912122",
+      "updated_at": "2025-11-05T15:12:02Z",
+      "asset_count": 8,
+      "file_bytes": 3500387,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8690378903",
+      "updated_at": "2025-11-05T15:41:10Z",
+      "asset_count": 20,
+      "file_bytes": 4829472,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8690423085",
+      "updated_at": "2025-11-05T15:42:00Z",
+      "asset_count": 5,
+      "file_bytes": 2382274,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8690444032",
+      "updated_at": "2025-11-05T15:41:23Z",
+      "asset_count": 10,
+      "file_bytes": 2070527,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8690965525",
+      "updated_at": "2025-11-05T15:11:43Z",
+      "asset_count": 9,
+      "file_bytes": 2222273,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8691525491",
+      "updated_at": "2025-11-05T15:40:32Z",
+      "asset_count": 10,
+      "file_bytes": 14470407,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8712022897",
+      "updated_at": "2025-11-05T15:41:42Z",
+      "asset_count": 7,
+      "file_bytes": 30798500,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8712063187",
+      "updated_at": "2025-11-05T15:42:23Z",
+      "asset_count": 26,
+      "file_bytes": 12784673,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8767023918",
+      "updated_at": "2025-11-05T15:42:39Z",
+      "asset_count": 11,
+      "file_bytes": 2687026,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8769494305",
+      "updated_at": "2025-11-05T16:00:43Z",
+      "asset_count": 9,
+      "file_bytes": 3652312,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8775924946",
+      "updated_at": "2025-11-05T15:43:13Z",
+      "asset_count": 12,
+      "file_bytes": 2189232,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8777725382",
+      "updated_at": "2025-11-05T15:42:53Z",
+      "asset_count": 10,
+      "file_bytes": 1850732,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8807496383",
+      "updated_at": "2025-11-05T15:09:56Z",
+      "asset_count": 1,
+      "file_bytes": 624069,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8809620163",
+      "updated_at": "2025-11-05T15:44:19Z",
+      "asset_count": 12,
+      "file_bytes": 2703692,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8819515274",
+      "updated_at": "2025-11-05T15:43:57Z",
+      "asset_count": 13,
+      "file_bytes": 28685544,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8836292596",
+      "updated_at": "2025-11-05T15:45:47Z",
+      "asset_count": 6,
+      "file_bytes": 5349521,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8861275444",
+      "updated_at": "2025-11-13T14:13:12Z",
+      "asset_count": 1,
+      "file_bytes": 594404,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8861851743",
+      "updated_at": "2025-11-05T15:45:31Z",
+      "asset_count": 1,
+      "file_bytes": 623931,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8862368996",
+      "updated_at": "2025-11-05T15:46:06Z",
+      "asset_count": 8,
+      "file_bytes": 2920621,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8862386740",
+      "updated_at": "2025-11-05T15:44:36Z",
+      "asset_count": 10,
+      "file_bytes": 5739334,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8864910927",
+      "updated_at": "2025-11-05T15:45:13Z",
+      "asset_count": 8,
+      "file_bytes": 2096182,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8888707004",
+      "updated_at": "2025-11-05T15:48:26Z",
+      "asset_count": 6,
+      "file_bytes": 3777065,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8899743620",
+      "updated_at": "2025-11-05T15:46:59Z",
+      "asset_count": 10,
+      "file_bytes": 1265540,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8899769993",
+      "updated_at": "2025-11-05T15:47:27Z",
+      "asset_count": 11,
+      "file_bytes": 1663672,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8905083967",
+      "updated_at": "2025-11-05T15:46:37Z",
+      "asset_count": 10,
+      "file_bytes": 3265363,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8917655513",
+      "updated_at": "2025-11-05T15:47:50Z",
+      "asset_count": 7,
+      "file_bytes": 2483146,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8925726630",
+      "updated_at": "2025-11-05T15:49:08Z",
+      "asset_count": 7,
+      "file_bytes": 1690168,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8925780836",
+      "updated_at": "2025-11-05T15:48:54Z",
+      "asset_count": 6,
+      "file_bytes": 1789037,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8939431468",
+      "updated_at": "2025-11-05T15:49:29Z",
+      "asset_count": 7,
+      "file_bytes": 3058535,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8947382842",
+      "updated_at": "2025-11-05T15:50:10Z",
+      "asset_count": 9,
+      "file_bytes": 2565123,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8947444981",
+      "updated_at": "2025-11-05T15:50:30Z",
+      "asset_count": 7,
+      "file_bytes": 1789889,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8953787243",
+      "updated_at": "2025-11-05T15:50:52Z",
+      "asset_count": 7,
+      "file_bytes": 3442617,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8978238907",
+      "updated_at": "2025-11-13T14:14:10Z",
+      "asset_count": 1,
+      "file_bytes": 595458,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8989503649",
+      "updated_at": "2025-11-05T15:53:17Z",
+      "asset_count": 9,
+      "file_bytes": 3449147,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "8989932052",
+      "updated_at": "2025-11-13T14:14:13Z",
+      "asset_count": 9,
+      "file_bytes": 3405852,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9001732667",
+      "updated_at": "2025-11-05T15:53:37Z",
+      "asset_count": 5,
+      "file_bytes": 2027820,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9001827976",
+      "updated_at": "2025-11-05T15:51:18Z",
+      "asset_count": 5,
+      "file_bytes": 27064941,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9002386806",
+      "updated_at": "2025-11-05T15:51:33Z",
+      "asset_count": 5,
+      "file_bytes": 2404751,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9007934104",
+      "updated_at": "2025-11-05T15:51:55Z",
+      "asset_count": 11,
+      "file_bytes": 4485437,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9008025763",
+      "updated_at": "2025-11-05T15:52:11Z",
+      "asset_count": 5,
+      "file_bytes": 1369659,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9008066476",
+      "updated_at": "2025-11-05T15:52:25Z",
+      "asset_count": 5,
+      "file_bytes": 1286823,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9008088974",
+      "updated_at": "2025-11-05T15:52:40Z",
+      "asset_count": 11,
+      "file_bytes": 4734153,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9008322571",
+      "updated_at": "2025-11-05T15:54:30Z",
+      "asset_count": 8,
+      "file_bytes": 4325096,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9008807076",
+      "updated_at": "2025-11-05T15:53:00Z",
+      "asset_count": 6,
+      "file_bytes": 1350184,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9009232709",
+      "updated_at": "2025-11-05T15:54:01Z",
+      "asset_count": 17,
+      "file_bytes": 5753524,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9041337134",
+      "updated_at": "2025-11-05T15:54:46Z",
+      "asset_count": 6,
+      "file_bytes": 3442598,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9042638710",
+      "updated_at": "2025-11-05T15:55:16Z",
+      "asset_count": 6,
+      "file_bytes": 20607818,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9042685222",
+      "updated_at": "2025-11-05T15:56:28Z",
+      "asset_count": 1,
+      "file_bytes": 595181,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9043154234",
+      "updated_at": "2025-11-05T15:57:13Z",
+      "asset_count": 7,
+      "file_bytes": 1944949,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9071556123",
+      "updated_at": "2025-11-05T15:57:58Z",
+      "asset_count": 7,
+      "file_bytes": 1792536,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9071924537",
+      "updated_at": "2025-11-05T15:57:36Z",
+      "asset_count": 9,
+      "file_bytes": 2461182,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9082043550",
+      "updated_at": "2025-11-05T15:58:25Z",
+      "asset_count": 12,
+      "file_bytes": 4314027,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9087578141",
+      "updated_at": "2025-11-13T14:15:56Z",
+      "asset_count": 1,
+      "file_bytes": 596359,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9087614018",
+      "updated_at": "2025-11-13T14:16:25Z",
+      "asset_count": 1,
+      "file_bytes": 596454,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9092853972",
+      "updated_at": "2025-11-13T14:14:50Z",
+      "asset_count": 1,
+      "file_bytes": 594218,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9092924609",
+      "updated_at": "2025-11-13T14:15:21Z",
+      "asset_count": 1,
+      "file_bytes": 595026,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9111764779",
+      "updated_at": "2025-11-05T16:00:18Z",
+      "asset_count": 16,
+      "file_bytes": 9060534,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9111821740",
+      "updated_at": "2025-11-05T15:59:35Z",
+      "asset_count": 10,
+      "file_bytes": 2628464,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9111880919",
+      "updated_at": "2025-11-13T14:17:01Z",
+      "asset_count": 1,
+      "file_bytes": 596358,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9137909910",
+      "updated_at": "2025-11-05T15:59:52Z",
+      "asset_count": 11,
+      "file_bytes": 4061001,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9137936468",
+      "updated_at": "2025-11-05T16:01:04Z",
+      "asset_count": 11,
+      "file_bytes": 6212482,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9137999365",
+      "updated_at": "2025-11-05T16:01:38Z",
+      "asset_count": 10,
+      "file_bytes": 4130622,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9162482626",
+      "updated_at": "2025-11-05T16:02:00Z",
+      "asset_count": 11,
+      "file_bytes": 4543843,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9183325916",
+      "updated_at": "2025-11-05T16:02:18Z",
+      "asset_count": 14,
+      "file_bytes": 3251601,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9193731840",
+      "updated_at": "2025-11-05T16:02:37Z",
+      "asset_count": 9,
+      "file_bytes": 3073695,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9193827314",
+      "updated_at": "2025-11-05T16:04:10Z",
+      "asset_count": 8,
+      "file_bytes": 2865174,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9195937692",
+      "updated_at": "2025-11-05T16:03:01Z",
+      "asset_count": 13,
+      "file_bytes": 6293289,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9220622237",
+      "updated_at": "2025-11-05T16:04:23Z",
+      "asset_count": 8,
+      "file_bytes": 3540677,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9251378516",
+      "updated_at": "2025-11-13T14:12:24Z",
+      "asset_count": 1,
+      "file_bytes": 594921,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9322856242",
+      "updated_at": "2025-11-05T16:04:57Z",
+      "asset_count": 10,
+      "file_bytes": 2004472,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9354339587",
+      "updated_at": "2025-11-05T16:05:19Z",
+      "asset_count": 11,
+      "file_bytes": 4811718,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9354509040",
+      "updated_at": "2025-11-05T16:05:40Z",
+      "asset_count": 9,
+      "file_bytes": 1933260,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9374906602",
+      "updated_at": "2025-11-13T14:11:41Z",
+      "asset_count": 1,
+      "file_bytes": 593797,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9388654212",
+      "updated_at": "2025-11-05T16:06:03Z",
+      "asset_count": 28,
+      "file_bytes": 8690049,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9420222361",
+      "updated_at": "2025-11-05T16:06:20Z",
+      "asset_count": 9,
+      "file_bytes": 1632090,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9431669819",
+      "updated_at": "2025-11-05T16:06:42Z",
+      "asset_count": 13,
+      "file_bytes": 4186513,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9441205157",
+      "updated_at": "2026-03-05T18:03:50Z",
+      "asset_count": 9,
+      "file_bytes": 2863121,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9469783280",
+      "updated_at": "2025-11-05T16:07:12Z",
+      "asset_count": 6,
+      "file_bytes": 3155320,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9485933188",
+      "updated_at": "2025-11-05T16:07:27Z",
+      "asset_count": 6,
+      "file_bytes": 2124235,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9491430770",
+      "updated_at": "2025-11-05T16:07:43Z",
+      "asset_count": 8,
+      "file_bytes": 5044680,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9513604431",
+      "updated_at": "2025-11-05T16:07:57Z",
+      "asset_count": 8,
+      "file_bytes": 1545512,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9523363861",
+      "updated_at": "2025-11-05T16:08:12Z",
+      "asset_count": 11,
+      "file_bytes": 4074600,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9531775700",
+      "updated_at": "2025-11-05T15:33:27Z",
+      "asset_count": 10,
+      "file_bytes": 3656959,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9546313055",
+      "updated_at": "2025-11-05T15:33:09Z",
+      "asset_count": 12,
+      "file_bytes": 2418169,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9592881422",
+      "updated_at": "2025-11-05T15:34:10Z",
+      "asset_count": 4,
+      "file_bytes": 1020648,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9602508974",
+      "updated_at": "2025-11-05T15:30:05Z",
+      "asset_count": 9,
+      "file_bytes": 3424650,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9622099221",
+      "updated_at": "2025-11-05T15:34:00Z",
+      "asset_count": 2,
+      "file_bytes": 490601,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9633012976",
+      "updated_at": "2025-11-05T15:29:47Z",
+      "asset_count": 11,
+      "file_bytes": 4178488,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9644456884",
+      "updated_at": "2025-11-05T15:29:03Z",
+      "asset_count": 9,
+      "file_bytes": 3089392,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9649919486",
+      "updated_at": "2025-11-05T15:28:47Z",
+      "asset_count": 10,
+      "file_bytes": 3361687,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9660041575",
+      "updated_at": "2025-11-05T15:28:20Z",
+      "asset_count": 4,
+      "file_bytes": 3601847,
+      "classification": "binary"
+    },
+    {
+      "monday_item_id": "9674226873",
+      "updated_at": "2025-11-05T15:27:53Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9684827409",
+      "updated_at": "2025-11-05T15:27:34Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9694007905",
+      "updated_at": "2025-11-05T15:27:16Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9696266332",
+      "updated_at": "2025-11-05T15:27:03Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9739551645",
+      "updated_at": "2025-11-05T15:26:43Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9765967139",
+      "updated_at": "2025-11-05T15:26:31Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9779766000",
+      "updated_at": "2025-11-05T15:26:16Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9797811602",
+      "updated_at": "2025-11-05T15:25:51Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9798014004",
+      "updated_at": "2025-11-05T15:25:20Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9798026197",
+      "updated_at": "2025-11-05T15:25:39Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9803281739",
+      "updated_at": "2025-11-05T15:25:05Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9817105882",
+      "updated_at": "2025-11-05T15:24:31Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9827630430",
+      "updated_at": "2025-11-05T15:24:50Z",
+      "asset_count": 0,
+      "file_bytes": 0,
+      "classification": "non_binary"
+    },
+    {
+      "monday_item_id": "9859010692",
+      "updated_at": "2025-11-05T15:23:55Z",
+      "asset_count": 1,
+      "file_bytes": 624856,
+      "classification": "binary"
+    }
+  ],
+  "non_binary_items": 38,
+  "binary_items": 233,
+  "binary_assets": 1689
+}
