@@ -13,6 +13,7 @@ from classificacao_procons.drive.pdf_builder import (
     is_mergeable_supporting_file,
     local_supporting_file_name,
 )
+from classificacao_procons.drive.protocol import is_protocol_mismatch_error
 from classificacao_procons.drive.reader import (
     ExistingResponseOutputs,
     clear_automatic_response_output_files,
@@ -48,6 +49,7 @@ from classificacao_procons.monday.cases import (
 )
 from classificacao_procons.monday.client import (
     MondayClientError,
+    create_item_update,
     get_api_token_from_env,
     update_elaborated_response_links,
 )
@@ -171,6 +173,25 @@ def _download_supporting_files(
     return downloaded
 
 
+def _try_post_sac_folder_protocol_mismatch_update(
+    case: MondayCaseReady,
+    *,
+    error_message: str,
+    options: ResponsePipelineOptions,
+) -> None:
+    monday_token = options.monday_api_token or get_api_token_from_env()
+    if not monday_token:
+        return
+    try:
+        create_item_update(
+            api_token=monday_token,
+            item_id=case.item_id,
+            body=error_message,
+        )
+    except MondayClientError:
+        return
+
+
 def _elaborate_case(
     case: MondayCaseReady,
     *,
@@ -200,14 +221,22 @@ def _elaborate_case(
         sac_context = resolve_sac_folder_context(
             docs_sac_url=case.docs_sac_url,
             token_path=options.token_path,
+            expected_protocol_number=case.protocol_number,
         )
     except DriveClientError as exc:
+        error_message = str(exc)
+        if is_protocol_mismatch_error(error_message):
+            _try_post_sac_folder_protocol_mismatch_update(
+                case,
+                error_message=error_message,
+                options=options,
+            )
         return ElaboratedResponseResult(
             status="error",
             monday_item_id=case.item_id,
             consumer_name=case.item_name,
             protocol_number=case.protocol_number,
-            error=str(exc),
+            error=error_message,
         )
 
     if options.force_reelaborate:

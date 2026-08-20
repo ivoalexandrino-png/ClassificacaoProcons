@@ -11,6 +11,12 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
+from classificacao_procons.drive.errors import DriveClientError
+from classificacao_procons.drive.protocol import (
+    build_disambiguated_folder_name,
+    extract_protocol_from_procon_pdf_name,
+    protocols_match,
+)
 from classificacao_procons.google_auth import (
     DEFAULT_DRIVE_PARENT_FOLDER_ID,
     GoogleAuthError,
@@ -19,10 +25,7 @@ from classificacao_procons.google_auth import (
 
 DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
 DRIVE_PDF_MIME = "application/pdf"
-
-
-class DriveClientError(RuntimeError):
-    """Erro ao salvar arquivos no Google Drive."""
+PROCON_PDF_PREFIX = "atendimento procon"
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,23 @@ def _build_drive_service(token_path: str | None = None):
 
 
 def _find_child_folder(service, *, parent_id: str, folder_name: str) -> str | None:
+    folders = _list_child_folders_by_exact_name(
+        service,
+        parent_id=parent_id,
+        folder_name=folder_name,
+    )
+    if not folders:
+        return None
+    return folders[0][0]
+
+
+def _list_child_folders_by_exact_name(
+    service,
+    *,
+    parent_id: str,
+    folder_name: str,
+) -> list[tuple[str, str | None]]:
+    """Lista pastas filhas com nome exato, da mais recente para a mais antiga."""
     safe_name = _escape_drive_query_value(folder_name)
     query = (
         f"'{parent_id}' in parents and "
@@ -110,16 +130,129 @@ def _find_child_folder(service, *, parent_id: str, folder_name: str) -> str | No
     try:
         response = (
             service.files()
-            .list(q=query, fields="files(id)", pageSize=1, supportsAllDrives=True)
+            .list(
+                q=query,
+                fields="files(id,createdTime)",
+                pageSize=100,
+                orderBy="createdTime desc",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
             .execute()
         )
     except HttpError as exc:
         raise DriveClientError(f"Falha ao buscar pasta no Drive: {exc}") from exc
 
-    files = response.get("files", [])
-    if not files:
-        return None
-    return files[0]["id"]
+    folders: list[tuple[str, str | None]] = []
+    for item in response.get("files", []):
+        folders.append((item["id"], item.get("createdTime")))
+    return folders
+
+
+def _folder_web_view_link(service, folder_id: str) -> str:
+    try:
+        metadata = (
+            service.files()
+            .get(fileId=folder_id, fields="webViewLink", supportsAllDrives=True)
+            .execute()
+        )
+    except HttpError as exc:
+        raise DriveClientError(f"Falha ao obter link da pasta: {exc}") from exc
+    return metadata["webViewLink"]
+
+
+def _list_folder_children_names(service, *, folder_id: str) -> list[tuple[str, str]]:
+    query = f"'{folder_id}' in parents and trashed = false"
+    try:
+        response = (
+            service.files()
+            .list(
+                q=query,
+                fields="files(name,mimeType)",
+                pageSize=200,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute()
+        )
+    except HttpError as exc:
+        raise DriveClientError(f"Falha ao listar pasta do Drive: {exc}") from exc
+
+    return [(item.get("name", ""), item.get("mimeType", "")) for item in response.get("files", [])]
+
+
+def _find_complaint_pdf_name(children: list[tuple[str, str]]) -> str | None:
+    pdfs = [
+        name
+        for name, mime_type in children
+        if mime_type == DRIVE_PDF_MIME or name.casefold().endswith(".pdf")
+    ]
+    procon_pdfs = [name for name in pdfs if name.casefold().startswith(PROCON_PDF_PREFIX)]
+    if procon_pdfs:
+        return procon_pdfs[0]
+    if pdfs:
+        return pdfs[0]
+    return None
+
+
+def _folder_matches_protocol(
+    service,
+    *,
+    folder_id: str,
+    protocol_number: str,
+) -> bool:
+    children = _list_folder_children_names(service, folder_id=folder_id)
+    pdf_name = _find_complaint_pdf_name(children)
+    if pdf_name is None:
+        return False
+    found_protocol = extract_protocol_from_procon_pdf_name(pdf_name)
+    if found_protocol is None:
+        return False
+    return protocols_match(protocol_number, found_protocol)
+
+
+def _find_consumer_folder_by_protocol(
+    service,
+    *,
+    parent_folder_id: str,
+    consumer_name: str,
+    protocol_number: str,
+) -> str | None:
+    """Retorna pasta da consumidora cujo PDF de reclamação bate com o protocolo."""
+    folder_name = _sanitize_folder_name(consumer_name)
+    candidate_ids: list[str] = []
+
+    for folder_id, _created_at in _list_child_folders_by_exact_name(
+        service,
+        parent_id=parent_folder_id,
+        folder_name=folder_name,
+    ):
+        candidate_ids.append(folder_id)
+
+    disambiguated_name = build_disambiguated_folder_name(
+        consumer_name=consumer_name,
+        protocol_number=protocol_number,
+    )
+    disambiguated_id = _find_child_folder(
+        service,
+        parent_id=parent_folder_id,
+        folder_name=disambiguated_name,
+    )
+    if disambiguated_id is not None:
+        candidate_ids.append(disambiguated_id)
+
+    seen: set[str] = set()
+    for folder_id in candidate_ids:
+        if folder_id in seen:
+            continue
+        seen.add(folder_id)
+        if _folder_matches_protocol(
+            service,
+            folder_id=folder_id,
+            protocol_number=protocol_number,
+        ):
+            return folder_id
+    return None
 
 
 def _create_folder(service, *, parent_id: str, folder_name: str) -> str:
@@ -144,23 +277,52 @@ def ensure_consumer_folder(
     *,
     parent_folder_id: str,
     consumer_name: str,
+    protocol_number: str | None = None,
 ) -> tuple[str, str]:
     """Retorna (folder_id, folder_url) da pasta da consumidora."""
     folder_name = _sanitize_folder_name(consumer_name)
+
+    if protocol_number:
+        matched_folder_id = _find_consumer_folder_by_protocol(
+            service,
+            parent_folder_id=parent_folder_id,
+            consumer_name=consumer_name,
+            protocol_number=protocol_number,
+        )
+        if matched_folder_id is not None:
+            return matched_folder_id, _folder_web_view_link(service, matched_folder_id)
+
+        homonym_folders = _list_child_folders_by_exact_name(
+            service,
+            parent_id=parent_folder_id,
+            folder_name=folder_name,
+        )
+        target_folder_name = (
+            build_disambiguated_folder_name(
+                consumer_name=consumer_name,
+                protocol_number=protocol_number,
+            )
+            if homonym_folders
+            else folder_name
+        )
+        folder_id = _find_child_folder(
+            service,
+            parent_id=parent_folder_id,
+            folder_name=target_folder_name,
+        )
+        if not folder_id:
+            folder_id = _create_folder(
+                service,
+                parent_id=parent_folder_id,
+                folder_name=target_folder_name,
+            )
+        return folder_id, _folder_web_view_link(service, folder_id)
+
     folder_id = _find_child_folder(service, parent_id=parent_folder_id, folder_name=folder_name)
     if not folder_id:
         folder_id = _create_folder(service, parent_id=parent_folder_id, folder_name=folder_name)
 
-    try:
-        metadata = (
-            service.files()
-            .get(fileId=folder_id, fields="webViewLink", supportsAllDrives=True)
-            .execute()
-        )
-    except HttpError as exc:
-        raise DriveClientError(f"Falha ao obter link da pasta: {exc}") from exc
-
-    return folder_id, metadata["webViewLink"]
+    return folder_id, _folder_web_view_link(service, folder_id)
 
 
 def upload_pdf_to_folder(
@@ -276,6 +438,7 @@ def save_complaint_pdf(
         service,
         parent_folder_id=parent_id,
         consumer_name=consumer_name,
+        protocol_number=cip_number,
     )
     file_id, file_url = upload_pdf_to_folder(
         service,

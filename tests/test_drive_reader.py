@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from classificacao_procons.drive.reader import (
+    RESPONSE_OUTPUT_FOLDER,
     DriveFileInfo,
     _find_complaint_pdf,
     _find_summary_txt,
@@ -31,6 +32,25 @@ class TestDriveReaderHelpers:
                 "Informações",
                 "application/vnd.google-apps.folder",
                 datetime(2026, 7, 9),
+            ),
+        ]
+        selected = _select_sac_subfolder(folders)
+        assert selected is not None
+        assert selected.file_id == "2"
+
+    def test_should_ignore_resposta_automatica_subfolder(self) -> None:
+        folders = [
+            DriveFileInfo(
+                "1",
+                RESPONSE_OUTPUT_FOLDER,
+                "application/vnd.google-apps.folder",
+                datetime(2026, 8, 20),
+            ),
+            DriveFileInfo(
+                "2",
+                "Informações",
+                "application/vnd.google-apps.folder",
+                datetime(2026, 8, 15),
             ),
         ]
         selected = _select_sac_subfolder(folders)

@@ -331,3 +331,42 @@ def test_should_use_existing_list_when_reelaborate_existing_dry_run(
     assert len(results) == 1
     assert results[0].status == "dry_run"
     list_existing_mock.assert_called_once()
+
+
+@patch("classificacao_procons.response_pipeline.create_item_update")
+@patch("classificacao_procons.response_pipeline.resolve_sac_folder_context")
+@patch("classificacao_procons.response_pipeline.list_cases_ready_for_elaboration")
+@patch("classificacao_procons.response_pipeline.has_valid_token", return_value=True)
+def test_should_post_monday_update_when_docs_sac_protocol_mismatches(
+    _token_mock,
+    list_cases_mock,
+    resolve_sac_mock,
+    create_update_mock,
+    tmp_path,
+) -> None:
+    from classificacao_procons.drive.client import DriveClientError
+    from classificacao_procons.drive.protocol import build_protocol_mismatch_error
+
+    list_cases_mock.return_value = [_case_ready()]
+    resolve_sac_mock.side_effect = DriveClientError(
+        build_protocol_mismatch_error(
+            expected_protocol="1759897/2026",
+            found_protocol="1656146/2026",
+            pdf_name="Atendimento Procon - GABRIELE - 1656146-2026 - 15-07-2026.pdf",
+        ),
+    )
+
+    results = elaborate_pending_responses(
+        ResponsePipelineOptions(
+            work_dir=tmp_path / "work",
+            state_path=tmp_path / "state.json",
+            monday_api_token="token-test",
+            gemini_api_key="gemini-test",
+        ),
+    )
+
+    assert len(results) == 1
+    assert results[0].status == "error"
+    assert "Pasta Docs SAC inconsistente" in (results[0].error or "")
+    create_update_mock.assert_called_once()
+    assert create_update_mock.call_args.kwargs["item_id"] == "100"
