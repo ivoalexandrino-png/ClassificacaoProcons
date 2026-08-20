@@ -70,7 +70,7 @@
       "item_count": 50,
       "asset_count": 114,
       "estimated_comments": 438,
-      "estimated_operations": 0,
+      "estimated_operations": 1138,
       "total_asset_bytes": 80829650,
       "min_asset_count_per_item": 1,
       "max_asset_count_per_item": 5
@@ -132,7 +132,7 @@
       "item_count": 50,
       "asset_count": 278,
       "estimated_comments": 500,
-      "estimated_operations": 0,
+      "estimated_operations": 1526,
       "total_asset_bytes": 203560540,
       "min_asset_count_per_item": 5,
       "max_asset_count_per_item": 7
@@ -194,7 +194,7 @@
       "item_count": 50,
       "asset_count": 373,
       "estimated_comments": 544,
-      "estimated_operations": 0,
+      "estimated_operations": 1752,
       "total_asset_bytes": 172589117,
       "min_asset_count_per_item": 7,
       "max_asset_count_per_item": 8
@@ -249,7 +249,7 @@
       "item_count": 43,
       "asset_count": 391,
       "estimated_comments": 618,
-      "estimated_operations": 0,
+      "estimated_operations": 1829,
       "total_asset_bytes": 160825137,
       "min_asset_count_per_item": 8,
       "max_asset_count_per_item": 10
@@ -295,7 +295,7 @@
       "item_count": 34,
       "asset_count": 396,
       "estimated_comments": 515,
-      "estimated_operations": 0,
+      "estimated_operations": 1643,
       "total_asset_bytes": 148365578,
       "min_asset_count_per_item": 10,
       "max_asset_count_per_item": 16
@@ -313,7 +313,7 @@
       "item_count": 6,
       "asset_count": 137,
       "estimated_comments": 73,
-      "estimated_operations": 0,
+      "estimated_operations": 407,
       "total_asset_bytes": 49582065,
       "min_asset_count_per_item": 17,
       "max_asset_count_per_item": 28
