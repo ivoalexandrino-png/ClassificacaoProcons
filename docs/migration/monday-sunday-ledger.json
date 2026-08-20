@@ -2874,9 +2874,74 @@
       "migration_status": "migrated",
       "migrated_at": "2026-08-20T15:26:36.832450+00:00",
       "source_snapshot_timestamp": "2026-08-20T15:14:20.917827+00:00"
+    },
+    "4944254220:12811628374": {
+      "monday_board_id": "4944254220",
+      "monday_item_id": "12811628374",
+      "sunday_board_id": "82",
+      "sunday_item_id": "8126",
+      "wave": "WAVE_1",
+      "disposition": "CREATE",
+      "canonical_monday_item_id": null,
+      "reason": null,
+      "migration_status": "migrated",
+      "migrated_at": "2026-08-20T18:10:20.545086+00:00",
+      "source_snapshot_timestamp": "2026-08-20T18:06:29.539889+00:00"
+    },
+    "4944254220:12532018513": {
+      "monday_board_id": "4944254220",
+      "monday_item_id": "12532018513",
+      "sunday_board_id": "82",
+      "sunday_item_id": "8127",
+      "wave": "WAVE_1",
+      "disposition": "CREATE",
+      "canonical_monday_item_id": null,
+      "reason": null,
+      "migration_status": "migrated",
+      "migrated_at": "2026-08-20T18:11:16.943113+00:00",
+      "source_snapshot_timestamp": "2026-08-20T18:06:29.539889+00:00"
+    },
+    "4944254220:12539772979": {
+      "monday_board_id": "4944254220",
+      "monday_item_id": "12539772979",
+      "sunday_board_id": "82",
+      "sunday_item_id": "8128",
+      "wave": "WAVE_1",
+      "disposition": "CREATE",
+      "canonical_monday_item_id": null,
+      "reason": null,
+      "migration_status": "migrated",
+      "migrated_at": "2026-08-20T18:12:48.660750+00:00",
+      "source_snapshot_timestamp": "2026-08-20T18:06:29.539889+00:00"
+    },
+    "4944254220:12673988479": {
+      "monday_board_id": "4944254220",
+      "monday_item_id": "12673988479",
+      "sunday_board_id": "82",
+      "sunday_item_id": "8129",
+      "wave": "WAVE_1",
+      "disposition": "CREATE",
+      "canonical_monday_item_id": null,
+      "reason": null,
+      "migration_status": "migrated",
+      "migrated_at": "2026-08-20T18:13:42.762311+00:00",
+      "source_snapshot_timestamp": "2026-08-20T18:06:29.539889+00:00"
+    },
+    "4944254220:12719372706": {
+      "monday_board_id": "4944254220",
+      "monday_item_id": "12719372706",
+      "sunday_board_id": "82",
+      "sunday_item_id": "8130",
+      "wave": "WAVE_1",
+      "disposition": "CREATE",
+      "canonical_monday_item_id": null,
+      "reason": null,
+      "migration_status": "migrated",
+      "migrated_at": "2026-08-20T18:15:06.436999+00:00",
+      "source_snapshot_timestamp": "2026-08-20T18:06:29.539889+00:00"
     }
   },
   "imported_from": "data/monday-sunday-map.json",
   "imported_at": "2026-08-12T16:16:34.596609+00:00",
-  "updated_at": "2026-08-20T15:26:36.833065+00:00"
+  "updated_at": "2026-08-20T18:15:06.437684+00:00"
 }
