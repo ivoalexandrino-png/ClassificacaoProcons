@@ -1,0 +1,161 @@
+{
+  "version": "1",
+  "board_id": "4944254220",
+  "wave": 1,
+  "item_ids": [
+    "10650033700",
+    "12158438159",
+    "12279267039",
+    "12655883654",
+    "12713954332",
+    "18346618207"
+  ],
+  "selected_source": "5d1c293e23763bc7fb8f4085",
+  "schema": "0b08b2a7267e882bb3f28900",
+  "manifest_v2": "0363063dadec675ecef4f208",
+  "code_revision": "6be75073843ec37b216f8c1a",
+  "board_global": "bab7a01e79b15ce30c7d299f",
+  "operation_total": 260,
+  "budgets": {
+    "max_items": 6,
+    "max_assets": 12,
+    "max_comments": 105,
+    "max_storage_uploads": 12,
+    "max_operations": 260
+  },
+  "approved_assets": [
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "10650033700",
+      "asset_id": "2620437283",
+      "sanitized_filename": "Reclamacao_35.001.003.25.0892292.pdf",
+      "mime_type": "application/pdf",
+      "size": 633769,
+      "source_sha256": "cadb4e6ba011fe8c41d8ff23a83413c682ade33051aaf0e76f7de96d693d8aa7",
+      "storage_object_key": "monday/4944254220/10650033700/2620437283/Reclamacao_35.001.003.25.0892292.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "10650033700",
+      "asset_id": "2620437288",
+      "sanitized_filename": "TNF_35.001.003.25.0892292.pdf",
+      "mime_type": "application/pdf",
+      "size": 595657,
+      "source_sha256": "a0925cd805987dc5135c3b8072678310160d483459b3451bff3d009a566b06ff",
+      "storage_object_key": "monday/4944254220/10650033700/2620437288/TNF_35.001.003.25.0892292.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12158438159",
+      "asset_id": "3034341029",
+      "sanitized_filename": "Reclamacao_35.001.003.26.1519277.pdf",
+      "mime_type": "application/pdf",
+      "size": 620041,
+      "source_sha256": "387e8c17241e458a1bc639557990344adb3238d4e6497a4690c2fa09a40bb28e",
+      "storage_object_key": "monday/4944254220/12158438159/3034341029/Reclamacao_35.001.003.26.1519277.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12158438159",
+      "asset_id": "3034341986",
+      "sanitized_filename": "TNF_35.001.003.26.1519277.pdf",
+      "mime_type": "application/pdf",
+      "size": 594531,
+      "source_sha256": "4f6705d76d4b7e00576c898d85f5b47add5974f158cc95023b4db30d1d9d6ea1",
+      "storage_object_key": "monday/4944254220/12158438159/3034341986/TNF_35.001.003.26.1519277.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12279267039",
+      "asset_id": "3057548664",
+      "sanitized_filename": "Reclamacao_35.001.003.26.1558195.pdf",
+      "mime_type": "application/pdf",
+      "size": 632183,
+      "source_sha256": "7258936411fb05a68d1e06f2a9d8a5a9e6fe595ac9009ec75cc7e8c8f366a4b3",
+      "storage_object_key": "monday/4944254220/12279267039/3057548664/Reclamacao_35.001.003.26.1558195.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12279267039",
+      "asset_id": "3057548804",
+      "sanitized_filename": "TNF_35.001.003.26.1558195.pdf",
+      "mime_type": "application/pdf",
+      "size": 595329,
+      "source_sha256": "71aa625cb89f2f8a4e40532ce07898e9cfee23825e6504faf6d35f66a89248e7",
+      "storage_object_key": "monday/4944254220/12279267039/3057548804/TNF_35.001.003.26.1558195.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12655883654",
+      "asset_id": "3141786130",
+      "sanitized_filename": "monday-notificacao-1ny5blG86Ae7f2gvLkX8JjPIBAI6Gq5IS.pdf",
+      "mime_type": "application/pdf",
+      "size": 623866,
+      "source_sha256": "df5d7654c61caa88491cc086cd965d8976f225735677a083d1e8cae3f9ad312f",
+      "storage_object_key": "monday/4944254220/12655883654/3141786130/monday-notificacao-1ny5blG86Ae7f2gvLkX8JjPIBAI6Gq5IS.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12655883654",
+      "asset_id": "3175068978",
+      "sanitized_filename": "monday-notificacao-1pVA6u7SThCgmypfI2taGBSQWdovC9mlg.pdf",
+      "mime_type": "application/pdf",
+      "size": 623866,
+      "source_sha256": "df5d7654c61caa88491cc086cd965d8976f225735677a083d1e8cae3f9ad312f",
+      "storage_object_key": "monday/4944254220/12655883654/3175068978/monday-notificacao-1pVA6u7SThCgmypfI2taGBSQWdovC9mlg.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12713954332",
+      "asset_id": "3156381654",
+      "sanitized_filename": "monday-notificacao-1NEPdhLxSw9QOF_ZAF9gsfbuD0obnRwGq.pdf",
+      "mime_type": "application/pdf",
+      "size": 625388,
+      "source_sha256": "5e86c28516cc79a2abb637ce49ef94f281bff5d36e93ef9c6d9bb06bf7f6d71e",
+      "storage_object_key": "monday/4944254220/12713954332/3156381654/monday-notificacao-1NEPdhLxSw9QOF_ZAF9gsfbuD0obnRwGq.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "12713954332",
+      "asset_id": "3186552073",
+      "sanitized_filename": "monday-notificacao-1CBQpTGW7GJw5dP9IPEEH5QJKFrRG56MP.pdf",
+      "mime_type": "application/pdf",
+      "size": 625388,
+      "source_sha256": "5e86c28516cc79a2abb637ce49ef94f281bff5d36e93ef9c6d9bb06bf7f6d71e",
+      "storage_object_key": "monday/4944254220/12713954332/3186552073/monday-notificacao-1CBQpTGW7GJw5dP9IPEEH5QJKFrRG56MP.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "18346618207",
+      "asset_id": "2565678418",
+      "sanitized_filename": "TNF_35.001.003.25.0825684.pdf",
+      "mime_type": "application/pdf",
+      "size": 595393,
+      "source_sha256": "f51091ac4dd1672ee314eaa16a703c450624e25dea29bdf7a8fb4a450e4ae278",
+      "storage_object_key": "monday/4944254220/18346618207/2565678418/TNF_35.001.003.25.0825684.pdf",
+      "sunday_board_id": "82"
+    },
+    {
+      "board_id": "4944254220",
+      "monday_item_id": "18346618207",
+      "asset_id": "2565678421",
+      "sanitized_filename": "Reclamacao_35.001.003.25.0825684.pdf",
+      "mime_type": "application/pdf",
+      "size": 632677,
+      "source_sha256": "d68bc31dda02f24625b83766e839379a0dd545ca1b5250a907d7d748891c54e0",
+      "storage_object_key": "monday/4944254220/18346618207/2565678421/Reclamacao_35.001.003.25.0825684.pdf",
+      "sunday_board_id": "82"
+    }
+  ],
+  "approval_bundle_digest": "6cb54b3f6ea84b505fd6d1f198e9957392e5dc64ce2260c5985f2eda0e4299c8"
+}
