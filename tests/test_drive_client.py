@@ -134,7 +134,14 @@ class TestDriveOperations:
             fields = kwargs.get("fields", "")
             response = {"files": []}
             if "createdTime" in fields and "MARIA SILVA'" in query:
-                response = {"files": [{"id": "matched-folder", "createdTime": "2026-08-15T00:00:00Z"}]}
+                response = {
+                    "files": [
+                        {
+                            "id": "matched-folder",
+                            "createdTime": "2026-08-15T00:00:00Z",
+                        },
+                    ],
+                }
             elif kwargs.get("fields") == "files(name,mimeType)":
                 response = {
                     "files": [
