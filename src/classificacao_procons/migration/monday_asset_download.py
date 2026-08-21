@@ -29,7 +29,7 @@ query ($ids: [ID!]!) {
 
 MONDAY_FILES_API = "https://api.monday.com/v2/files"
 
-ALLOWED_ASSET_EXTENSIONS = frozenset({"pdf", "jpg", "jpeg"})
+ALLOWED_ASSET_EXTENSIONS = frozenset({"pdf", "jpg", "jpeg", "png"})
 
 DownloadAuthMode = Literal["monday_auth", "presigned"]
 
